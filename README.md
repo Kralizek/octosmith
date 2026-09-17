@@ -1,6 +1,7 @@
 # OctoSmith
 
-A toolkit for defining, validating, and reconciling GitHub repository configuration as code.
+A toolkit for defining, validating, and reconciling GitHub repository
+configuration as code.
 
 ## Packages
 
