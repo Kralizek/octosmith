@@ -1,0 +1,16 @@
+{
+  "workspace": [
+    "./packages/core",
+    "./packages/cli"
+  ],
+  "imports": {
+    "@cliffy/command": "jsr:@cliffy/command@^1.2.1",
+    "@std/assert": "jsr:@std/assert@^1"
+  },
+  "tasks": {
+    "check": "deno fmt --check && deno lint && deno test -A",
+    "test": "deno test -A",
+    "cli": "deno run -A packages/cli/mod.ts"
+  },
+  "lock": false
+}
