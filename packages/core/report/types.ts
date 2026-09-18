@@ -7,7 +7,11 @@ export type RepositoryReportStatus =
   | "partially-applied"
   | "failed";
 
-export type OperationReportStatus = "planned" | "applied" | "failed";
+export type OperationReportStatus =
+  | "planned"
+  | "applied"
+  | "failed"
+  | "skipped";
 
 export interface Report {
   readonly organization: string;
@@ -18,13 +22,25 @@ export interface Report {
 
 export interface RepositoryReport {
   readonly repository: string;
-  readonly template: string;
+  readonly template?: string;
   readonly status: RepositoryReportStatus;
   readonly operations: readonly OperationReport[];
+  readonly error?: string;
+}
+
+export interface ReportedOperation {
+  readonly type: Operation["type"];
+  readonly details: Readonly<Record<string, unknown>>;
 }
 
 export interface OperationReport {
-  readonly operation: Operation;
+  readonly operation: ReportedOperation;
   readonly status: OperationReportStatus;
+  readonly error?: string;
+}
+
+export interface AppliedOperationLike {
+  readonly operation: Operation;
+  readonly status: "applied" | "failed" | "skipped";
   readonly error?: string;
 }
