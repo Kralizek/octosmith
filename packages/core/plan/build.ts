@@ -366,10 +366,11 @@ function planEnvironments(
       continue;
     }
 
-    if (environmentNeedsUpdate(actual, environment)) {
+    if (environmentNeedsUpdate(actual, environment, options)) {
       operations.push({
         type: "update-environment",
         environment,
+        collections: options.collections ?? "sparse",
       });
     }
   }
@@ -974,6 +975,7 @@ function assertCompleteObjects(
 function environmentNeedsUpdate(
   current: Environment,
   desired: DesiredEnvironment,
+  options: BuildPlanOptions,
 ): boolean {
   if (desired.secrets !== undefined) {
     if (desired.secrets.length > 0) {
@@ -985,8 +987,25 @@ function environmentNeedsUpdate(
     }
   }
 
-  return desired.variables !== undefined &&
-    !equalVariables(current.variables, desired.variables);
+  if (desired.variables === undefined) {
+    return false;
+  }
+
+  if (desired.variables.length === 0) {
+    return current.variables.length > 0;
+  }
+
+  if (options.collections === "strict") {
+    return !equalVariables(current.variables, desired.variables);
+  }
+
+  const currentByName = new Map(
+    current.variables.map((item) => [item.name, item.value]),
+  );
+
+  return desired.variables.some((item) =>
+    currentByName.get(item.name) !== item.value
+  );
 }
 
 function materializeEnvironment(
