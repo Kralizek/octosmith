@@ -1,0 +1,26 @@
+repository:
+  settings:
+    has_projects: false
+    has_discussions: false
+    delete_branch_on_merge: true
+
+  teams:
+    - name: platform-team
+      permission: maintain
+
+rulesets:
+  - name: protect-default-branch
+    target: branch
+    enforcement: active
+    conditions:
+      ref_name:
+        include:
+          - ~DEFAULT_BRANCH
+    rules:
+      - type: deletion
+      - type: non_fast_forward
+      - type: pull_request
+        parameters:
+          required_review_thread_resolution: true
+          allowed_merge_methods:
+            - squash

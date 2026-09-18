@@ -7,3 +7,8 @@ configuration as code.
 
 - `@octosmith/core` — core models and reconciliation primitives.
 - `@octosmith/cli` — command-line interface.
+
+## Examples
+
+See [`examples/configuration`](examples/configuration) for a sample policy
+directory covering scope, types, traits, overrides, and managed file templates.

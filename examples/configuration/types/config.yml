@@ -1,0 +1,12 @@
+match:
+  properties:
+    repository-type: config
+
+repository:
+  settings:
+    has_issues: false
+    has_wiki: false
+
+  teams:
+    - name: configuration-maintainers
+      permission: configuration-editor

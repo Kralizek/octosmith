@@ -1,0 +1,7 @@
+version: 1
+
+organization: example-org
+
+scope:
+  teams:
+    - platform-team

@@ -1,0 +1,31 @@
+match:
+  properties:
+    repository-type: code
+
+repository:
+  settings:
+    has_issues: false
+    has_wiki: false
+    merge:
+      merge_commit: false
+      rebase: false
+      squash: true
+
+  secrets:
+    - REVIEW_BOT_TOKEN
+
+  variables:
+    - NOTIFICATION_CHANNEL_ID
+
+environments:
+  - name: automation
+    secrets:
+      - PACKAGE_FEED_SECRET
+    variables:
+      - PACKAGE_FEED_CLIENT_ID
+      - PACKAGE_FEED_TENANT_ID
+
+files:
+  .github/workflows/request-review.yml:
+    ensure: exact
+    template: templates/workflows/request-review.yml

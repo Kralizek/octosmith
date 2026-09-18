@@ -1,0 +1,8 @@
+match:
+  properties:
+    distribution: shared-library
+
+repository:
+  teams:
+    - name: library-maintainers
+      permission: maintain

@@ -1,0 +1,12 @@
+match:
+  properties:
+    repository-type: issues
+
+repository:
+  settings:
+    has_issues: true
+    has_wiki: false
+
+files:
+  .github/workflows/request-review.yml:
+    ensure: absent
