@@ -1,3 +1,4 @@
+import sodium from "libsodium-wrappers";
 import { assert, assertEquals } from "@std/assert";
 import {
   type GitHubClient,
@@ -369,4 +370,107 @@ Deno.test("organization OIDC templates do not collapse to GitHub defaults", asyn
     use_default: false,
     use_immutable_subject: false,
   });
+});
+
+Deno.test("managed file uploads preserve UTF-8 content through base64", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "ciao 👋",
+    },
+  });
+
+  const request = client.requests.find((item) =>
+    item.method === "PUT" && item.path.endsWith("/contents/README.md")
+  );
+  const body = request?.body as { content: string };
+  const binary = atob(body.content);
+  const bytes = Uint8Array.from(binary, (character) =>
+    character.charCodeAt(0)
+  );
+
+  assertEquals(new TextDecoder().decode(bytes), "ciao 👋");
+});
+
+class SecretClient implements GitHubClient {
+  readonly requests: RecordedRequest[] = [];
+
+  constructor(readonly publicKey: string) {}
+
+  request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/github").GitHubRequestOptions = {},
+  ): Promise<T> {
+    this.requests.push({ method, path, body: options.body });
+
+    if (method === "GET") {
+      return this.get(path);
+    }
+
+    return Promise.resolve(undefined as T);
+  }
+
+  get<T>(
+    path: string,
+    _query: Readonly<Record<string, GitHubQueryValue>> = {},
+  ): Promise<T> {
+    if (path.endsWith("/actions/secrets/public-key")) {
+      return Promise.resolve({
+        key_id: "key-1",
+        key: this.publicKey,
+      } as T);
+    }
+
+    throw new Error("Unexpected GET " + path);
+  }
+}
+
+Deno.test("repository secrets are sealed with GitHub's public key", async () => {
+  await sodium.ready;
+  const keyPair = sodium.crypto_box_keypair();
+  const publicKey = sodium.to_base64(
+    keyPair.publicKey,
+    sodium.base64_variants.ORIGINAL,
+  );
+  const client = new SecretClient(publicKey);
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "super-secret",
+  });
+
+  await sink.apply("sample", {
+    type: "set-repository-secret",
+    secret: "TOKEN",
+  });
+
+  const request = client.requests.find((item) =>
+    item.method === "PUT" && item.path.endsWith("/actions/secrets/TOKEN")
+  );
+  const body = request?.body as {
+    encrypted_value: string;
+    key_id: string;
+  };
+  const encrypted = sodium.from_base64(
+    body.encrypted_value,
+    sodium.base64_variants.ORIGINAL,
+  );
+  const decrypted = sodium.crypto_box_seal_open(
+    encrypted,
+    keyPair.publicKey,
+    keyPair.privateKey,
+  );
+
+  assertEquals(body.key_id, "key-1");
+  assertEquals(sodium.to_string(decrypted), "super-secret");
 });
