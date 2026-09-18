@@ -635,15 +635,15 @@ function diffRuleset(
     changes.bypassActors = desired.bypassActors;
   }
 
-  if (desired.conditions !== undefined) {
-    const target = desired.target ?? current.target;
+  const effectiveTarget = desired.target ?? current.target;
 
-    if (target === "push") {
-      throw new Error(
-        "Push ruleset " + desired.name + " cannot declare ref conditions",
-      );
-    }
+  if (desired.conditions !== undefined && effectiveTarget === "push") {
+    throw new Error(
+      "Push ruleset " + desired.name + " cannot declare ref conditions",
+    );
+  }
 
+  if (effectiveTarget !== "push") {
     const currentConditions = current.target === "push"
       ? {
         refName: {
@@ -652,14 +652,17 @@ function diffRuleset(
         },
       }
       : current.conditions;
-    const merged = mergeOwned(currentConditions, desired.conditions);
 
-    if (!deepEqual(currentConditions, merged)) {
-      changes.conditions = merged;
+    if (desired.conditions !== undefined || current.target === "push") {
+      const merged = desired.conditions === undefined
+        ? currentConditions
+        : mergeOwned(currentConditions, desired.conditions);
+
+      if (current.target === "push" || !deepEqual(currentConditions, merged)) {
+        changes.conditions = merged;
+      }
     }
   }
-
-  const effectiveTarget = desired.target ?? current.target;
 
   if (
     desired.target !== undefined &&
