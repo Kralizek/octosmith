@@ -47,7 +47,6 @@ function currentRepositorySettings(): CurrentRepositorySettings {
 
 function currentState(overrides: Partial<CurrentState> = {}): CurrentState {
   return {
-
     repository: "sample",
     settings: currentRepositorySettings(),
     customProperties: {},
