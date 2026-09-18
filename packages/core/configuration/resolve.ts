@@ -1,7 +1,6 @@
 import { isAbsolute, join } from "@std/path";
 import type {
   BuiltInRepositoryPermission,
-  Environment,
   PropertyValue,
   RepositoryPermission,
   TeamPermission,
@@ -18,7 +17,11 @@ import type {
 } from "../state/repository.ts";
 import type { DesiredActionsSettings } from "../state/resources.ts";
 import type { DesiredRuleset, DesiredRulesetRule } from "../state/rulesets.ts";
-import type { DesiredFile, DesiredState } from "../state/types.ts";
+import type {
+  DesiredEnvironment,
+  DesiredFile,
+  DesiredState,
+} from "../state/types.ts";
 import type { LoadedConfiguration } from "./load.ts";
 
 export interface RepositoryMetadata {
@@ -367,13 +370,17 @@ function normalizeEnvironment(
     readonly variables?: readonly string[];
   },
   values: RuntimeValueProvider,
-): Environment {
+): DesiredEnvironment {
   return {
     name: environment.name,
-    secrets: environment.secrets ?? [],
-    variables: (environment.variables ?? []).map((name) => ({
-      name,
-      value: values(name),
-    })),
+    ...(environment.secrets !== undefined && {
+      secrets: environment.secrets,
+    }),
+    ...(environment.variables !== undefined && {
+      variables: environment.variables.map((name) => ({
+        name,
+        value: values(name),
+      })),
+    }),
   };
 }

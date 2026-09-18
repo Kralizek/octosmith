@@ -11,11 +11,17 @@ import type {
 } from "../state/resources.ts";
 import type { DesiredRepositorySettings } from "../state/repository.ts";
 import type { DesiredRuleset, RulesetDefinition } from "../state/rulesets.ts";
-import type { DesiredFile } from "../state/types.ts";
+import type { DesiredEnvironment, DesiredFile } from "../state/types.ts";
 
 export interface Plan {
   readonly repository: string;
   readonly operations: readonly Operation[];
+}
+
+export type CollectionReconciliationMode = "sparse" | "strict";
+
+export interface BuildPlanOptions {
+  readonly collections?: CollectionReconciliationMode;
 }
 
 export type Operation =
@@ -26,7 +32,9 @@ export type Operation =
   | SetTeamPermissionOperation
   | RemoveTeamPermissionOperation
   | SetRepositoryVariableOperation
+  | RemoveRepositoryVariableOperation
   | SetRepositorySecretOperation
+  | RemoveRepositorySecretOperation
   | CreateRulesetOperation
   | UpdateRulesetOperation
   | DeleteRulesetOperation
@@ -73,8 +81,18 @@ export interface SetRepositoryVariableOperation {
   readonly variable: Variable;
 }
 
+export interface RemoveRepositoryVariableOperation {
+  readonly type: "remove-repository-variable";
+  readonly name: string;
+}
+
 export interface SetRepositorySecretOperation {
   readonly type: "set-repository-secret";
+  readonly secret: SecretName;
+}
+
+export interface RemoveRepositorySecretOperation {
+  readonly type: "remove-repository-secret";
   readonly secret: SecretName;
 }
 
@@ -102,7 +120,8 @@ export interface CreateEnvironmentOperation {
 
 export interface UpdateEnvironmentOperation {
   readonly type: "update-environment";
-  readonly environment: Environment;
+  readonly environment: DesiredEnvironment;
+  readonly collections: CollectionReconciliationMode;
 }
 
 export interface DeleteEnvironmentOperation {

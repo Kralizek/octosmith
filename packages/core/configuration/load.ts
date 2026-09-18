@@ -1,6 +1,17 @@
 import { join } from "@std/path";
 import { parse } from "@std/yaml";
+import { Ajv2020, type ValidateFunction } from "ajv/2020";
 import type { Configuration, RepositoryTemplate } from "./types.ts";
+import configurationSchema from "./schemas/octosmith.schema.json" with {
+  type: "json",
+};
+import templateSchema from "./schemas/template.schema.json" with {
+  type: "json",
+};
+
+const validator = new Ajv2020({ allErrors: true, strict: false });
+const validateConfiguration = validator.compile(configurationSchema);
+const validateTemplate = validator.compile(templateSchema);
 
 export interface LoadedConfiguration {
   readonly root: string;
@@ -13,6 +24,7 @@ export async function loadConfigurationDirectory(
 ): Promise<LoadedConfiguration> {
   const configuration = await loadYaml<Configuration>(
     join(root, "octosmith.yml"),
+    validateConfiguration,
   );
 
   const templatesDirectory = join(root, "templates");
@@ -26,6 +38,7 @@ export async function loadConfigurationDirectory(
     const name = entry.name.replace(/\.ya?ml$/i, "");
     templates[name] = await loadYaml<RepositoryTemplate>(
       join(templatesDirectory, entry.name),
+      validateTemplate,
     );
   }
 
@@ -36,10 +49,23 @@ export async function loadConfigurationDirectory(
   };
 }
 
-async function loadYaml<T>(path: string): Promise<T> {
-  return normalizeYaml(
-    parse(await Deno.readTextFile(path)),
-  ) as T;
+async function loadYaml<T>(
+  path: string,
+  validate: ValidateFunction,
+): Promise<T> {
+  const value = parse(await Deno.readTextFile(path));
+
+  if (!validate(value)) {
+    const errors = validate.errors?.map((error) =>
+      (error.instancePath || "/") + " " + error.message +
+      (error.keyword === "additionalProperties"
+        ? ": " + error.params.additionalProperty
+        : "")
+    ).join("; ");
+    throw new Error("Invalid configuration in " + path + ": " + errors);
+  }
+
+  return normalizeYaml(value) as T;
 }
 
 function normalizeYaml(

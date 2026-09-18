@@ -1,12 +1,15 @@
-import { assertEquals } from "@std/assert";
-import { join } from "@std/path";
+import { assertEquals, assertThrows } from "@std/assert";
+import { fromFileUrl, join } from "@std/path";
 import {
+  buildPlan,
   loadConfigurationDirectory,
   matchesSelector,
   resolveDesiredState,
 } from "../packages/core/mod.ts";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+import { currentState } from "./plan/fixtures.ts";
+
+const ROOT = fromFileUrl(new URL("..", import.meta.url));
 const CONFIGURATION_ROOT = join(ROOT, "examples", "configuration");
 const FIXTURE_ROOT = join(ROOT, "tests", "fixtures", "configuration");
 
@@ -246,3 +249,144 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
     await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test("preserves omitted environment members in desired state", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "scope:",
+        "  names:",
+        "    - sample",
+        "",
+      ].join("\n"),
+    );
+
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "match:",
+        "  names:",
+        "    - sample",
+        "environments:",
+        "  - name: production",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+    const desired = await resolveDesiredState(
+      loaded,
+      {
+        name: "sample",
+        teams: [],
+        properties: {},
+      },
+      (name) => name,
+    );
+
+    assertEquals(desired.environments, [{ name: "production" }]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+for (
+  const testCase of [
+    {
+      name: "YAML rules reject null required scalar before planning",
+      rule: [
+        "      - type: max_file_size",
+        "        parameters:",
+        "          max_file_size_mb: null",
+      ],
+      message: "requires maxFileSizeMb",
+    },
+    {
+      name: "YAML rules reject null nested required field before planning",
+      rule: [
+        "      - type: required_status_checks",
+        "        parameters:",
+        "          do_not_enforce_on_create: false",
+        "          checks:",
+        "            - context: null",
+        "          strict: true",
+      ],
+      message: "required status check at index 0 requires context",
+    },
+    {
+      name: "YAML rules reject non-object nested entries before planning",
+      rule: [
+        "      - type: required_status_checks",
+        "        parameters:",
+        "          do_not_enforce_on_create: false",
+        "          checks:",
+        "            - bad",
+        "          strict: true",
+      ],
+      message: "required status check at index 0 must be an object",
+    },
+  ] as const
+) {
+  Deno.test(testCase.name, async () => {
+    const root = await Deno.makeTempDir();
+
+    try {
+      await Deno.mkdir(join(root, "templates"));
+      await Deno.writeTextFile(
+        join(root, "octosmith.yml"),
+        [
+          "version: 1",
+          "organization: example-org",
+          "scope:",
+          "  names:",
+          "    - sample",
+          "",
+        ].join("\n"),
+      );
+      await Deno.writeTextFile(
+        join(root, "templates", "sample.yml"),
+        [
+          "match:",
+          "  names:",
+          "    - sample",
+          "rulesets:",
+          "  - name: policy",
+          "    target: " +
+          (testCase.rule[0].includes("max_file") ? "push" : "branch"),
+          "    enforcement: active",
+          ...(testCase.rule[0].includes("max_file") ? [] : [
+            "    conditions:",
+            "      ref_name:",
+            "        include:",
+            "          - ~DEFAULT_BRANCH",
+          ]),
+          "    rules:",
+          ...testCase.rule,
+          "",
+        ].join("\n"),
+      );
+
+      const loaded = await loadConfigurationDirectory(root);
+      const desired = await resolveDesiredState(
+        loaded,
+        { name: "sample", teams: [], properties: {} },
+        (name) => name,
+      );
+
+      assertThrows(
+        () => buildPlan(currentState(), desired),
+        Error,
+        testCase.message,
+      );
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}

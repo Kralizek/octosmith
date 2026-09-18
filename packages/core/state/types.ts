@@ -40,8 +40,14 @@ export interface DesiredState {
   readonly secrets?: readonly SecretName[];
   readonly variables?: readonly Variable[];
   readonly rulesets?: readonly DesiredRuleset[];
-  readonly environments?: readonly Environment[];
+  readonly environments?: readonly DesiredEnvironment[];
   readonly files?: readonly DesiredFile[];
+}
+
+export interface DesiredEnvironment {
+  readonly name: string;
+  readonly secrets?: readonly SecretName[];
+  readonly variables?: readonly Variable[];
 }
 
 export interface CurrentFile {
