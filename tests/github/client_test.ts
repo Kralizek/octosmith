@@ -25,3 +25,24 @@ Deno.test("GitHub client preserves a path in the configured base URL", async () 
     "https://github.example.com/api/v3/repos/acme/api",
   );
 });
+
+Deno.test("GitHub client still resolves root API URLs", async () => {
+  let requestedUrl: string | undefined;
+
+  const client = new FetchGitHubClient({
+    token: "token",
+    fetch: (input) => {
+      requestedUrl = String(input);
+      return Promise.resolve(
+        new Response(JSON.stringify({ name: "api" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    },
+  });
+
+  await client.get("/repos/acme/api");
+
+  assertEquals(requestedUrl, "https://api.github.com/repos/acme/api");
+});
