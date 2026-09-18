@@ -51,7 +51,11 @@ export class FetchGitHubClient implements GitHubClient {
     path: string,
     options: GitHubRequestOptions = {},
   ): Promise<T> {
-    const url = new URL(path, this.#baseUrl);
+    const baseUrl = this.#baseUrl.endsWith("/")
+      ? this.#baseUrl
+      : this.#baseUrl + "/";
+    const relativePath = path.startsWith("/") ? path.slice(1) : path;
+    const url = new URL(relativePath, baseUrl);
 
     for (const [name, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) {
