@@ -35,6 +35,38 @@ Deno.test("applyPlan executes operations sequentially", async () => {
   );
 });
 
+Deno.test("applyPlan waits for each operation to finish before starting the next", async () => {
+  let releaseFirst!: () => void;
+  const firstCompleted = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  const started: string[] = [];
+
+  const sink: RepositoryMutationSink = {
+    async apply(_repository, operation) {
+      started.push(operation.type);
+
+      if (started.length === 1) {
+        await firstCompleted;
+      }
+    },
+  };
+
+  const applying = applyPlan(sink, samplePlan());
+
+  await Promise.resolve();
+  assertEquals(started, ["update-repository-settings"]);
+
+  releaseFirst();
+  await applying;
+
+  assertEquals(started, [
+    "update-repository-settings",
+    "set-custom-property",
+    "create-file",
+  ]);
+});
+
 Deno.test("applyPlan preserves partial results and skips remaining work after failure", async () => {
   const sink = new FakeSink("set-custom-property");
 
