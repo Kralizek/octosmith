@@ -29,6 +29,7 @@ Deno.test("environments create and update variables", () => {
       operations: [
         {
           type: "update-environment",
+          collections: "sparse",
           environment: {
             name: "production",
             secrets: [],
