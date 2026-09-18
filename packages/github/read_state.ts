@@ -113,13 +113,11 @@ function filterSparseEnvironments(
       secrets: owned.secrets === undefined
         ? []
         : environment.secrets.filter((name) => owned.secrets?.includes(name)),
-      variables: owned.variables === undefined
-        ? []
-        : filterNamed(
-          environment.variables,
-          owned.variables.map((item) => item.name),
-          "name",
-        ),
+      variables: owned.variables === undefined ? [] : filterNamed(
+        environment.variables,
+        owned.variables.map((item) => item.name),
+        "name",
+      ),
     }];
   });
 }
