@@ -504,6 +504,7 @@ Deno.test("ruleset conditions validate against the effective target", () => {
           conditions: {
             refName: {
               include: ["~DEFAULT_BRANCH"],
+              exclude: [],
             },
           },
         },
