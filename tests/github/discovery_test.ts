@@ -282,6 +282,113 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
   ]);
 });
 
+Deno.test("discovery finds a matching repository on organization page two", async () => {
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    name: "repo-" + index,
+    visibility: "private",
+  }));
+  const client = new FakeGitHubClient({
+    "/orgs/acme/repos?page=1&per_page=100": [firstPage],
+    "/orgs/acme/repos?page=2&per_page=100": [[
+      { name: "target-api", visibility: "private" },
+    ]],
+  });
+
+  const repositories = await discoverRepositoryList(
+    client,
+    configuration({ scope: { names: ["target-*"] } }),
+  );
+
+  assertEquals(repositories.map((repository) => repository.name), [
+    "target-api",
+  ]);
+});
+
+Deno.test("discovery follows team membership pagination", async () => {
+  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+    name: "repo-" + index,
+    visibility: "private",
+  }));
+  const client = new FakeGitHubClient({
+    "/orgs/acme/teams/platform/repos?page=1&per_page=100": [firstPage],
+    "/orgs/acme/teams/platform/repos?page=2&per_page=100": [[
+      { name: "api", visibility: "private" },
+    ]],
+  });
+
+  const repositories = await discoverRepositoryList(
+    client,
+    configuration({ scope: { teams: ["platform"], names: ["api"] } }),
+  );
+
+  assertEquals(repositories, [{
+    name: "api",
+    visibility: "private",
+    teams: ["platform"],
+    properties: {},
+  }]);
+});
+
+Deno.test("discovery uses custom properties from page two for selection", async () => {
+  const firstPropertyPage = Array.from({ length: 100 }, (_, index) => ({
+    repository_name: "other-" + index,
+    properties: [{ property_name: "kind", value: "other" }],
+  }));
+  const client = new FakeGitHubClient({
+    "/orgs/acme/repos?page=1&per_page=100": [[
+      { name: "api", visibility: "private" },
+    ]],
+    "/orgs/acme/properties/values?page=1&per_page=100": [firstPropertyPage],
+    "/orgs/acme/properties/values?page=2&per_page=100": [[
+      {
+        repository_name: "api",
+        properties: [{ property_name: "kind", value: "service" }],
+      },
+    ]],
+  });
+
+  const repositories = await discoverRepositoryList(
+    client,
+    configuration({
+      scope: { properties: { kind: "service" } },
+    }),
+  );
+
+  assertEquals(repositories, [{
+    name: "api",
+    visibility: "private",
+    teams: [],
+    properties: { kind: "service" },
+  }]);
+});
+
+Deno.test("discovery requests an empty page after exactly 100 results", async () => {
+  const repositories = Array.from({ length: 100 }, (_, index) => ({
+    name: "repo-" + index,
+    visibility: "private",
+  }));
+  const client = new FakeGitHubClient({
+    "/orgs/acme/repos?page=1&per_page=100": [repositories],
+    "/orgs/acme/repos?page=2&per_page=100": [[]],
+  });
+
+  const discovered = await discoverRepositoryList(
+    client,
+    configuration({ scope: {} }),
+  );
+
+  assertEquals(discovered.length, 100);
+  assertEquals(new Set(discovered.map((repository) => repository.name)).size, 100);
+  assertEquals(client.requests.map(requestKeyFromRequest), [
+    "/orgs/acme/repos?page=1&per_page=100",
+    "/orgs/acme/repos?page=2&per_page=100",
+  ]);
+});
+
+function requestKeyFromRequest(request: Request): string {
+  return requestKey(request.path, request.query);
+}
+
 async function discoverRepositoryList(
   client: GitHubClient,
   loaded: LoadedConfiguration,
