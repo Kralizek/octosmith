@@ -154,6 +154,28 @@ Deno.test("sparse current-state reading keeps only named owned members", async (
   }]);
 });
 
+Deno.test("sparse current-state reading preserves members for explicit clears", async () => {
+  const source = new FakeStateSource();
+  const state = await readCurrentState(source, {
+    repository: "sample",
+    template: "code",
+    environments: [{
+      name: "owned",
+      secrets: [],
+      variables: [],
+    }],
+  });
+
+  assertEquals(state.environments, [{
+    name: "owned",
+    secrets: ["OWNED_SECRET", "EXTRA_SECRET"],
+    variables: [
+      { name: "OWNED_VARIABLE", value: "1" },
+      { name: "EXTRA_VARIABLE", value: "2" },
+    ],
+  }]);
+});
+
 Deno.test("strict current-state reading preserves complete named collections", async () => {
   const source = new FakeStateSource();
   const state = await readCurrentState(
