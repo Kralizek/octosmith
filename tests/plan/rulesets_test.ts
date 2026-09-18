@@ -748,6 +748,30 @@ Deno.test("existing matching rules are validated after merge against the effecti
   );
 });
 
+Deno.test("unsupported ruleset rule types are rejected", () => {
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "branch",
+            target: "branch",
+            enforcement: "active",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
+            },
+            rules: [{ type: "future-rule" }],
+          }],
+        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+      ),
+    Error,
+    "Unsupported ruleset rule type: future-rule",
+  );
+});
+
 Deno.test("new rules validate nested object members", () => {
   assertThrows(
     () =>
