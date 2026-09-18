@@ -9,7 +9,6 @@ import {
   reportAppliedRepository,
   reportFailedRepository,
   reportPlannedRepository,
-  type RepositoryMetadata,
   resolveDesiredState,
   type RuntimeValueProvider,
 } from "@octosmith/core";
