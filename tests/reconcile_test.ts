@@ -105,6 +105,28 @@ Deno.test("reconcile apply executes the fresh plan", async () => {
   }
 });
 
+Deno.test("reconcile returns a structured report without runtime values or file contents", async () => {
+  const root = await sensitiveConfigurationDirectory();
+  try {
+    const runtime = new FakeRuntime([metadata("sample")]);
+    const report = await reconcile(runtime, {
+      path: root,
+      mode: "plan",
+      values: () => "runtime-private-value",
+      now: sequentialClock(),
+    });
+
+    const serialized = JSON.stringify(report);
+
+    assertEquals(serialized.includes("runtime-private-value"), false);
+    assertEquals(serialized.includes("file-private-content"), false);
+    assertEquals(serialized.includes("[redacted]"), true);
+    assertEquals(serialized.includes("managed.txt"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("reconcile reports discovery failures without stopping other repositories", async () => {
   const root = await configurationDirectory();
   try {
@@ -179,6 +201,41 @@ async function configurationDirectory(): Promise<string> {
       "repository:",
       "  settings:",
       "    has_issues: false",
+      "",
+    ].join("\n"),
+  );
+
+  return root;
+}
+
+async function sensitiveConfigurationDirectory(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+  await Deno.mkdir(root + "/files");
+
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      'scope: { names: ["sample"] }',
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(root + "/files/managed.txt", "file-private-content");
+  await Deno.writeTextFile(
+    root + "/templates/code.yml",
+    [
+      "match:",
+      "  names:",
+      "    - sample",
+      "repository:",
+      "  variables:",
+      "    - REGION",
+      "files:",
+      "  managed.txt:",
+      "    ensure: exact",
+      "    source: files/managed.txt",
       "",
     ].join("\n"),
   );
