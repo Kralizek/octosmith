@@ -301,11 +301,6 @@ Deno.test("ruleset state mapping preserves literals and maps enum fields", async
     (rules[5] as Extract<
       typeof rules[number],
       { readonly type: "pull-request" }
-    >).dismissalRestriction,});
-  assertEquals(
-    (rules[1] as Extract<
-      typeof rules[number],
-      { readonly type: "pull-request" }
     >).dismissalRestriction,
     {
       enabled: true,
