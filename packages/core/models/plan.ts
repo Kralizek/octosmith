@@ -1,11 +1,15 @@
 import type {
   Environment,
-  Ruleset,
   SecretName,
   TeamPermission,
   Variable,
 } from "./common.ts";
-import type { DesiredFile, DesiredRepositorySettings } from "./state.ts";
+import type { DesiredRepositorySettings } from "./repository.ts";
+import type {
+  DesiredRuleset,
+  RulesetDefinition,
+} from "./rulesets.ts";
+import type { DesiredFile } from "./state.ts";
 
 export interface Plan {
   readonly repository: string;
@@ -55,13 +59,13 @@ export interface SetRepositorySecretOperation {
 
 export interface CreateRulesetOperation {
   readonly type: "create-ruleset";
-  readonly ruleset: Ruleset;
+  readonly ruleset: RulesetDefinition;
 }
 
 export interface UpdateRulesetOperation {
   readonly type: "update-ruleset";
   readonly id: number;
-  readonly ruleset: Ruleset;
+  readonly changes: DesiredRuleset;
 }
 
 export interface DeleteRulesetOperation {

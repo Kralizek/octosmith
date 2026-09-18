@@ -1,4 +1,4 @@
-/** Values shared by configuration, state, planning, and reporting models. */
+/** Values shared across OctoSmith's domain models. */
 
 export type PropertyValue = string | boolean | readonly string[];
 
@@ -19,46 +19,6 @@ export interface TeamPermission {
 }
 
 export type MergeMethod = "merge" | "squash" | "rebase";
-
-export type RulesetTarget = "branch" | "tag";
-
-export type RulesetEnforcement = "disabled" | "evaluate" | "active";
-
-export interface RefNameCondition {
-  readonly include?: readonly string[];
-  readonly exclude?: readonly string[];
-}
-
-export interface RulesetConditions {
-  readonly refName?: RefNameCondition;
-}
-
-export interface DeletionRule {
-  readonly type: "deletion";
-}
-
-export interface NonFastForwardRule {
-  readonly type: "non-fast-forward";
-}
-
-export interface PullRequestRule {
-  readonly type: "pull-request";
-  readonly requiredReviewThreadResolution: boolean;
-  readonly allowedMergeMethods: readonly MergeMethod[];
-}
-
-export type RulesetRule =
-  | DeletionRule
-  | NonFastForwardRule
-  | PullRequestRule;
-
-export interface Ruleset {
-  readonly name: string;
-  readonly target: RulesetTarget;
-  readonly enforcement: RulesetEnforcement;
-  readonly conditions?: RulesetConditions;
-  readonly rules: readonly RulesetRule[];
-}
 
 export type SecretName = string;
 

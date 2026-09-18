@@ -1,10 +1,17 @@
 import type {
   Environment,
-  Ruleset,
   SecretName,
   TeamPermission,
   Variable,
 } from "./common.ts";
+import type {
+  CurrentRepositorySettings,
+  DesiredRepositorySettings,
+} from "./repository.ts";
+import type {
+  CurrentRuleset,
+  DesiredRuleset,
+} from "./rulesets.ts";
 
 export interface CurrentState {
   readonly repository: string;
@@ -20,49 +27,13 @@ export interface CurrentState {
 export interface DesiredState {
   readonly repository: string;
   readonly template: string;
-  readonly settings: DesiredRepositorySettings;
-  readonly teams: readonly TeamPermission[];
-  readonly secrets: readonly SecretName[];
-  readonly variables: readonly Variable[];
-  readonly rulesets: readonly Ruleset[];
-  readonly environments: readonly Environment[];
-  readonly files: readonly DesiredFile[];
-}
-
-export interface CurrentRepositorySettings {
-  readonly hasWiki: boolean;
-  readonly hasIssues: boolean;
-  readonly hasProjects: boolean;
-  readonly hasDiscussions: boolean;
-  readonly deleteBranchOnMerge: boolean;
-  readonly merge: CurrentMergeSettings;
-}
-
-export interface DesiredRepositorySettings {
-  readonly hasWiki?: boolean;
-  readonly hasIssues?: boolean;
-  readonly hasProjects?: boolean;
-  readonly hasDiscussions?: boolean;
-  readonly deleteBranchOnMerge?: boolean;
-  readonly merge?: DesiredMergeSettings;
-}
-
-export interface CurrentMergeSettings {
-  readonly mergeCommit: boolean;
-  readonly rebase: boolean;
-  readonly squash: boolean;
-  readonly squashCommitTitle?: string;
-}
-
-export interface DesiredMergeSettings {
-  readonly mergeCommit?: boolean;
-  readonly rebase?: boolean;
-  readonly squash?: boolean;
-  readonly squashCommitTitle?: string;
-}
-
-export interface CurrentRuleset extends Ruleset {
-  readonly id: number;
+  readonly settings?: DesiredRepositorySettings;
+  readonly teams?: readonly TeamPermission[];
+  readonly secrets?: readonly SecretName[];
+  readonly variables?: readonly Variable[];
+  readonly rulesets?: readonly DesiredRuleset[];
+  readonly environments?: readonly Environment[];
+  readonly files?: readonly DesiredFile[];
 }
 
 export interface CurrentFile {
