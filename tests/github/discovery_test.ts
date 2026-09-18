@@ -70,6 +70,26 @@ Deno.test("discovery fetches exact repository names directly", async () => {
   ]);
 });
 
+Deno.test("discovery deduplicates exact repository names", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+  });
+
+  const repositories = await discoverRepositories(
+    client,
+    configuration({
+      scope: { names: ["api", "api"] },
+    }),
+  );
+
+  assertEquals(repositories, [
+    { name: "api", visibility: "private", teams: [], properties: {} },
+  ]);
+  assertEquals(client.requests.map((request) => request.path), [
+    "/repos/acme/api",
+  ]);
+});
+
 Deno.test("discovery uses a scope team as the candidate source and verifies all team criteria", async () => {
   const client = new FakeGitHubClient({
     "/orgs/acme/teams/platform/repos?page=1&per_page=100": [[
