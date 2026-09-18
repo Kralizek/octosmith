@@ -1,7 +1,6 @@
 import type {
   Environment,
   RepositoryPermission,
-  TeamPermission,
   Variable,
 } from "../types.ts";
 import type {
@@ -26,9 +25,7 @@ import type {
   RulesetDefinition,
 } from "../state/rulesets.ts";
 import type {
-  CurrentFile,
   CurrentState,
-  DesiredFile,
   DesiredState,
 } from "../state/types.ts";
 import type { Operation, Plan } from "./types.ts";
