@@ -13,7 +13,15 @@ import {
   resolveDesiredState,
   type RuntimeValueProvider,
 } from "@octosmith/core";
-import type { ApplyPlanResult } from "@octosmith/github";
+import {
+  applyPlan,
+  type ApplyPlanResult,
+  discoverRepositories,
+  FetchGitHubClient,
+  GitHubRepositoryMutationSink,
+  GitHubRepositoryStateSource,
+  readCurrentState,
+} from "@octosmith/github";
 
 export type ReconcileMode = "plan" | "apply";
 
@@ -28,6 +36,53 @@ export interface ReconciliationRuntime {
   ): Promise<import("@octosmith/core").CurrentState>;
 
   apply(plan: Plan): Promise<ApplyPlanResult>;
+}
+
+
+export interface GitHubRuntimeOptions {
+  readonly token: string;
+  readonly secretValue?: RuntimeValueProvider;
+}
+
+export function createGitHubRuntime(
+  options: GitHubRuntimeOptions,
+): ReconciliationRuntime {
+  const client = new FetchGitHubClient({ token: options.token });
+  const secretValue = options.secretValue ?? environmentValue;
+  let source: GitHubRepositoryStateSource | undefined;
+  let sink: GitHubRepositoryMutationSink | undefined;
+
+  return {
+    async discover(loaded) {
+      source = new GitHubRepositoryStateSource(
+        client,
+        loaded.configuration.organization,
+      );
+      sink = new GitHubRepositoryMutationSink({
+        client,
+        owner: loaded.configuration.organization,
+        secretValue,
+      });
+
+      return await discoverRepositories(client, loaded);
+    },
+
+    async read(desired, planOptions) {
+      if (!source) {
+        throw new Error("GitHub runtime has not discovered repositories yet");
+      }
+
+      return await readCurrentState(source, desired, planOptions);
+    },
+
+    async apply(plan) {
+      if (!sink) {
+        throw new Error("GitHub runtime has not discovered repositories yet");
+      }
+
+      return await applyPlan(sink, plan);
+    },
+  };
 }
 
 export interface ReconcileOptions extends BuildPlanOptions {

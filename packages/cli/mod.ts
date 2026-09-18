@@ -3,7 +3,7 @@
 import { Command } from "@cliffy/command";
 import { renderReport, type Report } from "@octosmith/core";
 import type { ReconciliationRuntime } from "./reconcile.ts";
-import { reconcile } from "./reconcile.ts";
+import { createGitHubRuntime, reconcile } from "./reconcile.ts";
 import cliMetadata from "./deno.json" with { type: "json" };
 
 /** The OctoSmith CLI version. */
@@ -45,12 +45,6 @@ function createCli(options: CliExecutionOptions = {}): Command {
           { default: "sparse" },
         )
         .action(async (commandOptions) => {
-          if (!options.runtime) {
-            throw new Error(
-              "GitHub runtime is not configured for " + mode + " execution",
-            );
-          }
-
           if (
             commandOptions.collections !== "sparse" &&
             commandOptions.collections !== "strict"
@@ -60,7 +54,8 @@ function createCli(options: CliExecutionOptions = {}): Command {
             );
           }
 
-          const report = await reconcile(options.runtime, {
+          const runtime = options.runtime ?? createDefaultRuntime();
+          const report = await reconcile(runtime, {
             path: commandOptions.path,
             mode,
             collections: commandOptions.collections,
@@ -76,6 +71,18 @@ function createCli(options: CliExecutionOptions = {}): Command {
   }
 
   return root;
+}
+
+function createDefaultRuntime(): ReconciliationRuntime {
+  const token = Deno.env.get("GITHUB_TOKEN");
+
+  if (!token) {
+    throw new Error(
+      "GITHUB_TOKEN is required to access GitHub",
+    );
+  }
+
+  return createGitHubRuntime({ token });
 }
 
 class ReconciliationFailedError extends Error {
