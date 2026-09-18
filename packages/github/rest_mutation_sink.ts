@@ -670,8 +670,33 @@ function mapRule(
 
     case "merge-queue":
       if (typeof mapped.grouping_strategy === "string") {
-        mapped.grouping_strategy = snake(mapped.grouping_strategy);
+        mapped.grouping_strategy = mapped.grouping_strategy === "all-green"
+          ? "ALLGREEN"
+          : mapped.grouping_strategy === "head-green"
+          ? "HEADGREEN"
+          : mapped.grouping_strategy;
       }
+      if (typeof mapped.merge_method === "string") {
+        mapped.merge_method = mapped.merge_method.toUpperCase();
+      }
+      break;
+
+    case "required-deployments":
+      mapped.required_deployment_environments = Reflect.get(
+        rule,
+        "environments",
+      ) ?? [];
+      delete mapped.environments;
+      break;
+
+    case "required-status-checks":
+      mapped.required_status_checks = Reflect.get(rule, "checks") ?? [];
+      mapped.strict_required_status_checks_policy = Reflect.get(
+        rule,
+        "strict",
+      );
+      delete mapped.checks;
+      delete mapped.strict;
       break;
 
     case "pull-request": {
@@ -698,6 +723,25 @@ function mapRule(
           }),
         };
       }
+
+      const requiredReviewers = Reflect.get(rule, "requiredReviewers") as
+        | readonly {
+          readonly reviewerTeamId: number;
+          readonly filePatterns: readonly string[];
+          readonly minimumApprovals: number;
+        }[]
+        | undefined;
+
+      if (requiredReviewers !== undefined) {
+        mapped.required_reviewers = requiredReviewers.map((reviewer) => ({
+          file_patterns: reviewer.filePatterns,
+          minimum_approvals: reviewer.minimumApprovals,
+          reviewer: {
+            id: reviewer.reviewerTeamId,
+            type: "Team",
+          },
+        }));
+      }
       break;
     }
 
@@ -711,14 +755,20 @@ function mapRule(
         | undefined;
 
       if (tools !== undefined) {
-        mapped.tools = tools.map((tool) => ({
+        mapped.code_scanning_tools = tools.map((tool) => ({
           tool: tool.tool,
           alerts_threshold: snake(tool.alertsThreshold),
           security_alerts_threshold: snake(tool.securityAlertsThreshold),
         }));
       }
+      delete mapped.tools;
       break;
     }
+
+    case "max-file-size":
+      mapped.max_file_size = Reflect.get(rule, "maxFileSizeMb");
+      delete mapped.max_file_size_mb;
+      break;
   }
 
   return {
