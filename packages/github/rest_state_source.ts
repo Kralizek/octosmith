@@ -158,10 +158,14 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       }),
       oidc: oidc
         ? {
-          subjectClaimTemplate: oidc.use_default ? { source: "default" } : {
-            source: "custom",
-            claims: oidc.include_claim_keys ?? [],
-          },
+          subjectClaimTemplate: oidc.use_default
+            ? { source: "default" }
+            : oidc.include_claim_keys === undefined
+            ? { source: "organization" }
+            : {
+              source: "custom",
+              claims: oidc.include_claim_keys,
+            },
           immutableSubject: oidc.use_immutable_subject ?? false,
         }
         : {
@@ -467,9 +471,61 @@ function mapRule(value: Record<string, unknown>):
   | import("@octosmith/core").CurrentRefRule
   | import("@octosmith/core").CurrentPushRule {
   const type = kebab(String(value.type));
-  const parameters = camelizeObject(
+  const parameters = camelizeKeys(
     (value.parameters as Record<string, unknown> | undefined) ?? {},
   ) as Record<string, unknown>;
+
+  switch (type) {
+    case "commit-message-pattern":
+    case "commit-author-email-pattern":
+    case "committer-email-pattern":
+    case "branch-name-pattern":
+    case "tag-name-pattern":
+      if (typeof parameters.operator === "string") {
+        parameters.operator = kebab(parameters.operator);
+      }
+      break;
+
+    case "merge-queue":
+      if (typeof parameters.groupingStrategy === "string") {
+        parameters.groupingStrategy = kebab(parameters.groupingStrategy);
+      }
+      break;
+
+    case "pull-request": {
+      const restriction = parameters.dismissalRestriction as
+        | {
+          enabled?: boolean;
+          allowedActors?: readonly Record<string, unknown>[];
+        }
+        | undefined;
+
+      if (restriction?.allowedActors !== undefined) {
+        restriction.allowedActors = restriction.allowedActors.map((actor) => ({
+          id: Number(actor.id),
+          type: kebab(String(actor.type)),
+        }));
+      }
+      break;
+    }
+
+    case "code-scanning": {
+      const tools = parameters.tools as
+        | readonly Record<string, unknown>[]
+        | undefined;
+
+      if (tools !== undefined) {
+        parameters.tools = tools.map((tool) => ({
+          ...tool,
+          alertsThreshold: kebab(String(tool.alertsThreshold)),
+          securityAlertsThreshold: kebab(
+            String(tool.securityAlertsThreshold),
+          ),
+        }));
+      }
+      break;
+    }
+  }
 
   return {
     type,
@@ -479,42 +535,21 @@ function mapRule(value: Record<string, unknown>):
     | import("@octosmith/core").CurrentPushRule;
 }
 
-function camelizeObject(value: unknown): unknown {
+function camelizeKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return value.map(camelizeObject);
+    return value.map(camelizeKeys);
   }
 
   if (value === null || typeof value !== "object") {
-    return normalizeEnum(value);
+    return value;
   }
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, child]) => [
       key.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase()),
-      camelizeObject(child),
+      camelizeKeys(child),
     ]),
   );
-}
-
-function normalizeEnum(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  const enumValues = new Set([
-    "starts_with",
-    "ends_with",
-    "all_green",
-    "head_green",
-    "pull_request",
-    "integration_installation",
-    "repository_role",
-    "errors_and_warnings",
-    "high_or_higher",
-    "medium_or_higher",
-  ]);
-
-  return enumValues.has(value) ? kebab(value) : value;
 }
 
 function kebab(value: string): string {
