@@ -38,7 +38,6 @@ export interface ReconciliationRuntime {
   apply(plan: Plan): Promise<ApplyPlanResult>;
 }
 
-
 export interface GitHubRuntimeOptions {
   readonly token: string;
   readonly secretValue?: RuntimeValueProvider;
