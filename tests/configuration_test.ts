@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { join } from "@std/path";
+import { fromFileUrl, join } from "@std/path";
 import {
   buildPlan,
   loadConfigurationDirectory,
@@ -9,7 +9,7 @@ import {
 
 import { currentState } from "./plan/fixtures.ts";
 
-const ROOT = new URL("..", import.meta.url).pathname;
+const ROOT = fromFileUrl(new URL("..", import.meta.url));
 const CONFIGURATION_ROOT = join(ROOT, "examples", "configuration");
 const FIXTURE_ROOT = join(ROOT, "tests", "fixtures", "configuration");
 
