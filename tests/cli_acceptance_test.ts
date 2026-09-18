@@ -281,7 +281,7 @@ Deno.test("partial apply skips later operations and continues with the next repo
     assertStringIncludes(rendered, "update-repository-settings — applied");
     assertStringIncludes(rendered, "set-repository-variable — failed");
     assertStringIncludes(rendered, "create-file — skipped");
-    assertStringIncludes(rendered, "next [code] — applied");
+    assertStringIncludes(rendered, "z-next [code] — applied");
     assertStringIncludes(
       rendered,
       "Summary: 0 unchanged, 0 planned, 1 applied, 1 partially-applied, 0 failed",
@@ -635,7 +635,7 @@ async function partialConfigurationDirectory(): Promise<string> {
       "match:",
       "  names:",
       "    - sample",
-      "    - next",
+      "    - z-next",
       "repository:",
       "  settings:",
       "    has_issues: false",
