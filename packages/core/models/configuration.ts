@@ -37,7 +37,9 @@ export interface RepositoryTemplate {
 
 export interface RepositoryConfiguration {
   readonly settings?: RepositorySettingsConfiguration;
-  readonly customProperties?: Readonly<Record<string, string | readonly string[] | null>>;
+  readonly customProperties?: Readonly<
+    Record<string, string | readonly string[] | null>
+  >;
   readonly actions?: ActionsConfiguration;
   readonly teams?: readonly TeamPermissionConfiguration[];
   readonly secrets?: readonly string[];
