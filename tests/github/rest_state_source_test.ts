@@ -182,6 +182,15 @@ Deno.test("ruleset state mapping preserves literals and maps enum fields", async
   const rulesets = await source.getRulesets("sample");
   const rules = rulesets[0].rules;
 
+  assertEquals(
+    "conditions" in rulesets[0] ? rulesets[0].conditions : undefined,
+    {
+      refName: {
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      },
+    },
+  );
   assertEquals(rules[0], {
     type: "branch-name-pattern",
     operator: "starts-with",
