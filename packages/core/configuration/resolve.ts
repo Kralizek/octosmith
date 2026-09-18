@@ -54,7 +54,7 @@ export async function resolveDesiredState(
     );
   }
 
-  const [templateName, template] = matches;
+  const [[templateName, template]] = matches;
 
   return {
     repository: repository.name,
