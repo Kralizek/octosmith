@@ -320,7 +320,6 @@ Deno.test("ruleset state mapping preserves literals and maps enum fields", async
   }]);
 });
 
-
 Deno.test("documented ruleset state supports sparse planner updates", async () => {
   const source = new GitHubRepositoryStateSource(
     new MappingStateClient(),
