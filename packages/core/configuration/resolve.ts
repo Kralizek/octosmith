@@ -160,13 +160,6 @@ function matchesGlob(pattern: string, value: string): boolean {
   return new RegExp("^" + expression + "$").test(value);
 }
 
-function equalPropertyValue")
-    .replaceAll("*", ".*")
-    .replaceAll("?", ".");
-
-  return new RegExp("^" + expression + "$").test(value);
-}
-
 function equalPropertyValue(
   actual: PropertyValue | undefined,
   expected: PropertyValue,
