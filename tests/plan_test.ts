@@ -179,20 +179,6 @@ Deno.test("buildPlan returns an empty plan when owned state matches", () => {
   });
 });
 
-Deno.test("buildPlan rejects unsupported desired resources", () => {
-  const desired: DesiredState = {
-    repository: "sample",
-    template: "code",
-    teams: [],
-  };
-
-  assertThrows(
-    () => buildPlan(currentState(), desired),
-    Error,
-    "Planning is not implemented yet for: teams",
-  );
-});
-
 Deno.test("buildPlan rejects mismatched repositories", () => {
   const desired: DesiredState = {
     repository: "other",
@@ -203,5 +189,407 @@ Deno.test("buildPlan rejects mismatched repositories", () => {
     () => buildPlan(currentState(), desired),
     Error,
     "Cannot build a plan for different repositories",
+  );
+});
+
+Deno.test("buildPlan reconciles all desired resource families", () => {
+  const current = currentState();
+  current.customProperties = {
+    "repository-type": "code",
+    regions: ["eu", "us"],
+  };
+  current.actions = {
+    enabled: true,
+    allowedActions: "all",
+    shaPinningRequired: false,
+    selectedActions: {
+      githubOwnedAllowed: true,
+      verifiedAllowed: false,
+      patternsAllowed: ["actions/*"],
+    },
+    oidc: {
+      subjectClaimTemplate: { source: "default" },
+      immutableSubject: false,
+    },
+  };
+  current.teams = [{
+    team: "platform",
+    permission: { kind: "built-in", name: "pull" },
+  }];
+  current.secrets = ["OLD_SECRET", "TOKEN"];
+  current.variables = [
+    { name: "UNCHANGED", value: "same" },
+    { name: "REGION", value: "west" },
+  ];
+  current.rulesets = [{
+    id: 10,
+    name: "protect",
+    target: "branch",
+    enforcement: "active",
+    bypassActors: [],
+    conditions: {
+      refName: {
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      },
+    },
+    rules: [
+      { type: "deletion" },
+      { type: "update", updateAllowsFetchAndMerge: false },
+    ],
+  }];
+  current.environments = [{
+    name: "production",
+    secrets: ["DEPLOY_TOKEN"],
+    variables: [{ name: "REGION", value: "west" }],
+  }];
+  current.files = [
+    { path: "README.md", content: "old", sha: "readme-sha" },
+    { path: "KEEP.md", content: "customized", sha: "keep-sha" },
+    { path: "REMOVE.md", content: "remove", sha: "remove-sha" },
+  ];
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    settings: {
+      hasIssues: false,
+    },
+    customProperties: {
+      "repository-type": "code",
+      regions: ["us", "eu"],
+      tier: "critical",
+    },
+    actions: {
+      enabled: true,
+      allowedActions: "selected",
+      selectedActions: {
+        githubOwnedAllowed: true,
+        verifiedAllowed: true,
+        patternsAllowed: ["actions/*"],
+      },
+      oidc: {
+        subjectClaimTemplate: {
+          source: "custom",
+          claims: ["repo"],
+        },
+        immutableSubject: true,
+      },
+    },
+    teams: [
+      {
+        team: "platform",
+        permission: { kind: "built-in", name: "maintain" },
+      },
+      {
+        team: "release",
+        permission: { kind: "custom", name: "release-manager" },
+      },
+    ],
+    secrets: ["TOKEN", "NEW_SECRET"],
+    variables: [
+      { name: "UNCHANGED", value: "same" },
+      { name: "REGION", value: "north" },
+      { name: "NEW_VARIABLE", value: "value" },
+    ],
+    rulesets: [{
+      name: "protect",
+      enforcement: "evaluate",
+      conditions: {
+        refName: {
+          exclude: ["refs/heads/generated"],
+        },
+      },
+      rules: [{
+        type: "update",
+        updateAllowsFetchAndMerge: true,
+      }],
+    }],
+    environments: [{
+      name: "production",
+      secrets: ["DEPLOY_TOKEN"],
+      variables: [{ name: "REGION", value: "north" }],
+    }, {
+      name: "staging",
+      secrets: [],
+      variables: [],
+    }],
+    files: [
+      { path: "README.md", ensure: "exact", content: "new" },
+      { path: "KEEP.md", ensure: "exists", content: "seed" },
+      { path: "CREATE.md", ensure: "exists", content: "created" },
+      { path: "REMOVE.md", ensure: "absent" },
+    ],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [
+      {
+        type: "update-repository-settings",
+        settings: { hasIssues: false },
+      },
+      {
+        type: "set-custom-property",
+        name: "tier",
+        value: "critical",
+      },
+      {
+        type: "update-actions-settings",
+        settings: {
+          allowedActions: "selected",
+          selectedActions: {
+            verifiedAllowed: true,
+          },
+        },
+      },
+      {
+        type: "update-actions-oidc",
+        settings: {
+          subjectClaimTemplate: {
+            source: "custom",
+            claims: ["repo"],
+          },
+          immutableSubject: true,
+        },
+      },
+      {
+        type: "set-team-permission",
+        permission: {
+          team: "platform",
+          permission: { kind: "built-in", name: "maintain" },
+        },
+      },
+      {
+        type: "set-team-permission",
+        permission: {
+          team: "release",
+          permission: { kind: "custom", name: "release-manager" },
+        },
+      },
+      { type: "set-repository-secret", secret: "TOKEN" },
+      { type: "set-repository-secret", secret: "NEW_SECRET" },
+      {
+        type: "set-repository-variable",
+        variable: { name: "REGION", value: "north" },
+      },
+      {
+        type: "set-repository-variable",
+        variable: { name: "NEW_VARIABLE", value: "value" },
+      },
+      {
+        type: "update-ruleset",
+        id: 10,
+        changes: {
+          name: "protect",
+          enforcement: "evaluate",
+          conditions: {
+            refName: {
+              include: ["~DEFAULT_BRANCH"],
+              exclude: ["refs/heads/generated"],
+            },
+          },
+          rules: [
+            { type: "deletion" },
+            { type: "update", updateAllowsFetchAndMerge: true },
+          ],
+        },
+      },
+      {
+        type: "update-environment",
+        environment: {
+          name: "production",
+          secrets: ["DEPLOY_TOKEN"],
+          variables: [{ name: "REGION", value: "north" }],
+        },
+      },
+      {
+        type: "create-environment",
+        environment: {
+          name: "staging",
+          secrets: [],
+          variables: [],
+        },
+      },
+      {
+        type: "update-file",
+        sha: "readme-sha",
+        file: { path: "README.md", ensure: "exact", content: "new" },
+      },
+      {
+        type: "create-file",
+        file: { path: "CREATE.md", ensure: "exists", content: "created" },
+      },
+      {
+        type: "delete-file",
+        path: "REMOVE.md",
+        sha: "remove-sha",
+      },
+    ],
+  });
+});
+
+Deno.test("explicit empty owned collections clear removable resources", () => {
+  const current = currentState();
+  current.teams = [
+    { team: "a", permission: { kind: "built-in", name: "pull" } },
+    { team: "b", permission: { kind: "built-in", name: "push" } },
+  ];
+  current.secrets = ["A", "B"];
+  current.variables = [
+    { name: "A", value: "1" },
+    { name: "B", value: "2" },
+  ];
+  current.rulesets = [{
+    id: 1,
+    name: "protect",
+    target: "push",
+    enforcement: "active",
+    bypassActors: [],
+    rules: [],
+  }];
+  current.environments = [{
+    name: "production",
+    secrets: [],
+    variables: [],
+  }];
+  current.files = [{
+    path: "README.md",
+    content: "content",
+    sha: "sha",
+  }];
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    customProperties: {},
+    teams: [],
+    secrets: [],
+    variables: [],
+    rulesets: [],
+    environments: [],
+    files: [],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [
+      { type: "remove-team-permission", team: "a" },
+      { type: "remove-team-permission", team: "b" },
+      { type: "remove-repository-secret", secret: "A" },
+      { type: "remove-repository-secret", secret: "B" },
+      { type: "remove-repository-variable", name: "A" },
+      { type: "remove-repository-variable", name: "B" },
+      { type: "delete-ruleset", id: 1, name: "protect" },
+      { type: "delete-environment", name: "production" },
+    ],
+  });
+});
+
+Deno.test("declared repository secrets are always set because values are opaque", () => {
+  const current = currentState();
+  current.secrets = ["TOKEN"];
+
+  assertEquals(
+    buildPlan(current, {
+      repository: "sample",
+      template: "code",
+      secrets: ["TOKEN"],
+    }),
+    {
+      repository: "sample",
+      operations: [{ type: "set-repository-secret", secret: "TOKEN" }],
+    },
+  );
+});
+
+Deno.test("ruleset creation requires materializable identity and conditions", () => {
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{ name: "protect" }],
+      }),
+    Error,
+    "requires target",
+  );
+
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "protect",
+          target: "branch",
+          enforcement: "active",
+        }],
+      }),
+    Error,
+    "requires conditions.refName",
+  );
+
+  assertEquals(
+    buildPlan(currentState(), {
+      repository: "sample",
+      template: "code",
+      rulesets: [{
+        name: "push-policy",
+        target: "push",
+        enforcement: "active",
+        rules: [],
+      }],
+    }),
+    {
+      repository: "sample",
+      operations: [{
+        type: "create-ruleset",
+        ruleset: {
+          name: "push-policy",
+          target: "push",
+          enforcement: "active",
+          bypassActors: [],
+          rules: [],
+        },
+      }],
+    },
+  );
+});
+
+Deno.test("files require explicit absent intent for deletion", () => {
+  const current = currentState();
+  current.files = [{
+    path: "README.md",
+    content: "custom",
+    sha: "sha",
+  }];
+
+  assertEquals(
+    buildPlan(current, {
+      repository: "sample",
+      template: "code",
+      files: [],
+    }),
+    {
+      repository: "sample",
+      operations: [],
+    },
+  );
+
+  assertEquals(
+    buildPlan(current, {
+      repository: "sample",
+      template: "code",
+      files: [{
+        path: "README.md",
+        ensure: "exists",
+        content: "seed",
+      }],
+    }),
+    {
+      repository: "sample",
+      operations: [],
+    },
   );
 });
