@@ -270,7 +270,7 @@ function normalizeActions(
   actions: RepositoryTemplate["repository"] extends infer Repository
     ? Repository extends { readonly actions?: infer Actions }
       ? NonNullable<Actions>
-      : never
+    : never
     : never,
 ): DesiredActionsSettings {
   return {
