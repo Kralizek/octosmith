@@ -105,18 +105,21 @@ Deno.test("failed-only applied results are failed and preserve the operation err
 });
 
 Deno.test("failed plus skipped without success is failed", () => {
-  assertEquals(
-    reportAppliedRepository("code", "sample", [
-      { operation, status: "failed", error: "boom" },
-      {
-        operation: {
-          type: "delete-environment",
-          name: "later",
-        },
-        status: "skipped",
+  const report = reportAppliedRepository("code", "sample", [
+    { operation, status: "failed", error: "boom" },
+    {
+      operation: {
+        type: "delete-environment",
+        name: "later",
       },
-    ]).status,
-    "failed",
+      status: "skipped",
+    },
+  ]);
+
+  assertEquals(report.status, "failed");
+  assertEquals(
+    report.operations.map((item) => item.status),
+    ["failed", "skipped"],
   );
 });
 
