@@ -5,7 +5,10 @@ import type {
   Plan,
   RepositoryMetadata,
 } from "@octosmith/core";
-import type { ApplyPlanResult } from "@octosmith/github";
+import type {
+  ApplyPlanResult,
+  RepositoryDiscoveryFailure,
+} from "@octosmith/github";
 import {
   reconcile,
   type ReconciliationRuntime,
@@ -18,10 +21,14 @@ class FakeRuntime implements ReconciliationRuntime {
   constructor(
     readonly repositories: readonly RepositoryMetadata[],
     readonly failRead = new Set<string>(),
+    readonly discoveryFailures: readonly RepositoryDiscoveryFailure[] = [],
   ) {}
 
   discover(_loaded: LoadedConfiguration) {
-    return Promise.resolve(this.repositories);
+    return Promise.resolve({
+      repositories: this.repositories,
+      failures: this.discoveryFailures,
+    });
   }
 
   read(desired: import("@octosmith/core").DesiredState): Promise<CurrentState> {
@@ -93,6 +100,33 @@ Deno.test("reconcile apply executes the fresh plan", async () => {
 
     assertEquals(report.repositories[0].status, "applied");
     assertEquals(runtime.applied.length, 1);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("reconcile reports discovery failures without stopping other repositories", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime(
+      [metadata("sample")],
+      new Set(),
+      [{ repository: "missing", error: new Error("not found") }],
+    );
+    const report = await reconcile(runtime, {
+      path: root,
+      mode: "plan",
+      now: sequentialClock(),
+    });
+
+    assertEquals(
+      report.repositories.map((item) => [item.repository, item.status]),
+      [
+        ["missing", "failed"],
+        ["sample", "planned"],
+      ],
+    );
+    assertEquals(report.repositories[0].error, "not found");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
