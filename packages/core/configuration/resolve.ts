@@ -16,6 +16,7 @@ import type {
   DesiredMergeSettings,
   DesiredRepositorySettings,
 } from "../state/repository.ts";
+import type { DesiredActionsSettings } from "../state/resources.ts";
 import type { DesiredRuleset, DesiredRulesetRule } from "../state/rulesets.ts";
 import type { DesiredFile, DesiredState } from "../state/types.ts";
 import type { LoadedConfiguration } from "./load.ts";
@@ -76,6 +77,9 @@ export async function resolveDesiredState(
     }),
     ...(template.repository?.customProperties && {
       customProperties: template.repository.customProperties,
+    }),
+    ...(template.repository?.actions && {
+      actions: normalizeActions(template.repository.actions),
     }),
     ...(template.rulesets && {
       rulesets: template.rulesets.map(normalizeRuleset),
@@ -149,7 +153,15 @@ export function matchesSelector(
 
 function matchesGlob(pattern: string, value: string): boolean {
   const expression = pattern
+    .replace(/[.+^$\{\}()|[\]\\]/g, "\\function matchesGlob(pattern: string, value: string): boolean {
+  const expression = pattern
     .replaceAll(".", "\\.")
+    .replaceAll("*", ".*")
+    .replaceAll("?", ".");
+
+  return new RegExp("^" + expression + "$").test(value);
+}
+")
     .replaceAll("*", ".*")
     .replaceAll("?", ".");
 
@@ -262,6 +274,38 @@ function normalizeMerge(
   };
 }
 
+function normalizeActions(
+  actions: RepositoryTemplate["repository"] extends infer Repository
+    ? Repository extends { readonly actions?: infer Actions } ? NonNullable<Actions>
+    : never
+    : never,
+): DesiredActionsSettings {
+  return {
+    ...(actions.enabled !== undefined && { enabled: actions.enabled }),
+    ...(actions.allowedActions !== undefined && {
+      allowedActions: actions.allowedActions === "local_only"
+        ? "local-only" as const
+        : actions.allowedActions,
+    }),
+    ...(actions.shaPinningRequired !== undefined && {
+      shaPinningRequired: actions.shaPinningRequired,
+    }),
+    ...(actions.selectedActions !== undefined && {
+      selectedActions: { ...actions.selectedActions },
+    }),
+    ...(actions.oidc !== undefined && {
+      oidc: {
+        ...(actions.oidc.subjectClaimTemplate !== undefined && {
+          subjectClaimTemplate: actions.oidc.subjectClaimTemplate,
+        }),
+        ...(actions.oidc.immutableSubject !== undefined && {
+          immutableSubject: actions.oidc.immutableSubject,
+        }),
+      },
+    }),
+  };
+}
+
 function normalizeTeamPermission(
   permission: { readonly name: string; readonly permission: string },
 ): TeamPermission {
@@ -283,6 +327,9 @@ function normalizeRuleset(ruleset: RulesetConfiguration): DesiredRuleset {
     ...(ruleset.target !== undefined && { target: ruleset.target }),
     ...(ruleset.enforcement !== undefined && {
       enforcement: ruleset.enforcement,
+    }),
+    ...(ruleset.bypassActors !== undefined && {
+      bypassActors: ruleset.bypassActors,
     }),
     ...(ruleset.conditions?.refName !== undefined && {
       conditions: {

@@ -2,6 +2,7 @@ import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import {
   loadConfigurationDirectory,
+  matchesSelector,
   resolveDesiredState,
 } from "../packages/core/mod.ts";
 
@@ -80,4 +81,168 @@ Deno.test("fixture organization agrees with root configuration", async () => {
   );
 
   assertEquals(organization.organization, loaded.configuration.organization);
+});
+
+Deno.test("preserves arbitrary configuration map keys", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.mkdir(join(root, "files"));
+
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "scope:",
+        "  properties:",
+        "    repository_type: code",
+        "",
+      ].join("\n"),
+    );
+
+    await Deno.writeTextFile(
+      join(root, "templates", "code.yml"),
+      [
+        "match:",
+        "  properties:",
+        "    repository_type: code",
+        "repository:",
+        "  custom_properties:",
+        "    deployment_region: eu-north-1",
+        "files:",
+        "  .github/workflows/release_candidate.yml:",
+        "    ensure: exact",
+        "    source: files/workflow.yml",
+        "",
+      ].join("\n"),
+    );
+
+    await Deno.writeTextFile(
+      join(root, "files", "workflow.yml"),
+      "name: release\n",
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    assertEquals(loaded.configuration.scope.properties, {
+      repository_type: "code",
+    });
+    assertEquals(loaded.templates.code.match.properties, {
+      repository_type: "code",
+    });
+    assertEquals(loaded.templates.code.repository?.customProperties, {
+      deployment_region: "eu-north-1",
+    });
+    assertEquals(Object.keys(loaded.templates.code.files ?? {}), [
+      ".github/workflows/release_candidate.yml",
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("name selectors treat regex metacharacters literally", () => {
+  assertEquals(
+    matchesSelector(
+      { names: ["lib+(core)*"] },
+      {
+        name: "lib+(core)-api",
+        teams: [],
+        properties: {},
+      },
+    ),
+    true,
+  );
+
+  assertEquals(
+    matchesSelector(
+      { names: ["lib[core]"] },
+      {
+        name: "libc",
+        teams: [],
+        properties: {},
+      },
+    ),
+    false,
+  );
+});
+
+Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "scope:",
+        "  names:",
+        "    - sample",
+        "",
+      ].join("\n"),
+    );
+
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  actions:",
+        "    enabled: true",
+        "    allowed_actions: local_only",
+        "    sha_pinning_required: true",
+        "    oidc:",
+        "      subject_claim_template:",
+        "        source: custom",
+        "        claims:",
+        "          - repo",
+        "      immutable_subject: true",
+        "rulesets:",
+        "  - name: protect",
+        "    bypass_actors:",
+        "      - actor_type: team",
+        "        actor_id: 42",
+        "        bypass_mode: pull-request",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+    const desired = await resolveDesiredState(
+      loaded,
+      {
+        name: "sample",
+        teams: [],
+        properties: {},
+      },
+      (name) => name,
+    );
+
+    assertEquals(desired.actions, {
+      enabled: true,
+      allowedActions: "local-only",
+      shaPinningRequired: true,
+      oidc: {
+        subjectClaimTemplate: {
+          source: "custom",
+          claims: ["repo"],
+        },
+        immutableSubject: true,
+      },
+    });
+    assertEquals(desired.rulesets?.[0].bypassActors, [{
+      actorType: "team",
+      actorId: 42,
+      bypassMode: "pull-request",
+    }]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
