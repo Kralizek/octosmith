@@ -1,61 +1,61 @@
 {
   "repository": "shared-library",
   "template": "shared-library",
-  "desiredState": {
-    "repository": {
-      "settings": {
-        "has_projects": false,
-        "has_discussions": false,
-        "has_issues": false,
-        "has_wiki": false,
-        "delete_branch_on_merge": true,
-        "merge": {
-          "merge_commit": false,
-          "rebase": false,
-          "squash": true
+  "settings": {
+    "hasProjects": false,
+    "hasDiscussions": false,
+    "hasIssues": false,
+    "hasWiki": false,
+    "merge": {
+      "allowSquashMerge": true,
+      "allowMergeCommit": false,
+      "allowRebaseMerge": false,
+      "deleteBranchOnMerge": true
+    }
+  },
+  "teams": [
+    {
+      "team": "platform-team",
+      "permission": {
+        "kind": "built-in",
+        "name": "maintain"
+      }
+    },
+    {
+      "team": "library-maintainers",
+      "permission": {
+        "kind": "built-in",
+        "name": "maintain"
+      }
+    }
+  ],
+  "rulesets": [
+    {
+      "name": "protect-default-branch",
+      "target": "branch",
+      "enforcement": "active",
+      "conditions": {
+        "refName": {
+          "include": [
+            "~DEFAULT_BRANCH"
+          ]
         }
       },
-      "teams": [
+      "rules": [
         {
-          "name": "platform-team",
-          "permission": "maintain"
+          "type": "deletion"
         },
         {
-          "name": "library-maintainers",
-          "permission": "maintain"
+          "type": "non-fast-forward"
+        },
+        {
+          "type": "pull-request",
+          "requiredReviewThreadResolution": true,
+          "allowedMergeMethods": [
+            "squash"
+          ]
         }
       ]
-    },
-    "rulesets": [
-      {
-        "name": "protect-default-branch",
-        "target": "branch",
-        "enforcement": "active",
-        "conditions": {
-          "ref_name": {
-            "include": [
-              "~DEFAULT_BRANCH"
-            ]
-          }
-        },
-        "rules": [
-          {
-            "type": "deletion"
-          },
-          {
-            "type": "non_fast_forward"
-          },
-          {
-            "type": "pull_request",
-            "parameters": {
-              "required_review_thread_resolution": true,
-              "allowed_merge_methods": [
-                "squash"
-              ]
-            }
-          }
-        ]
-      }
-    ]
-  }
+    }
+  ]
 }

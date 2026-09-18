@@ -4,7 +4,11 @@
   "title": "OctoSmith configuration",
   "type": "object",
   "additionalProperties": false,
-  "required": ["version", "organization", "scope"],
+  "required": [
+    "version",
+    "organization",
+    "scope"
+  ],
   "properties": {
     "version": {
       "const": 1
@@ -47,6 +51,31 @@
           "additionalProperties": {
             "$ref": "#/$defs/propertyValue"
           }
+        },
+        "visibility": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "public",
+                "private",
+                "internal"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "private",
+                  "internal"
+                ]
+              }
+            }
+          ]
         }
       }
     },
