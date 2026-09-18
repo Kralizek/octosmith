@@ -1,0 +1,9 @@
+{
+  "name": "config-repository",
+  "teams": [
+    "platform-team"
+  ],
+  "properties": {
+    "repository-type": "config"
+  }
+}

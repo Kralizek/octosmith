@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../schemas/octosmith.schema.json
+
+version: 1
+
+organization: example-org
+
+scope:
+  teams:
+    - platform-team

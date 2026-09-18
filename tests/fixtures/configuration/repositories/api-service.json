@@ -1,0 +1,10 @@
+{
+  "name": "api-service",
+  "teams": [
+    "platform-team"
+  ],
+  "properties": {
+    "repository-type": "code",
+    "distribution": "internal"
+  }
+}

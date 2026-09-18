@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=../../../schemas/template.schema.json
+
+match:
+  properties:
+    repository-type: config
+
+repository:
+  settings:
+    has_projects: false
+    has_discussions: false
+    has_issues: false
+    has_wiki: false
+    delete_branch_on_merge: true
+
+  teams:
+    - name: platform-team
+      permission: maintain
+    - name: configuration-maintainers
+      permission: configuration-editor

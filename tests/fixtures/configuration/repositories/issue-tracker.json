@@ -1,0 +1,9 @@
+{
+  "name": "issue-tracker",
+  "teams": [
+    "platform-team"
+  ],
+  "properties": {
+    "repository-type": "issues"
+  }
+}
