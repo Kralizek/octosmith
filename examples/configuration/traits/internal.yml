@@ -1,8 +1,0 @@
-match:
-  teams:
-    - internal-apps-team
-
-repository:
-  teams:
-    - name: internal-apps-team
-      permission: push

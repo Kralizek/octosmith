@@ -1,24 +1,16 @@
 # Example OctoSmith configuration
 
-This directory is a design fixture for the OctoSmith configuration model.
+This directory is a design fixture for the initial OctoSmith configuration
+model.
 
 The filesystem acts as the registry:
 
 - `octosmith.yml` defines the deployment scope.
-- `base.yml` applies to every repository in scope.
-- exactly one file under `types/` should match a repository.
-- zero or more files under `traits/` may match a repository.
-- `overrides/<repository>.yml` is an explicit repository-specific escape hatch.
-- `templates/` contains content copied into managed repositories.
+- every file under `templates/` fully describes one repository family.
+- `files/` contains content copied into managed repositories.
 
-The effective desired state for a repository is composed as:
+Every repository in scope is expected to match exactly one template. Templates
+are intentionally self-contained, even when that means some duplication.
 
-```text
-base
-  + type
-  + matching traits
-  + repository override
-```
-
-Names used in this example are intentionally generic and do not represent any
-specific organization.
+Names used in this example are generic and do not represent any specific
+organization.

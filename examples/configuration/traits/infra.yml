@@ -1,8 +1,0 @@
-match:
-  names:
-    - "*-infra"
-    - "terraform-*"
-
-repository:
-  variables:
-    - INFRASTRUCTURE_REGION

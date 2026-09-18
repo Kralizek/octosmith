@@ -11,4 +11,4 @@ configuration as code.
 ## Examples
 
 See [`examples/configuration`](examples/configuration) for a sample policy
-directory covering scope, types, traits, overrides, and managed file templates.
+directory covering scope, repository-family templates, and managed files.
