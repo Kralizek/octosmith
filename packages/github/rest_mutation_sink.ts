@@ -689,8 +689,20 @@ function mapRule(
       delete mapped.environments;
       break;
 
-    case "required-status-checks":
-      mapped.required_status_checks = Reflect.get(rule, "checks") ?? [];
+    case "required-status-checks": {
+      const checks = Reflect.get(rule, "checks") as
+        | readonly {
+          readonly context: string;
+          readonly integrationId?: number;
+        }[]
+        | undefined;
+
+      mapped.required_status_checks = (checks ?? []).map((check) => ({
+        context: check.context,
+        ...(check.integrationId !== undefined && {
+          integration_id: check.integrationId,
+        }),
+      }));
       mapped.strict_required_status_checks_policy = Reflect.get(
         rule,
         "strict",
@@ -698,6 +710,7 @@ function mapRule(
       delete mapped.checks;
       delete mapped.strict;
       break;
+    }
 
     case "pull-request": {
       const restriction = Reflect.get(rule, "dismissalRestriction") as
