@@ -153,17 +153,7 @@ export function matchesSelector(
 
 function matchesGlob(pattern: string, value: string): boolean {
   const expression = pattern
-    .replace(/[.+^$\{\}()|[\]\\]/g, "\\function matchesGlob(pattern: string, value: string): boolean {
-  const expression = pattern
-    .replace(/[.+^$\{\}()|[\]\\]/g, "\\function matchesGlob(pattern: string, value: string): boolean {
-  const expression = pattern
-    .replaceAll(".", "\\.")
-    .replaceAll("*", ".*")
-    .replaceAll("?", ".");
-
-  return new RegExp("^" + expression + "$").test(value);
-}
-")
+    .replace(/[.+^$\{\}()|[\]\\]/g, (character) => "\\" + character)
     .replaceAll("*", ".*")
     .replaceAll("?", ".");
 
