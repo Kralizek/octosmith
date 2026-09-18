@@ -1,9 +1,6 @@
 import { join } from "@std/path";
 import { parse } from "@std/yaml";
-import type {
-  Configuration,
-  RepositoryTemplate,
-} from "./types.ts";
+import type { Configuration, RepositoryTemplate } from "./types.ts";
 
 export interface LoadedConfiguration {
   readonly root: string;
