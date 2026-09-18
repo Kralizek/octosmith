@@ -58,7 +58,9 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   async getRepositorySettings(
     repository: string,
   ): Promise<CurrentRepositorySettings> {
-    const response = await this.client.get<RepositoryResponse>(this.repo(repository));
+    const response = await this.client.get<RepositoryResponse>(
+      this.repo(repository),
+    );
 
     return {
       name: response.name,
@@ -103,17 +105,21 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   async getCustomProperties(
     repository: string,
   ): Promise<Readonly<Record<string, CustomPropertyValue>>> {
-    const values = await this.client.get<readonly {
-      readonly property_name: string;
-      readonly value: CustomPropertyValue;
-    }[]>(this.repo(repository) + "/properties/values");
+    const values = await this.client.get<
+      readonly {
+        readonly property_name: string;
+        readonly value: CustomPropertyValue;
+      }[]
+    >(this.repo(repository) + "/properties/values");
 
     return Object.fromEntries(
       values.map((value) => [value.property_name, value.value]),
     );
   }
 
-  async getActionsSettings(repository: string): Promise<CurrentActionsSettings> {
+  async getActionsSettings(
+    repository: string,
+  ): Promise<CurrentActionsSettings> {
     const base = this.repo(repository) + "/actions";
     const permissions = await this.client.get<{
       readonly enabled: boolean;
@@ -129,11 +135,13 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       }>(base + "/permissions/selected-actions")
       : undefined;
 
-    const oidc = await this.client.request<{
-      readonly use_default: boolean;
-      readonly include_claim_keys?: readonly string[];
-      readonly use_immutable_subject?: boolean;
-    } | undefined>("GET", base + "/oidc/customization/sub", {
+    const oidc = await this.client.request<
+      {
+        readonly use_default: boolean;
+        readonly include_claim_keys?: readonly string[];
+        readonly use_immutable_subject?: boolean;
+      } | undefined
+    >("GET", base + "/oidc/customization/sub", {
       allowNotFound: true,
     });
 
@@ -150,12 +158,10 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       }),
       oidc: oidc
         ? {
-          subjectClaimTemplate: oidc.use_default
-            ? { source: "default" }
-            : {
-              source: "custom",
-              claims: oidc.include_claim_keys ?? [],
-            },
+          subjectClaimTemplate: oidc.use_default ? { source: "default" } : {
+            source: "custom",
+            claims: oidc.include_claim_keys ?? [],
+          },
           immutableSubject: oidc.use_immutable_subject ?? false,
         }
         : {
