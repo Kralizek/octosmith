@@ -1,6 +1,18 @@
 import type { PropertyValue } from "./common.ts";
-import type { DesiredRepositorySettings } from "./repository.ts";
-import type { DesiredRuleset } from "./rulesets.ts";
+import type {
+  MergeCommitMessage,
+  MergeCommitTitle,
+  RepositoryVisibility,
+  SecurityFeatureStatus,
+  SquashMergeCommitMessage,
+  SquashMergeCommitTitle,
+} from "./repository.ts";
+import type {
+  RulesetBypassActorType,
+  RulesetBypassMode,
+  RulesetEnforcement,
+  RulesetTarget,
+} from "./rulesets.ts";
 
 export interface Configuration {
   readonly version: 1;
@@ -17,21 +29,118 @@ export interface RepositorySelector {
 export interface RepositoryTemplate {
   readonly match: RepositorySelector;
   readonly repository?: RepositoryConfiguration;
-  readonly rulesets?: readonly DesiredRuleset[];
+  readonly rulesets?: readonly RulesetConfiguration[];
   readonly environments?: readonly EnvironmentConfiguration[];
   readonly files?: Readonly<Record<string, FileConfiguration>>;
 }
 
 export interface RepositoryConfiguration {
-  readonly settings?: DesiredRepositorySettings;
+  readonly settings?: RepositorySettingsConfiguration;
   readonly teams?: readonly TeamPermissionConfiguration[];
   readonly secrets?: readonly string[];
   readonly variables?: readonly string[];
 }
 
+export interface RepositorySettingsConfiguration {
+  readonly name?: string;
+  readonly description?: string | null;
+  readonly homepage?: string | null;
+  readonly visibility?: RepositoryVisibility;
+  readonly hasWiki?: boolean;
+  readonly hasIssues?: boolean;
+  readonly hasProjects?: boolean;
+  readonly hasDiscussions?: boolean;
+  readonly hasPullRequests?: boolean;
+  readonly pullRequestCreationPolicy?: "all" | "collaborators_only";
+  readonly isTemplate?: boolean;
+  readonly defaultBranch?: string;
+  readonly deleteBranchOnMerge?: boolean;
+  readonly allowForking?: boolean;
+  readonly archived?: boolean;
+  readonly webCommitSignoffRequired?: boolean;
+  readonly merge?: MergeConfiguration;
+  readonly securityAndAnalysis?: SecurityAndAnalysisConfiguration;
+}
+
+export interface MergeConfiguration {
+  readonly squash?: boolean;
+  readonly mergeCommit?: boolean;
+  readonly rebase?: boolean;
+  readonly autoMerge?: boolean;
+  readonly updateBranch?: boolean;
+  readonly squashCommitTitle?: SquashMergeCommitTitle;
+  readonly squashCommitMessage?: SquashMergeCommitMessage;
+  readonly mergeCommitTitle?: MergeCommitTitle;
+  readonly mergeCommitMessage?: MergeCommitMessage;
+}
+
+export interface SecurityAndAnalysisConfiguration {
+  readonly advancedSecurity?: SecurityFeatureStatus;
+  readonly codeSecurity?: SecurityFeatureStatus;
+  readonly secretScanning?: SecurityFeatureStatus;
+  readonly secretScanningPushProtection?: SecurityFeatureStatus;
+  readonly secretScanningAiDetection?: SecurityFeatureStatus;
+}
+
 export interface TeamPermissionConfiguration {
   readonly name: string;
   readonly permission: string;
+}
+
+export interface RulesetConfiguration {
+  readonly name: string;
+  readonly target?: RulesetTarget;
+  readonly enforcement?: RulesetEnforcement;
+  readonly bypassActors?: readonly RulesetBypassActorConfiguration[];
+  readonly conditions?: RulesetConditionsConfiguration;
+  readonly rules?: readonly RulesetRuleConfiguration[];
+}
+
+export interface RulesetBypassActorConfiguration {
+  readonly actorType: RulesetBypassActorType;
+  readonly actorId?: number;
+  readonly bypassMode?: RulesetBypassMode;
+}
+
+export interface RulesetConditionsConfiguration {
+  readonly refName?: RefNameConditionConfiguration;
+}
+
+export interface RefNameConditionConfiguration {
+  readonly include?: readonly string[];
+  readonly exclude?: readonly string[];
+}
+
+export type RulesetRuleTypeConfiguration =
+  | "creation"
+  | "update"
+  | "deletion"
+  | "required_linear_history"
+  | "merge_queue"
+  | "required_deployments"
+  | "required_signatures"
+  | "pull_request"
+  | "required_status_checks"
+  | "non_fast_forward"
+  | "commit_message_pattern"
+  | "commit_author_email_pattern"
+  | "committer_email_pattern"
+  | "branch_name_pattern"
+  | "tag_name_pattern"
+  | "workflows"
+  | "code_scanning"
+  | "code_quality"
+  | "code_coverage"
+  | "copilot_code_review"
+  | "license_compliance_scanning"
+  | "file_path_restriction"
+  | "max_file_path_length"
+  | "file_extension_restriction"
+  | "max_file_size";
+
+export interface RulesetRuleConfiguration {
+  readonly type: RulesetRuleTypeConfiguration;
+  readonly parameters?: Readonly<Record<string, unknown>>;
 }
 
 export interface EnvironmentConfiguration {
