@@ -23,6 +23,7 @@ export interface Configuration {
 export interface RepositorySelector {
   readonly names?: readonly string[];
   readonly teams?: readonly string[];
+  readonly visibility?: RepositoryVisibility | readonly RepositoryVisibility[];
   readonly properties?: Readonly<Record<string, PropertyValue>>;
 }
 

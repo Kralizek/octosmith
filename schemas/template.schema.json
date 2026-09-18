@@ -4,7 +4,9 @@
   "title": "OctoSmith repository template",
   "type": "object",
   "additionalProperties": false,
-  "required": ["match"],
+  "required": [
+    "match"
+  ],
   "properties": {
     "match": {
       "$ref": "#/$defs/selector"
@@ -49,6 +51,31 @@
           "additionalProperties": {
             "$ref": "#/$defs/propertyValue"
           }
+        },
+        "visibility": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "public",
+                "private",
+                "internal"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "private",
+                  "internal"
+                ]
+              }
+            }
+          ]
         }
       }
     },
@@ -115,14 +142,24 @@
           "minLength": 1
         },
         "description": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "homepage": {
-          "type": ["string", "null"]
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "visibility": {
           "type": "string",
-          "enum": ["public", "private", "internal"]
+          "enum": [
+            "public",
+            "private",
+            "internal"
+          ]
         },
         "has_wiki": {
           "type": "boolean"
@@ -141,7 +178,10 @@
         },
         "pull_request_creation_policy": {
           "type": "string",
-          "enum": ["all", "collaborators_only"]
+          "enum": [
+            "all",
+            "collaborators_only"
+          ]
         },
         "is_template": {
           "type": "boolean"
@@ -191,25 +231,42 @@
         },
         "squash_commit_title": {
           "type": "string",
-          "enum": ["pull-request-title", "commit-or-pull-request-title"]
+          "enum": [
+            "pull-request-title",
+            "commit-or-pull-request-title"
+          ]
         },
         "squash_commit_message": {
           "type": "string",
-          "enum": ["pull-request-body", "commit-messages", "blank"]
+          "enum": [
+            "pull-request-body",
+            "commit-messages",
+            "blank"
+          ]
         },
         "merge_commit_title": {
           "type": "string",
-          "enum": ["pull-request-title", "merge-message"]
+          "enum": [
+            "pull-request-title",
+            "merge-message"
+          ]
         },
         "merge_commit_message": {
           "type": "string",
-          "enum": ["pull-request-title", "pull-request-body", "blank"]
+          "enum": [
+            "pull-request-title",
+            "pull-request-body",
+            "blank"
+          ]
         }
       }
     },
     "securityFeatureStatus": {
       "type": "string",
-      "enum": ["enabled", "disabled"]
+      "enum": [
+        "enabled",
+        "disabled"
+      ]
     },
     "securityAndAnalysis": {
       "type": "object",
@@ -235,7 +292,10 @@
     "teamPermission": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name", "permission"],
+      "required": [
+        "name",
+        "permission"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -250,7 +310,9 @@
     "ruleset": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -258,11 +320,19 @@
         },
         "target": {
           "type": "string",
-          "enum": ["branch", "tag", "push"]
+          "enum": [
+            "branch",
+            "tag",
+            "push"
+          ]
         },
         "enforcement": {
           "type": "string",
-          "enum": ["disabled", "evaluate", "active"]
+          "enum": [
+            "disabled",
+            "evaluate",
+            "active"
+          ]
         },
         "bypass_actors": {
           "type": "array",
@@ -284,7 +354,9 @@
     "bypassActor": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["actor_type"],
+      "required": [
+        "actor_type"
+      ],
       "properties": {
         "actor_type": {
           "type": "string",
@@ -302,7 +374,11 @@
         },
         "bypass_mode": {
           "type": "string",
-          "enum": ["always", "pull-request", "exempt"]
+          "enum": [
+            "always",
+            "pull-request",
+            "exempt"
+          ]
         }
       }
     },
@@ -327,7 +403,9 @@
     "rule": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type"],
+      "required": [
+        "type"
+      ],
       "properties": {
         "type": {
           "type": "string",
@@ -367,7 +445,9 @@
     "environment": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "type": "string",
@@ -386,7 +466,10 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["ensure", "source"],
+          "required": [
+            "ensure",
+            "source"
+          ],
           "properties": {
             "ensure": {
               "const": "exact"
@@ -400,7 +483,9 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["ensure"],
+          "required": [
+            "ensure"
+          ],
           "properties": {
             "ensure": {
               "const": "absent"
