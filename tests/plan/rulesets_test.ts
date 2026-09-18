@@ -707,104 +707,116 @@ Deno.test("existing matching rules are validated after merge against the effecti
 Deno.test("new rules validate nested object members", () => {
   assertThrows(
     () =>
-      buildPlan(currentState(), {
-        repository: "sample",
-        template: "code",
-        rulesets: [{
-          name: "branch",
-          target: "branch",
-          enforcement: "active",
-          conditions: {
-            refName: { include: ["~DEFAULT_BRANCH"] },
-          },
-          rules: [{
-            type: "required-status-checks",
-            doNotEnforceOnCreate: false,
-            checks: [{}],
-            strict: true,
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "branch",
+            target: "branch",
+            enforcement: "active",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
+            },
+            rules: [{
+              type: "required-status-checks",
+              doNotEnforceOnCreate: false,
+              checks: [{}],
+              strict: true,
+            }],
           }],
-        }],
-      }),
+        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+      ),
     Error,
     "required status check at index 0 requires context",
   );
 
   assertThrows(
     () =>
-      buildPlan(currentState(), {
-        repository: "sample",
-        template: "code",
-        rulesets: [{
-          name: "branch",
-          target: "branch",
-          enforcement: "active",
-          conditions: {
-            refName: { include: ["~DEFAULT_BRANCH"] },
-          },
-          rules: [{
-            type: "workflows",
-            doNotEnforceOnCreate: false,
-            workflows: [{ path: ".github/workflows/ci.yml" }],
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "branch",
+            target: "branch",
+            enforcement: "active",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
+            },
+            rules: [{
+              type: "workflows",
+              doNotEnforceOnCreate: false,
+              workflows: [{ path: ".github/workflows/ci.yml" }],
+            }],
           }],
-        }],
-      }),
+        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+      ),
     Error,
     "required workflow at index 0 requires repositoryId",
   );
 
   assertThrows(
     () =>
-      buildPlan(currentState(), {
-        repository: "sample",
-        template: "code",
-        rulesets: [{
-          name: "branch",
-          target: "branch",
-          enforcement: "active",
-          conditions: {
-            refName: { include: ["~DEFAULT_BRANCH"] },
-          },
-          rules: [{
-            type: "pull-request",
-            allowedMergeMethods: ["squash"],
-            dismissStaleReviewsOnPush: true,
-            dismissalRestriction: {
-              enabled: true,
-              allowedActors: [],
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "branch",
+            target: "branch",
+            enforcement: "active",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
             },
-            requireCodeOwnerReview: true,
-            requireLastPushApproval: true,
-            requiredApprovingReviewCount: 1,
-            requiredReviewThreadResolution: true,
-            requiredReviewers: [{ reviewerTeamId: 7 }],
+            rules: [{
+              type: "pull-request",
+              allowedMergeMethods: ["squash"],
+              dismissStaleReviewsOnPush: true,
+              dismissalRestriction: {
+                enabled: true,
+                allowedActors: [],
+              },
+              requireCodeOwnerReview: true,
+              requireLastPushApproval: true,
+              requiredApprovingReviewCount: 1,
+              requiredReviewThreadResolution: true,
+              requiredReviewers: [{ reviewerTeamId: 7 }],
+            }],
           }],
-        }],
-      }),
+        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+      ),
     Error,
     "pull-request required reviewer at index 0 requires filePatterns",
   );
 
   assertThrows(
     () =>
-      buildPlan(currentState(), {
-        repository: "sample",
-        template: "code",
-        rulesets: [{
-          name: "branch",
-          target: "branch",
-          enforcement: "active",
-          conditions: {
-            refName: { include: ["~DEFAULT_BRANCH"] },
-          },
-          rules: [{
-            type: "code-scanning",
-            tools: [{
-              tool: "CodeQL",
-              alertsThreshold: "errors",
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "branch",
+            target: "branch",
+            enforcement: "active",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
+            },
+            rules: [{
+              type: "code-scanning",
+              tools: [{
+                tool: "CodeQL",
+                alertsThreshold: "errors",
+              }],
             }],
           }],
-        }],
-      }),
+        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+      ),
     Error,
     "code scanning tool at index 0 requires securityAlertsThreshold",
   );
