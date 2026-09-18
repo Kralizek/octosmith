@@ -121,6 +121,7 @@ export interface CreateEnvironmentOperation {
 export interface UpdateEnvironmentOperation {
   readonly type: "update-environment";
   readonly environment: DesiredEnvironment;
+  readonly collections: CollectionReconciliationMode;
 }
 
 export interface DeleteEnvironmentOperation {
