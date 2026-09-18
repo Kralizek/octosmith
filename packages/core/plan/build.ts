@@ -644,9 +644,17 @@ function diffRuleset(
       );
     }
 
-    const merged = mergeOwned(current.conditions, desired.conditions);
+    const currentConditions = current.target === "push"
+      ? {
+        refName: {
+          include: [],
+          exclude: [],
+        },
+      }
+      : current.conditions;
+    const merged = mergeOwned(currentConditions, desired.conditions);
 
-    if (!deepEqual(current.conditions, merged)) {
+    if (!deepEqual(currentConditions, merged)) {
       changes.conditions = merged;
     }
   }
@@ -676,6 +684,8 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
     );
   }
 
+  const target = desired.target;
+
   if (!desired.enforcement) {
     throw new Error(
       "Ruleset " + desired.name +
@@ -686,7 +696,7 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
   const bypassActors = desired.bypassActors ?? [];
   const rules = desired.rules ?? [];
 
-  if (desired.target === "push") {
+  if (target === "push") {
     if (desired.conditions !== undefined) {
       throw new Error(
         "Push ruleset " + desired.name + " cannot declare ref conditions",
@@ -695,7 +705,7 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
 
     return {
       name: desired.name,
-      target: "push",
+      target,
       enforcement: desired.enforcement,
       bypassActors,
       rules: rules.map((rule) =>
@@ -715,7 +725,7 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
 
   return {
     name: desired.name,
-    target: desired.target,
+    target,
     enforcement: desired.enforcement,
     bypassActors,
     conditions: {
