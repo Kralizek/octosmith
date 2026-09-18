@@ -112,12 +112,18 @@ function filterSparseEnvironments(
       ...environment,
       secrets: owned.secrets === undefined
         ? []
+        : owned.secrets.length === 0
+        ? environment.secrets
         : environment.secrets.filter((name) => owned.secrets?.includes(name)),
-      variables: owned.variables === undefined ? [] : filterNamed(
-        environment.variables,
-        owned.variables.map((item) => item.name),
-        "name",
-      ),
+      variables: owned.variables === undefined
+        ? []
+        : owned.variables.length === 0
+        ? environment.variables
+        : filterNamed(
+          environment.variables,
+          owned.variables.map((item) => item.name),
+          "name",
+        ),
     }];
   });
 }
