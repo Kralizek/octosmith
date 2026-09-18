@@ -431,7 +431,7 @@ Deno.test("buildPlan reconciles all desired resource families", () => {
   });
 });
 
-Deno.test("explicit empty owned collections clear removable resources", () => {
+Deno.test("explicit empty collections do not remove repository values by default", () => {
   const current = currentState({
     teams: [
       { team: "a", permission: { kind: "built-in", name: "pull" } },
@@ -479,10 +479,6 @@ Deno.test("explicit empty owned collections clear removable resources", () => {
     operations: [
       { type: "remove-team-permission", team: "a" },
       { type: "remove-team-permission", team: "b" },
-      { type: "remove-repository-secret", secret: "A" },
-      { type: "remove-repository-secret", secret: "B" },
-      { type: "remove-repository-variable", name: "A" },
-      { type: "remove-repository-variable", name: "B" },
       { type: "delete-ruleset", id: 1, name: "protect" },
       { type: "delete-environment", name: "production" },
     ],
@@ -597,4 +593,82 @@ Deno.test("files require explicit absent intent for deletion", () => {
       operations: [],
     },
   );
+});
+
+Deno.test("strict mode removes undeclared repository secrets and variables", () => {
+  const current = currentState({
+    secrets: ["KEEP", "REMOVE"],
+    variables: [
+      { name: "KEEP", value: "same" },
+      { name: "REMOVE", value: "old" },
+    ],
+  });
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    secrets: ["KEEP", "NEW"],
+    variables: [
+      { name: "KEEP", value: "same" },
+      { name: "NEW", value: "new" },
+    ],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [
+      { type: "set-repository-secret", secret: "KEEP" },
+      { type: "set-repository-secret", secret: "NEW" },
+      {
+        type: "set-repository-variable",
+        variable: { name: "NEW", value: "new" },
+      },
+    ],
+  });
+
+  assertEquals(buildPlan(current, desired, { strict: true }), {
+    repository: "sample",
+    operations: [
+      { type: "remove-repository-secret", secret: "REMOVE" },
+      { type: "set-repository-secret", secret: "KEEP" },
+      { type: "set-repository-secret", secret: "NEW" },
+      { type: "remove-repository-variable", name: "REMOVE" },
+      {
+        type: "set-repository-variable",
+        variable: { name: "NEW", value: "new" },
+      },
+    ],
+  });
+});
+
+Deno.test("strict mode allows explicit empty repository value collections to clear them", () => {
+  const current = currentState({
+    secrets: ["A", "B"],
+    variables: [
+      { name: "A", value: "1" },
+      { name: "B", value: "2" },
+    ],
+  });
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    secrets: [],
+    variables: [],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [],
+  });
+
+  assertEquals(buildPlan(current, desired, { strict: true }), {
+    repository: "sample",
+    operations: [
+      { type: "remove-repository-secret", secret: "A" },
+      { type: "remove-repository-secret", secret: "B" },
+      { type: "remove-repository-variable", name: "A" },
+      { type: "remove-repository-variable", name: "B" },
+    ],
+  });
 });
