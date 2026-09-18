@@ -19,6 +19,9 @@
     },
     "scope": {
       "$ref": "#/$defs/selector"
+    },
+    "reconciliation": {
+      "$ref": "#/$defs/reconciliation"
     }
   },
   "$defs": {
@@ -95,6 +98,19 @@
           }
         }
       ]
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "collections": {
+          "type": "string",
+          "enum": [
+            "sparse",
+            "strict"
+          ]
+        }
+      }
     }
   }
 }
