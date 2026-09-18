@@ -95,6 +95,44 @@ Deno.test("CLI reconciles through the real GitHub HTTP stack", async () => {
   }
 });
 
+Deno.test("CLI isolates exact-name discovery failures", async () => {
+  const root = await configurationDirectory(true);
+  const previous = Deno.env.get("DESIRED");
+
+  try {
+    Deno.env.set("DESIRED", "same");
+
+    const requests: CapturedRequest[] = [];
+    const output: string[] = [];
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    const rendered = output.join("\n");
+    assertStringIncludes(rendered, "missing — failed");
+    assertStringIncludes(rendered, "sample [code] — planned");
+    assertEquals(mutations(requests), []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 function fakeGitHub(
   requests: CapturedRequest[],
 ): typeof globalThis.fetch {
@@ -125,6 +163,13 @@ function fakeGitHub(
       url.pathname === "/api/v3/repos/acme/sample"
     ) {
       return json(repository());
+    }
+
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/repos/acme/missing"
+    ) {
+      return json({ message: "Not Found" }, 404);
     }
 
     if (
@@ -198,18 +243,30 @@ function repository(): Record<string, unknown> {
   };
 }
 
-async function configurationDirectory(): Promise<string> {
+async function configurationDirectory(
+  exactNames = false,
+): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
 
   await Deno.writeTextFile(
     root + "/octosmith.yml",
-    [
-      "version: 1",
-      "organization: acme",
-      "scope: {}",
-      "",
-    ].join("\n"),
+    exactNames
+      ? [
+        "version: 1",
+        "organization: acme",
+        "scope:",
+        "  names:",
+        "    - sample",
+        "    - missing",
+        "",
+      ].join("\n")
+      : [
+        "version: 1",
+        "organization: acme",
+        "scope: {}",
+        "",
+      ].join("\n"),
   );
 
   await Deno.writeTextFile(
