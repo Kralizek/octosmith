@@ -18,6 +18,10 @@ export interface Plan {
   readonly operations: readonly Operation[];
 }
 
+export interface BuildPlanOptions {
+  readonly strict?: boolean;
+}
+
 export type Operation =
   | UpdateRepositorySettingsOperation
   | SetCustomPropertyOperation

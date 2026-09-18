@@ -21,11 +21,12 @@ import type {
   RulesetDefinition,
 } from "../state/rulesets.ts";
 import type { CurrentState, DesiredState } from "../state/types.ts";
-import type { Operation, Plan } from "./types.ts";
+import type { BuildPlanOptions, Operation, Plan } from "./types.ts";
 
 export function buildPlan(
   current: CurrentState,
   desired: DesiredState,
+  options: BuildPlanOptions = {},
 ): Plan {
   if (current.repository !== desired.repository) {
     throw new Error(
@@ -40,8 +41,8 @@ export function buildPlan(
   planCustomProperties(current, desired, operations);
   planActions(current, desired, operations);
   planTeams(current, desired, operations);
-  planRepositorySecrets(current, desired, operations);
-  planRepositoryVariables(current, desired, operations);
+  planRepositorySecrets(current, desired, operations, options);
+  planRepositoryVariables(current, desired, operations, options);
   planRulesets(current, desired, operations);
   planEnvironments(current, desired, operations);
   planFiles(current, desired, operations);
@@ -161,6 +162,7 @@ function planRepositorySecrets(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  options: BuildPlanOptions,
 ): void {
   if (desired.secrets === undefined) {
     return;
@@ -168,15 +170,17 @@ function planRepositorySecrets(
 
   assertUnique(desired.secrets, "repository secret");
 
-  if (desired.secrets.length === 0) {
-    for (const secret of current.secrets) {
-      operations.push({
-        type: "remove-repository-secret",
-        secret,
-      });
-    }
+  if (options.strict) {
+    const desiredNames = new Set(desired.secrets);
 
-    return;
+    for (const secret of current.secrets) {
+      if (!desiredNames.has(secret)) {
+        operations.push({
+          type: "remove-repository-secret",
+          secret,
+        });
+      }
+    }
   }
 
   // GitHub exposes secret names but never values, so declared secrets must be
@@ -193,6 +197,7 @@ function planRepositoryVariables(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  options: BuildPlanOptions,
 ): void {
   if (desired.variables === undefined) {
     return;
@@ -203,15 +208,17 @@ function planRepositoryVariables(
     "repository variable",
   );
 
-  if (desired.variables.length === 0) {
-    for (const variable of current.variables) {
-      operations.push({
-        type: "remove-repository-variable",
-        name: variable.name,
-      });
-    }
+  if (options.strict) {
+    const desiredNames = new Set(desired.variables.map((item) => item.name));
 
-    return;
+    for (const variable of current.variables) {
+      if (!desiredNames.has(variable.name)) {
+        operations.push({
+          type: "remove-repository-variable",
+          name: variable.name,
+        });
+      }
+    }
   }
 
   const currentByName = new Map(
