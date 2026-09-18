@@ -23,6 +23,11 @@ export function reportAppliedRepository(
 ): RepositoryReport {
   const applied = operations.filter((item) => item.status === "applied").length;
   const failed = operations.some((item) => item.status === "failed");
+  const skipped = operations.some((item) => item.status === "skipped");
+
+  if (skipped && !failed) {
+    throw new Error("Skipped operations require a failed operation");
+  }
 
   return {
     repository,
