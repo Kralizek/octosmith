@@ -162,13 +162,16 @@ function diffSecurityAndAnalysis(
 }
 
 function copyChangedScalar(
-  current: Record<string, unknown>,
-  desired: Record<string, unknown>,
+  current: object,
+  desired: object,
   changes: Record<string, unknown>,
   key: string,
 ): void {
-  if (desired[key] !== undefined && desired[key] !== current[key]) {
-    changes[key] = desired[key];
+  const currentValue = Reflect.get(current, key);
+  const desiredValue = Reflect.get(desired, key);
+
+  if (desiredValue !== undefined && desiredValue !== currentValue) {
+    changes[key] = desiredValue;
   }
 }
 
