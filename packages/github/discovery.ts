@@ -21,12 +21,27 @@ interface RepositoryPropertiesResponse {
   }[];
 }
 
+export interface RepositoryDiscoveryFailure {
+  readonly repository: string;
+  readonly error: unknown;
+}
+
+export interface RepositoryDiscoveryResult {
+  readonly repositories: readonly RepositoryMetadata[];
+  readonly failures: readonly RepositoryDiscoveryFailure[];
+}
+
+interface CandidateDiscoveryResult {
+  readonly repositories: readonly RepositoryResponse[];
+  readonly failures: readonly RepositoryDiscoveryFailure[];
+}
+
 const PAGE_SIZE = 100;
 
 export async function discoverRepositories(
   client: GitHubClient,
   loaded: LoadedConfiguration,
-): Promise<readonly RepositoryMetadata[]> {
+): Promise<RepositoryDiscoveryResult> {
   const organization = loaded.configuration.organization;
   const selectors = [
     loaded.configuration.scope,
@@ -36,7 +51,7 @@ export async function discoverRepositories(
   const referencedProperties = collectReferencedProperties(selectors);
   const teamRepositories = new Map<string, ReadonlySet<string>>();
 
-  const candidates = await discoverCandidates(
+  const discovery = await discoverCandidates(
     client,
     organization,
     loaded.configuration.scope,
@@ -59,7 +74,7 @@ export async function discoverRepositories(
     ? await loadRepositoryProperties(client, organization, referencedProperties)
     : new Map<string, Readonly<Record<string, PropertyValue>>>();
 
-  const repositories = candidates.map((repository): RepositoryMetadata => ({
+  const repositories = discovery.repositories.map((repository): RepositoryMetadata => ({
     name: repository.name,
     visibility: repository.visibility,
     teams: [...referencedTeams].filter((team) =>
@@ -68,11 +83,14 @@ export async function discoverRepositories(
     properties: properties.get(repository.name) ?? {},
   }));
 
-  return repositories
-    .filter((repository) =>
-      matchesSelector(loaded.configuration.scope, repository)
-    )
-    .sort((left, right) => left.name.localeCompare(right.name));
+  return {
+    repositories: repositories
+      .filter((repository) =>
+        matchesSelector(loaded.configuration.scope, repository)
+      )
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    failures: discovery.failures,
+  };
 }
 
 async function discoverCandidates(
@@ -80,16 +98,33 @@ async function discoverCandidates(
   organization: string,
   scope: RepositorySelector,
   teamRepositories: Map<string, ReadonlySet<string>>,
-): Promise<readonly RepositoryResponse[]> {
+): Promise<CandidateDiscoveryResult> {
   if (scope.names?.length && scope.names.every(isExactRepositoryName)) {
-    return await Promise.all(
-      [...new Set(scope.names)].map((name) =>
-        client.get<RepositoryResponse>(
-          "/repos/" + encodeURIComponent(organization) + "/" +
-            encodeURIComponent(name),
-        )
-      ),
+    const results = await Promise.all(
+      [...new Set(scope.names)].map(async (name) => {
+        try {
+          return {
+            repository: await client.get<RepositoryResponse>(
+              "/repos/" + encodeURIComponent(organization) + "/" +
+                encodeURIComponent(name),
+            ),
+          };
+        } catch (error) {
+          return { name, error };
+        }
+      }),
     );
+
+    return {
+      repositories: results.flatMap((result) =>
+        "repository" in result ? [result.repository] : []
+      ),
+      failures: results.flatMap((result) =>
+        "error" in result
+          ? [{ repository: result.name, error: result.error }]
+          : []
+      ),
+    };
   }
 
   if (scope.teams?.length) {
@@ -103,18 +138,21 @@ async function discoverCandidates(
       team,
       new Set(repositories.map((repository) => repository.name)),
     );
-    return repositories;
+    return { repositories, failures: [] };
   }
 
   const visibility = singleVisibility(scope.visibility);
 
-  return await getAllPages<RepositoryResponse>(
+  return {
+    repositories: await getAllPages<RepositoryResponse>(
     client,
     "/orgs/" + encodeURIComponent(organization) + "/repos",
-    {
-      ...(visibility && { type: visibility }),
-    },
-  );
+      {
+        ...(visibility && { type: visibility }),
+      },
+    ),
+    failures: [],
+  };
 }
 
 async function listTeamRepositories(
