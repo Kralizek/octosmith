@@ -394,9 +394,7 @@ Deno.test("managed file uploads preserve UTF-8 content through base64", async ()
   );
   const body = request?.body as { content: string };
   const binary = atob(body.content);
-  const bytes = Uint8Array.from(binary, (character) =>
-    character.charCodeAt(0)
-  );
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
 
   assertEquals(new TextDecoder().decode(bytes), "ciao 👋");
 });
