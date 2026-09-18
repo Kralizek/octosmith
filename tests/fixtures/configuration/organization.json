@@ -1,0 +1,37 @@
+{
+  "organization": "example-org",
+  "teams": [
+    "platform-team",
+    "library-maintainers",
+    "configuration-maintainers"
+  ],
+  "repositoryRoles": {
+    "builtIn": [
+      "pull",
+      "triage",
+      "push",
+      "maintain",
+      "admin"
+    ],
+    "custom": [
+      "configuration-editor"
+    ]
+  },
+  "customProperties": {
+    "repository-type": {
+      "type": "single_select",
+      "allowedValues": [
+        "code",
+        "issues",
+        "config"
+      ]
+    },
+    "distribution": {
+      "type": "single_select",
+      "allowedValues": [
+        "internal",
+        "shared-library"
+      ]
+    }
+  }
+}

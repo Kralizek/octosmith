@@ -1,0 +1,21 @@
+{
+  "repository": "issue-tracker",
+  "template": "issues",
+  "desiredState": {
+    "repository": {
+      "settings": {
+        "has_projects": false,
+        "has_discussions": false,
+        "has_issues": true,
+        "has_wiki": false,
+        "delete_branch_on_merge": true
+      },
+      "teams": [
+        {
+          "name": "platform-team",
+          "permission": "maintain"
+        }
+      ]
+    }
+  }
+}

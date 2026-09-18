@@ -1,0 +1,81 @@
+{
+  "repository": "api-service",
+  "template": "code",
+  "desiredState": {
+    "repository": {
+      "settings": {
+        "has_projects": false,
+        "has_discussions": false,
+        "has_issues": false,
+        "has_wiki": false,
+        "delete_branch_on_merge": true,
+        "merge": {
+          "merge_commit": false,
+          "rebase": false,
+          "squash": true
+        }
+      },
+      "teams": [
+        {
+          "name": "platform-team",
+          "permission": "maintain"
+        }
+      ],
+      "secrets": [
+        "REVIEW_BOT_TOKEN"
+      ],
+      "variables": [
+        "NOTIFICATION_CHANNEL_ID"
+      ]
+    },
+    "rulesets": [
+      {
+        "name": "protect-default-branch",
+        "target": "branch",
+        "enforcement": "active",
+        "conditions": {
+          "ref_name": {
+            "include": [
+              "~DEFAULT_BRANCH"
+            ]
+          }
+        },
+        "rules": [
+          {
+            "type": "deletion"
+          },
+          {
+            "type": "non_fast_forward"
+          },
+          {
+            "type": "pull_request",
+            "parameters": {
+              "required_review_thread_resolution": true,
+              "allowed_merge_methods": [
+                "squash"
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "environments": [
+      {
+        "name": "automation",
+        "secrets": [
+          "PACKAGE_FEED_SECRET"
+        ],
+        "variables": [
+          "PACKAGE_FEED_CLIENT_ID",
+          "PACKAGE_FEED_TENANT_ID"
+        ]
+      }
+    ],
+    "files": {
+      ".github/workflows/request-review.yml": {
+        "ensure": "exact",
+        "content": "name: Request review\n\non:\n  issue_comment:\n    types:\n      - created\n\npermissions:\n  contents: read\n\njobs:\n  request-review:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Request review\n        run: echo \"Requesting review\"\n"
+      }
+    }
+  }
+}

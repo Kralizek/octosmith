@@ -1,0 +1,9 @@
+{
+  "name": "shared-library",
+  "teams": [
+    "platform-team"
+  ],
+  "properties": {
+    "distribution": "shared-library"
+  }
+}
