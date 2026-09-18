@@ -47,7 +47,6 @@ Deno.test("GitHub client still resolves root API URLs", async () => {
   assertEquals(requestedUrl, "https://api.github.com/repos/acme/api");
 });
 
-
 Deno.test("GitHub client throws on an ordinary 404", async () => {
   const client = responseClient(new Response("missing", {
     status: 404,
