@@ -579,7 +579,6 @@ Deno.test("repository secrets are sealed with GitHub's public key", async () => 
   assertEquals(sodium.to_string(decrypted), "super-secret");
 });
 
-
 class StatefulRulesetClient implements GitHubClient {
   readonly requests: RecordedRequest[] = [];
   ruleset: Record<string, unknown>;
