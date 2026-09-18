@@ -318,15 +318,19 @@ Deno.test("discovery follows team membership pagination", async () => {
 
   const repositories = await discoverRepositoryList(
     client,
-    configuration({ scope: { teams: ["platform"], names: ["api"] } }),
+    configuration({ scope: { teams: ["platform"] } }),
   );
 
-  assertEquals(repositories, [{
-    name: "api",
-    visibility: "private",
-    teams: ["platform"],
-    properties: {},
-  }]);
+  assertEquals(repositories.length, 101);
+  assertEquals(
+    repositories.find((repository) => repository.name === "api"),
+    {
+      name: "api",
+      visibility: "private",
+      teams: ["platform"],
+      properties: {},
+    },
+  );
 });
 
 Deno.test("discovery uses custom properties from page two for selection", async () => {
