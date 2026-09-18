@@ -4,6 +4,7 @@
  * @module
  */
 
+export * from "./configuration/mod.ts";
 export * from "./models/mod.ts";
 
 /** The reconciliation modes supported by OctoSmith. */
