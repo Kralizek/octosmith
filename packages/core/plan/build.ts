@@ -659,12 +659,24 @@ function diffRuleset(
     }
   }
 
+  const effectiveTarget = desired.target ?? current.target;
+
+  if (
+    desired.target !== undefined &&
+    desired.target !== current.target &&
+    desired.rules === undefined
+  ) {
+    for (const rule of current.rules) {
+      materializeRule(rule, effectiveTarget);
+    }
+  }
+
   if (desired.rules !== undefined) {
     const merged = mergeRules(
       current.rules,
       desired.rules,
       options,
-      desired.target ?? current.target,
+      effectiveTarget,
     );
 
     if (!deepEqual(current.rules, merged)) {
@@ -695,6 +707,8 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
 
   const bypassActors = desired.bypassActors ?? [];
   const rules = desired.rules ?? [];
+
+  assertUnique(rules.map((rule) => rule.type), "ruleset rule type");
 
   if (target === "push") {
     if (desired.conditions !== undefined) {
@@ -749,7 +763,7 @@ function mergeRules(
   if (desired.length === 0) {
     return options.collections === "strict"
       ? []
-      : current.map((rule) => structuredClone(rule));
+      : current.map((rule) => materializeRule(rule, target));
   }
 
   assertUnique(desired.map((rule) => rule.type), "ruleset rule type");
@@ -776,7 +790,9 @@ function mergeRules(
     }
   }
 
-  return result as readonly DesiredRulesetRule[];
+  return result.map((rule) =>
+    materializeRule(rule as DesiredRulesetRule, target)
+  );
 }
 
 function materializeRule(
@@ -846,11 +862,26 @@ function materializeRule(
           "Rule pull-request requires complete dismissalRestriction",
         );
       }
+      assertCompleteObjects(
+        "pull-request dismissal actor",
+        restriction.allowedActors,
+        ["id", "type"],
+      );
+      assertCompleteObjects(
+        "pull-request required reviewer",
+        rule.requiredReviewers ?? [],
+        ["reviewerTeamId", "filePatterns", "minimumApprovals"],
+      );
       return rule as CurrentRefRule;
     }
 
     case "required-status-checks":
       requireRuleFields(rule, ["doNotEnforceOnCreate", "checks", "strict"]);
+      assertCompleteObjects(
+        "required status check",
+        rule.checks ?? [],
+        ["context"],
+      );
       return rule as CurrentRefRule;
 
     case "commit-message-pattern":
@@ -863,10 +894,20 @@ function materializeRule(
 
     case "workflows":
       requireRuleFields(rule, ["doNotEnforceOnCreate", "workflows"]);
+      assertCompleteObjects(
+        "required workflow",
+        rule.workflows ?? [],
+        ["path", "repositoryId"],
+      );
       return rule as CurrentRefRule;
 
     case "code-scanning":
       requireRuleFields(rule, ["tools"]);
+      assertCompleteObjects(
+        "code scanning tool",
+        rule.tools ?? [],
+        ["tool", "alertsThreshold", "securityAlertsThreshold"],
+      );
       return rule as CurrentRefRule;
 
     case "code-quality":
@@ -905,8 +946,24 @@ function requireRuleFields(
   for (const field of fields) {
     if (Reflect.get(rule, field) === undefined) {
       throw new Error(
-        "Rule " + rule.type + " requires " + field + " when it is new",
+        "Rule " + rule.type + " requires " + field,
       );
+    }
+  }
+}
+
+function assertCompleteObjects(
+  resource: string,
+  values: readonly object[],
+  fields: readonly string[],
+): void {
+  for (const [index, value] of values.entries()) {
+    for (const field of fields) {
+      if (Reflect.get(value, field) === undefined) {
+        throw new Error(
+          resource + " at index " + index + " requires " + field,
+        );
+      }
     }
   }
 }
