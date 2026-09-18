@@ -155,6 +155,8 @@ function matchesGlob(pattern: string, value: string): boolean {
   const expression = pattern
     .replace(/[.+^$\{\}()|[\]\\]/g, "\\function matchesGlob(pattern: string, value: string): boolean {
   const expression = pattern
+    .replace(/[.+^$\{\}()|[\]\\]/g, "\\function matchesGlob(pattern: string, value: string): boolean {
+  const expression = pattern
     .replaceAll(".", "\\.")
     .replaceAll("*", ".*")
     .replaceAll("?", ".");
@@ -162,6 +164,13 @@ function matchesGlob(pattern: string, value: string): boolean {
   return new RegExp("^" + expression + "$").test(value);
 }
 ")
+    .replaceAll("*", ".*")
+    .replaceAll("?", ".");
+
+  return new RegExp("^" + expression + "$").test(value);
+}
+
+function equalPropertyValue")
     .replaceAll("*", ".*")
     .replaceAll("?", ".");
 
