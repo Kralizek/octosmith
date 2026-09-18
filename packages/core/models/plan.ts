@@ -5,10 +5,7 @@ import type {
   TeamPermission,
   Variable,
 } from "./common.ts";
-import type {
-  DesiredFile,
-  DesiredRepositorySettings,
-} from "./state.ts";
+import type { DesiredFile, DesiredRepositorySettings } from "./state.ts";
 
 export interface Plan {
   readonly repository: string;
