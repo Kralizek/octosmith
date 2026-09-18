@@ -133,7 +133,7 @@ export interface RulesetConfiguration {
 export interface RulesetBypassActorConfiguration {
   readonly actorType: RulesetBypassActorType;
   readonly actorId?: number;
-  readonly bypassMode?: RulesetBypassMode;
+  readonly bypassMode: RulesetBypassMode;
 }
 
 export interface RulesetConditionsConfiguration {

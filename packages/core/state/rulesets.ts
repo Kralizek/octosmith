@@ -192,7 +192,7 @@ export type CurrentRuleset =
   | (PushRulesetDefinition & { readonly id: number });
 
 type DeepPartial<T> = T extends readonly (infer Item)[]
-  ? readonly DeepPartial<Item>[]
+  ? readonly Item[]
   : T extends object ? { readonly [Key in keyof T]?: DeepPartial<T[Key]> }
   : T;
 
@@ -220,7 +220,7 @@ export interface DesiredRuleset {
   readonly name: string;
   readonly target?: RulesetTarget;
   readonly enforcement?: RulesetEnforcement;
-  readonly bypassActors?: readonly DeepPartial<RulesetBypassActor>[];
+  readonly bypassActors?: readonly RulesetBypassActor[];
   readonly conditions?: DeepPartial<RefRulesetConditions>;
   readonly rules?: readonly DesiredRulesetRule[];
 }

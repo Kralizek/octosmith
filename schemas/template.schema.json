@@ -381,7 +381,8 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "actor_type"
+        "actor_type",
+        "bypass_mode"
       ],
       "properties": {
         "actor_type": {
