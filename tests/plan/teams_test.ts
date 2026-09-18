@@ -64,7 +64,11 @@ Deno.test("teams empty collection is non-destructive unless strict", () => {
   const current = currentState({
     teams: [{ team: "a", permission: { kind: "built-in", name: "pull" } }],
   });
-  const desired = { repository: "sample", template: "code", teams: [] } as const;
+  const desired = {
+    repository: "sample",
+    template: "code",
+    teams: [],
+  } as const;
 
   assertEquals(buildPlan(current, desired), {
     repository: "sample",
