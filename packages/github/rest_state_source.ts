@@ -105,12 +105,12 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   async getCustomProperties(
     repository: string,
   ): Promise<Readonly<Record<string, CustomPropertyValue>>> {
-    const values = await this.client.get<
-      readonly {
+    const values = await getAllPages<
+      {
         readonly property_name: string;
         readonly value: CustomPropertyValue;
-      }[]
-    >(this.repo(repository) + "/properties/values");
+      }
+    >(this.client, this.repo(repository) + "/properties/values");
 
     return Object.fromEntries(
       values.map((value) => [value.property_name, value.value]),
@@ -172,12 +172,12 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   }
 
   async getTeams(repository: string): Promise<readonly TeamPermission[]> {
-    const teams = await this.client.get<
-      readonly {
+    const teams = await getAllPages<
+      {
         readonly slug: string;
         readonly permission: string;
-      }[]
-    >(this.repo(repository) + "/teams");
+      }
+    >(this.client, this.repo(repository) + "/teams");
 
     return teams.map((team) => ({
       team: team.slug,
@@ -186,37 +186,46 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   }
 
   async getSecrets(repository: string): Promise<readonly SecretName[]> {
-    const response = await this.client.get<{
-      readonly secrets: readonly { readonly name: string }[];
-    }>(this.repo(repository) + "/actions/secrets", { per_page: 100 });
+    const secrets = await getAllWrappedPages<
+      { readonly name: string }
+    >(
+      this.client,
+      this.repo(repository) + "/actions/secrets",
+      "secrets",
+    );
 
-    return response.secrets.map((secret) => secret.name);
+    return secrets.map((secret) => secret.name);
   }
 
   async getVariables(repository: string): Promise<readonly Variable[]> {
-    const response = await this.client.get<{
-      readonly variables: readonly {
+    const variables = await getAllWrappedPages<
+      {
         readonly name: string;
         readonly value: string;
-      }[];
-    }>(this.repo(repository) + "/actions/variables", { per_page: 100 });
+      }
+    >(
+      this.client,
+      this.repo(repository) + "/actions/variables",
+      "variables",
+    );
 
-    return response.variables.map((variable) => ({
+    return variables.map((variable) => ({
       name: variable.name,
       value: variable.value,
     }));
   }
 
   async getRulesets(repository: string): Promise<readonly CurrentRuleset[]> {
-    const summaries = await this.client.get<
-      readonly {
+    const summaries = await getAllPages<
+      {
         readonly id: number;
         readonly source_type?: string;
-      }[]
-    >(this.repo(repository) + "/rulesets", {
-      per_page: 100,
-      includes_parents: false,
-    });
+      }
+    >(
+      this.client,
+      this.repo(repository) + "/rulesets",
+      { includes_parents: false },
+    );
 
     const repositoryRules = summaries.filter((summary) =>
       summary.source_type === undefined || summary.source_type === "Repository"
@@ -235,30 +244,38 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   }
 
   async getEnvironments(repository: string): Promise<readonly Environment[]> {
-    const response = await this.client.get<{
-      readonly environments: readonly { readonly name: string }[];
-    }>(this.repo(repository) + "/environments", { per_page: 100 });
+    const environments = await getAllWrappedPages<
+      { readonly name: string }
+    >(
+      this.client,
+      this.repo(repository) + "/environments",
+      "environments",
+    );
 
     return await Promise.all(
-      response.environments.map(async (environment) => {
+      environments.map(async (environment) => {
         const name = encodeURIComponent(environment.name);
         const base = this.repo(repository) + "/environments/" + name;
         const [secrets, variables] = await Promise.all([
-          this.client.get<{
-            readonly secrets: readonly { readonly name: string }[];
-          }>(base + "/secrets", { per_page: 100 }),
-          this.client.get<{
-            readonly variables: readonly {
-              readonly name: string;
-              readonly value: string;
-            }[];
-          }>(base + "/variables", { per_page: 100 }),
+          getAllWrappedPages<{ readonly name: string }>(
+            this.client,
+            base + "/secrets",
+            "secrets",
+          ),
+          getAllWrappedPages<{
+            readonly name: string;
+            readonly value: string;
+          }>(
+            this.client,
+            base + "/variables",
+            "variables",
+          ),
         ]);
 
         return {
           name: environment.name,
-          secrets: secrets.secrets.map((secret) => secret.name),
-          variables: variables.variables.map((variable) => ({
+          secrets: secrets.map((secret) => secret.name),
+          variables: variables.map((variable) => ({
             name: variable.name,
             value: variable.value,
           })),
@@ -302,6 +319,50 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   private repo(repository: string): string {
     return "/repos/" + encodeURIComponent(this.owner) + "/" +
       encodeURIComponent(repository);
+  }
+}
+
+const PAGE_SIZE = 100;
+
+async function getAllPages<T>(
+  client: GitHubClient,
+  path: string,
+  query: Readonly<Record<string, string | number | boolean | undefined>> = {},
+): Promise<readonly T[]> {
+  const result: T[] = [];
+
+  for (let page = 1;; page++) {
+    const items = await client.get<readonly T[]>(path, {
+      ...query,
+      per_page: PAGE_SIZE,
+      page,
+    });
+    result.push(...items);
+
+    if (items.length < PAGE_SIZE) {
+      return result;
+    }
+  }
+}
+
+async function getAllWrappedPages<T>(
+  client: GitHubClient,
+  path: string,
+  field: string,
+): Promise<readonly T[]> {
+  const result: T[] = [];
+
+  for (let page = 1;; page++) {
+    const response = await client.get<Record<string, unknown>>(path, {
+      per_page: PAGE_SIZE,
+      page,
+    });
+    const items = Reflect.get(response, field) as readonly T[];
+    result.push(...items);
+
+    if (items.length < PAGE_SIZE) {
+      return result;
+    }
   }
 }
 
