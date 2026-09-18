@@ -48,10 +48,12 @@ Deno.test("GitHub client still resolves root API URLs", async () => {
 });
 
 Deno.test("GitHub client throws on an ordinary 404", async () => {
-  const client = responseClient(new Response("missing", {
-    status: 404,
-    statusText: "Not Found",
-  }));
+  const client = responseClient(
+    new Response("missing", {
+      status: 404,
+      statusText: "Not Found",
+    }),
+  );
 
   await assertRejects(
     () => client.get("/repos/acme/missing"),
@@ -75,10 +77,12 @@ Deno.test("GitHub client returns undefined for an allowed 404", async () => {
 });
 
 Deno.test("GitHub client propagates a 403 response", async () => {
-  const client = responseClient(new Response("forbidden", {
-    status: 403,
-    statusText: "Forbidden",
-  }));
+  const client = responseClient(
+    new Response("forbidden", {
+      status: 403,
+      statusText: "Forbidden",
+    }),
+  );
 
   await assertRejects(
     () => client.get("/repos/acme/private"),
