@@ -1,4 +1,3 @@
-
 export interface Configuration {
   readonly version: 1;
   readonly organization: string;
