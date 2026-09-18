@@ -53,7 +53,7 @@ Deno.test("discovery fetches exact repository names directly", async () => {
     "/repos/acme/web": [{ name: "web", visibility: "public" }],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration({
       scope: { names: ["api", "web"] },
@@ -75,7 +75,7 @@ Deno.test("discovery deduplicates exact repository names", async () => {
     "/repos/acme/api": [{ name: "api", visibility: "private" }],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration({
       scope: { names: ["api", "api"] },
@@ -90,6 +90,25 @@ Deno.test("discovery deduplicates exact repository names", async () => {
   ]);
 });
 
+Deno.test("discovery isolates failures for exact repository names", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+  });
+
+  const result = await discoverRepositories(
+    client,
+    configuration({
+      scope: { names: ["api", "missing"] },
+    }),
+  );
+
+  assertEquals(result.repositories, [
+    { name: "api", visibility: "private", teams: [], properties: {} },
+  ]);
+  assertEquals(result.failures.length, 1);
+  assertEquals(result.failures[0].repository, "missing");
+});
+
 Deno.test("discovery uses a scope team as the candidate source and verifies all team criteria", async () => {
   const client = new FakeGitHubClient({
     "/orgs/acme/teams/platform/repos?page=1&per_page=100": [[
@@ -101,7 +120,7 @@ Deno.test("discovery uses a scope team as the candidate source and verifies all 
     ]],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration({
       scope: { teams: ["platform", "security"] },
@@ -123,7 +142,7 @@ Deno.test("discovery applies a single visibility as an organization-side filter"
     ]],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration({
       scope: { visibility: "private" },
@@ -145,7 +164,7 @@ Deno.test("discovery narrows a one-item visibility array", async () => {
     ]],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration({
       scope: { visibility: ["private"] },
@@ -168,7 +187,7 @@ Deno.test("discovery does not send unsupported internal visibility filtering", a
     ]],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration({
       scope: { visibility: "internal" },
@@ -191,7 +210,7 @@ Deno.test("discovery falls back to organization listing for name globs", async (
     ]],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration({
       scope: { names: ["api-*"] },
@@ -232,7 +251,7 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
     ]],
   });
 
-  const repositories = await discoverRepositories(
+  const repositories = await discoverRepositoryList(
     client,
     configuration(
       { scope: {} },
@@ -262,6 +281,13 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
     },
   ]);
 });
+
+async function discoverRepositoryList(
+  client: GitHubClient,
+  loaded: LoadedConfiguration,
+) {
+  return (await discoverRepositories(client, loaded)).repositories;
+}
 
 function configuration(
   root: { readonly scope: LoadedConfiguration["configuration"]["scope"] },
