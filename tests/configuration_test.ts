@@ -297,8 +297,8 @@ Deno.test("preserves omitted environment members in desired state", async () => 
   }
 });
 
-
-for (const testCase of [
+for (
+  const testCase of [
   {
     name: "YAML rules reject null required scalar before planning",
     rule: [
@@ -332,7 +332,8 @@ for (const testCase of [
     ],
     message: "required status check at index 0 must be an object",
   },
-] as const) {
+  ] as const
+) {
   Deno.test(testCase.name, async () => {
     const root = await Deno.makeTempDir();
 
@@ -357,16 +358,15 @@ for (const testCase of [
           "    - sample",
           "rulesets:",
           "  - name: policy",
-          "    target: " + (testCase.rule[0].includes("max_file") ? "push" : "branch"),
+          "    target: " +
+            (testCase.rule[0].includes("max_file") ? "push" : "branch"),
           "    enforcement: active",
-          ...(testCase.rule[0].includes("max_file")
-            ? []
-            : [
-              "    conditions:",
-              "      ref_name:",
-              "        include:",
-              "          - ~DEFAULT_BRANCH",
-            ]),
+          ...(testCase.rule[0].includes("max_file") ? [] : [
+            "    conditions:",
+            "      ref_name:",
+            "        include:",
+            "          - ~DEFAULT_BRANCH",
+          ]),
           "    rules:",
           ...testCase.rule,
           "",
