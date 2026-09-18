@@ -87,7 +87,14 @@ class FakeStateSource implements RepositoryStateSource {
   getEnvironments(repository: string) {
     this.calls.push("environments:" + repository);
     return Promise.resolve([
-      { name: "owned", secrets: [], variables: [] },
+      {
+        name: "owned",
+        secrets: ["OWNED_SECRET", "EXTRA_SECRET"],
+        variables: [
+          { name: "OWNED_VARIABLE", value: "1" },
+          { name: "EXTRA_VARIABLE", value: "2" },
+        ],
+      },
       { name: "extra", secrets: [], variables: [] },
     ]);
   }
@@ -140,7 +147,11 @@ Deno.test("sparse current-state reading keeps only named owned members", async (
   assertEquals(state.secrets, ["OWNED"]);
   assertEquals(state.variables.map((item) => item.name), ["OWNED"]);
   assertEquals(state.rulesets.map((item) => item.name), ["owned"]);
-  assertEquals(state.environments.map((item) => item.name), ["owned"]);
+  assertEquals(state.environments, [{
+    name: "owned",
+    secrets: ["OWNED_SECRET"],
+    variables: [{ name: "OWNED_VARIABLE", value: "1" }],
+  }]);
 });
 
 Deno.test("strict current-state reading preserves complete named collections", async () => {
@@ -192,6 +203,10 @@ function fullDesired(): DesiredState {
     secrets: ["OWNED"],
     variables: [{ name: "OWNED", value: "1" }],
     rulesets: [{ name: "owned" }],
-    environments: [{ name: "owned" }],
+    environments: [{
+      name: "owned",
+      secrets: ["OWNED_SECRET"],
+      variables: [{ name: "OWNED_VARIABLE", value: "1" }],
+    }],
   };
 }
