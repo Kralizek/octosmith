@@ -74,7 +74,9 @@ export async function discoverRepositories(
     ? await loadRepositoryProperties(client, organization, referencedProperties)
     : new Map<string, Readonly<Record<string, PropertyValue>>>();
 
-  const repositories = discovery.repositories.map((repository): RepositoryMetadata => ({
+  const repositories = discovery.repositories.map((
+    repository,
+  ): RepositoryMetadata => ({
     name: repository.name,
     visibility: repository.visibility,
     teams: [...referencedTeams].filter((team) =>
@@ -145,8 +147,8 @@ async function discoverCandidates(
 
   return {
     repositories: await getAllPages<RepositoryResponse>(
-    client,
-    "/orgs/" + encodeURIComponent(organization) + "/repos",
+      client,
+      "/orgs/" + encodeURIComponent(organization) + "/repos",
       {
         ...(visibility && { type: visibility }),
       },
