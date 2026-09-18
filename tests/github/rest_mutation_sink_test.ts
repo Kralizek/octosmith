@@ -105,3 +105,268 @@ Deno.test("environment sync preserves sparse siblings and paginates strict clean
     ),
   );
 });
+
+interface RecordedRequest {
+  readonly method: string;
+  readonly path: string;
+  readonly body?: unknown;
+}
+
+class MappingClient implements GitHubClient {
+  readonly requests: RecordedRequest[] = [];
+
+  request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/github").GitHubRequestOptions = {},
+  ): Promise<T> {
+    this.requests.push({ method, path, body: options.body });
+
+    if (method === "GET") {
+      return this.get(path, options.query);
+    }
+
+    return Promise.resolve(undefined as T);
+  }
+
+  get<T>(
+    path: string,
+    _query: Readonly<Record<string, GitHubQueryValue>> = {},
+  ): Promise<T> {
+    if (path.endsWith("/rulesets/1")) {
+      return Promise.resolve({
+        id: 1,
+        name: "protect",
+        target: "branch",
+        enforcement: "active",
+        bypass_actors: [{
+          actor_id: 7,
+          actor_type: "Team",
+          bypass_mode: "always",
+        }],
+        conditions: {
+          ref_name: {
+            include: ["~DEFAULT_BRANCH"],
+            exclude: [],
+          },
+        },
+        rules: [],
+      } as T);
+    }
+
+    if (path.endsWith("/actions/permissions")) {
+      return Promise.resolve({
+        enabled: true,
+        allowed_actions: "all",
+        sha_pinning_required: false,
+      } as T);
+    }
+
+    if (path.endsWith("/actions/permissions/selected-actions")) {
+      return Promise.resolve({
+        github_owned_allowed: false,
+        verified_allowed: false,
+        patterns_allowed: [],
+      } as T);
+    }
+
+    if (path.endsWith("/actions/oidc/customization/sub")) {
+      return Promise.resolve({
+        use_default: true,
+        use_immutable_subject: false,
+      } as T);
+    }
+
+    throw new Error("Unexpected GET " + path);
+  }
+}
+
+Deno.test("ruleset updates materialize a complete GitHub document", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-ruleset",
+    id: 1,
+    changes: {
+      name: "protect",
+      enforcement: "evaluate",
+    },
+  });
+
+  const update = client.requests.find((request) =>
+    request.method === "PUT" && request.path.endsWith("/rulesets/1")
+  );
+
+  assertEquals(update?.body, {
+    name: "protect",
+    target: "branch",
+    enforcement: "evaluate",
+    bypass_actors: [{
+      actor_id: 7,
+      actor_type: "Team",
+      bypass_mode: "always",
+    }],
+    conditions: {
+      ref_name: {
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      },
+    },
+    rules: [],
+  });
+});
+
+Deno.test("ruleset transition to push drops ref conditions", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-ruleset",
+    id: 1,
+    changes: {
+      name: "protect",
+      target: "push",
+    },
+  });
+
+  const update = client.requests.find((request) =>
+    request.method === "PUT" && request.path.endsWith("/rulesets/1")
+  )?.body as Record<string, unknown>;
+
+  assertEquals(update.target, "push");
+  assertEquals("conditions" in update, false);
+});
+
+Deno.test("ruleset mapping preserves literals and maps only enum fields", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "create-ruleset",
+    ruleset: {
+      name: "protect",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: {
+        refName: {
+          include: ["~DEFAULT_BRANCH"],
+          exclude: [],
+        },
+      },
+      rules: [
+        {
+          type: "branch-name-pattern",
+          operator: "starts-with",
+          pattern: "pull-request",
+        },
+        {
+          type: "pull-request",
+          allowedMergeMethods: ["squash"],
+          dismissStaleReviewsOnPush: true,
+          dismissalRestriction: {
+            enabled: true,
+            allowedActors: [{
+              id: 42,
+              type: "integration-installation",
+            }],
+          },
+          requireCodeOwnerReview: true,
+          requireLastPushApproval: true,
+          requiredApprovingReviewCount: 1,
+          requiredReviewThreadResolution: true,
+          requiredReviewers: [],
+        },
+      ],
+    },
+  });
+
+  const body = client.requests.find((request) =>
+    request.method === "POST" && request.path.endsWith("/rulesets")
+  )?.body as {
+    rules: readonly {
+      type: string;
+      parameters?: Record<string, unknown>;
+    }[];
+  };
+
+  assertEquals(body.rules[0].parameters, {
+    operator: "starts_with",
+    pattern: "pull-request",
+  });
+  assertEquals(body.rules[1].parameters?.dismissal_restriction, {
+    enabled: true,
+    allowed_actors: [{
+      id: 42,
+      type: "IntegrationInstallation",
+    }],
+  });
+});
+
+Deno.test("selected Actions settings switch the repository to selected mode", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-actions-settings",
+    settings: {
+      selectedActions: {
+        githubOwnedAllowed: true,
+      },
+    },
+  });
+
+  const permissions = client.requests.find((request) =>
+    request.method === "PUT" &&
+    request.path.endsWith("/actions/permissions")
+  );
+
+  assertEquals(permissions?.body, {
+    enabled: true,
+    allowed_actions: "selected",
+    sha_pinning_required: false,
+  });
+});
+
+Deno.test("organization OIDC templates do not collapse to GitHub defaults", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-actions-oidc",
+    settings: {
+      subjectClaimTemplate: { source: "organization" },
+    },
+  });
+
+  const update = client.requests.find((request) =>
+    request.method === "PUT" &&
+    request.path.endsWith("/actions/oidc/customization/sub")
+  );
+
+  assertEquals(update?.body, {
+    use_default: false,
+    use_immutable_subject: false,
+  });
+});
