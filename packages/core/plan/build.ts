@@ -961,7 +961,7 @@ function requireRuleFields(
   fields: readonly string[],
 ): void {
   for (const field of fields) {
-    if (Reflect.get(rule, field) === undefined) {
+    if (Reflect.get(rule, field) == null) {
       throw new Error(
         "Rule " + rule.type + " requires " + field,
       );
@@ -975,8 +975,12 @@ function assertCompleteObjects(
   fields: readonly string[],
 ): void {
   for (const [index, value] of values.entries()) {
+    if (value === null || typeof value !== "object") {
+      throw new Error(resource + " at index " + index + " must be an object");
+    }
+
     for (const field of fields) {
-      if (Reflect.get(value, field) === undefined) {
+      if (Reflect.get(value, field) == null) {
         throw new Error(
           resource + " at index " + index + " requires " + field,
         );
