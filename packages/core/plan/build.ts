@@ -610,7 +610,7 @@ function diffRuleset(
   }
 
   return Object.keys(changes).length > 1
-    ? changes as DesiredRuleset
+    ? changes as unknown as DesiredRuleset
     : undefined;
 }
 

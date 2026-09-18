@@ -45,8 +45,9 @@ function currentRepositorySettings(): CurrentRepositorySettings {
   };
 }
 
-function currentState(): CurrentState {
+function currentState(overrides: Partial<CurrentState> = {}): CurrentState {
   return {
+
     repository: "sample",
     settings: currentRepositorySettings(),
     customProperties: {},
@@ -65,6 +66,7 @@ function currentState(): CurrentState {
     rulesets: [],
     environments: [],
     files: [],
+    ...overrides,
   };
 }
 
@@ -193,61 +195,62 @@ Deno.test("buildPlan rejects mismatched repositories", () => {
 });
 
 Deno.test("buildPlan reconciles all desired resource families", () => {
-  const current = currentState();
-  current.customProperties = {
-    "repository-type": "code",
-    regions: ["eu", "us"],
-  };
-  current.actions = {
-    enabled: true,
-    allowedActions: "all",
-    shaPinningRequired: false,
-    selectedActions: {
-      githubOwnedAllowed: true,
-      verifiedAllowed: false,
-      patternsAllowed: ["actions/*"],
+  const current = currentState({
+    customProperties: {
+      "repository-type": "code",
+      regions: ["eu", "us"],
     },
-    oidc: {
-      subjectClaimTemplate: { source: "default" },
-      immutableSubject: false,
-    },
-  };
-  current.teams = [{
-    team: "platform",
-    permission: { kind: "built-in", name: "pull" },
-  }];
-  current.secrets = ["OLD_SECRET", "TOKEN"];
-  current.variables = [
-    { name: "UNCHANGED", value: "same" },
-    { name: "REGION", value: "west" },
-  ];
-  current.rulesets = [{
-    id: 10,
-    name: "protect",
-    target: "branch",
-    enforcement: "active",
-    bypassActors: [],
-    conditions: {
-      refName: {
-        include: ["~DEFAULT_BRANCH"],
-        exclude: [],
+    actions: {
+      enabled: true,
+      allowedActions: "all",
+      shaPinningRequired: false,
+      selectedActions: {
+        githubOwnedAllowed: true,
+        verifiedAllowed: false,
+        patternsAllowed: ["actions/*"],
+      },
+      oidc: {
+        subjectClaimTemplate: { source: "default" },
+        immutableSubject: false,
       },
     },
-    rules: [
-      { type: "deletion" },
-      { type: "update", updateAllowsFetchAndMerge: false },
+    teams: [{
+      team: "platform",
+      permission: { kind: "built-in", name: "pull" },
+    }],
+    secrets: ["OLD_SECRET", "TOKEN"],
+    variables: [
+      { name: "UNCHANGED", value: "same" },
+      { name: "REGION", value: "west" },
     ],
-  }];
-  current.environments = [{
-    name: "production",
-    secrets: ["DEPLOY_TOKEN"],
-    variables: [{ name: "REGION", value: "west" }],
-  }];
-  current.files = [
-    { path: "README.md", content: "old", sha: "readme-sha" },
-    { path: "KEEP.md", content: "customized", sha: "keep-sha" },
-    { path: "REMOVE.md", content: "remove", sha: "remove-sha" },
-  ];
+    rulesets: [{
+      id: 10,
+      name: "protect",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: {
+        refName: {
+          include: ["~DEFAULT_BRANCH"],
+          exclude: [],
+        },
+      },
+      rules: [
+        { type: "deletion" },
+        { type: "update", updateAllowsFetchAndMerge: false },
+      ],
+    }],
+    environments: [{
+      name: "production",
+      secrets: ["DEPLOY_TOKEN"],
+      variables: [{ name: "REGION", value: "west" }],
+    }],
+    files: [
+      { path: "README.md", content: "old", sha: "readme-sha" },
+      { path: "KEEP.md", content: "customized", sha: "keep-sha" },
+      { path: "REMOVE.md", content: "remove", sha: "remove-sha" },
+    ],
+  });
 
   const desired: DesiredState = {
     repository: "sample",
@@ -430,34 +433,35 @@ Deno.test("buildPlan reconciles all desired resource families", () => {
 });
 
 Deno.test("explicit empty owned collections clear removable resources", () => {
-  const current = currentState();
-  current.teams = [
-    { team: "a", permission: { kind: "built-in", name: "pull" } },
-    { team: "b", permission: { kind: "built-in", name: "push" } },
-  ];
-  current.secrets = ["A", "B"];
-  current.variables = [
-    { name: "A", value: "1" },
-    { name: "B", value: "2" },
-  ];
-  current.rulesets = [{
-    id: 1,
-    name: "protect",
-    target: "push",
-    enforcement: "active",
-    bypassActors: [],
-    rules: [],
-  }];
-  current.environments = [{
-    name: "production",
-    secrets: [],
-    variables: [],
-  }];
-  current.files = [{
-    path: "README.md",
-    content: "content",
-    sha: "sha",
-  }];
+  const current = currentState({
+    teams: [
+      { team: "a", permission: { kind: "built-in", name: "pull" } },
+      { team: "b", permission: { kind: "built-in", name: "push" } },
+    ],
+    secrets: ["A", "B"],
+    variables: [
+      { name: "A", value: "1" },
+      { name: "B", value: "2" },
+    ],
+    rulesets: [{
+      id: 1,
+      name: "protect",
+      target: "push",
+      enforcement: "active",
+      bypassActors: [],
+      rules: [],
+    }],
+    environments: [{
+      name: "production",
+      secrets: [],
+      variables: [],
+    }],
+    files: [{
+      path: "README.md",
+      content: "content",
+      sha: "sha",
+    }],
+  });
 
   const desired: DesiredState = {
     repository: "sample",
@@ -487,8 +491,9 @@ Deno.test("explicit empty owned collections clear removable resources", () => {
 });
 
 Deno.test("declared repository secrets are always set because values are opaque", () => {
-  const current = currentState();
-  current.secrets = ["TOKEN"];
+  const current = currentState({
+    secrets: ["TOKEN"],
+  });
 
   assertEquals(
     buildPlan(current, {
@@ -558,12 +563,13 @@ Deno.test("ruleset creation requires materializable identity and conditions", ()
 });
 
 Deno.test("files require explicit absent intent for deletion", () => {
-  const current = currentState();
-  current.files = [{
-    path: "README.md",
-    content: "custom",
-    sha: "sha",
-  }];
+  const current = currentState({
+    files: [{
+      path: "README.md",
+      content: "custom",
+      sha: "sha",
+    }],
+  });
 
   assertEquals(
     buildPlan(current, {
