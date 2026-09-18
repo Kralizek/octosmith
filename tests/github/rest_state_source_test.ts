@@ -1,8 +1,8 @@
 import { assertEquals } from "@std/assert";
 import {
-  GitHubRepositoryStateSource,
   type GitHubClient,
   type GitHubQueryValue,
+  GitHubRepositoryStateSource,
 } from "@octosmith/github";
 
 class PagingClient implements GitHubClient {
