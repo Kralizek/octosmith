@@ -102,7 +102,8 @@ function fakeGitHub(
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
-    const rawBody = init?.body ?? (request ? await request.clone().text() : undefined);
+    const rawBody = init?.body ??
+      (request ? await request.clone().text() : undefined);
     const body = typeof rawBody === "string" && rawBody.length > 0
       ? JSON.parse(rawBody)
       : undefined;
