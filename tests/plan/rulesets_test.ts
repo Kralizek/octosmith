@@ -201,6 +201,12 @@ Deno.test("ruleset bypass actors and target drift are planned", () => {
             actorId: 7,
             bypassMode: "pull-request",
           }],
+          conditions: {
+            refName: {
+              include: [],
+              exclude: [],
+            },
+          },
         },
       }],
     },
