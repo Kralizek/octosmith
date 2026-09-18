@@ -41,12 +41,18 @@ export interface ReconciliationRuntime {
 export interface GitHubRuntimeOptions {
   readonly token: string;
   readonly secretValue?: RuntimeValueProvider;
+  readonly baseUrl?: string;
+  readonly fetch?: typeof globalThis.fetch;
 }
 
 export function createGitHubRuntime(
   options: GitHubRuntimeOptions,
 ): ReconciliationRuntime {
-  const client = new FetchGitHubClient({ token: options.token });
+  const client = new FetchGitHubClient({
+    token: options.token,
+    baseUrl: options.baseUrl,
+    fetch: options.fetch,
+  });
   const secretValue = options.secretValue ?? environmentValue;
   let source: GitHubRepositoryStateSource | undefined;
   let sink: GitHubRepositoryMutationSink | undefined;
