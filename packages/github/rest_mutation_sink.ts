@@ -105,13 +105,18 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           { body: mapRuleset(operation.ruleset) },
         );
         return;
-      case "update-ruleset":
+      case "update-ruleset": {
+        const path = this.repo(repository) + "/rulesets/" + operation.id;
+        const current = await this.#client.get<Record<string, unknown>>(path, {
+          includes_parents: false,
+        });
         await this.#client.request(
           "PUT",
-          this.repo(repository) + "/rulesets/" + operation.id,
-          { body: mapDesiredRuleset(operation.changes) },
+          path,
+          { body: materializeRulesetUpdate(current, operation.changes) },
         );
         return;
+      }
       case "delete-ruleset":
         await this.#client.request(
           "DELETE",
@@ -201,7 +206,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     if (
       settings.enabled !== undefined ||
       settings.allowedActions !== undefined ||
-      settings.shaPinningRequired !== undefined
+      settings.shaPinningRequired !== undefined ||
+      settings.selectedActions !== undefined
     ) {
       const current = await this.#client.get<{
         readonly enabled: boolean;
@@ -213,7 +219,9 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         body: {
           enabled: settings.enabled ?? current.enabled,
           allowed_actions: settings.allowedActions === undefined
-            ? current.allowed_actions
+            ? settings.selectedActions !== undefined
+              ? "selected"
+              : current.allowed_actions
             : settings.allowedActions === "local-only"
             ? "local_only"
             : settings.allowedActions,
@@ -261,15 +269,17 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     const subject = settings.subjectClaimTemplate;
     const useDefault = subject === undefined
       ? current?.use_default ?? true
-      : subject.source !== "custom";
-    const claims = subject?.source === "custom"
+      : subject.source === "default";
+    const claims = subject === undefined
+      ? current?.include_claim_keys
+      : subject.source === "custom"
       ? subject.claims
-      : current?.include_claim_keys ?? [];
+      : undefined;
 
     await this.#client.request("PUT", path, {
       body: {
         use_default: useDefault,
-        include_claim_keys: claims,
+        ...(claims !== undefined && { include_claim_keys: claims }),
         use_immutable_subject: settings.immutableSubject ??
           current?.use_immutable_subject ??
           false,
