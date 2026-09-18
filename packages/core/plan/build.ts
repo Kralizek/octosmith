@@ -151,9 +151,9 @@ function planTeams(
 
   const desiredTeams = new Set(desired.teams.map((item) => item.team));
 
-  if (desired.teams.length === 0 || options.collections === "strict") {
+  if (options.collections === "strict") {
     for (const permission of current.teams) {
-      if (desired.teams.length === 0 || !desiredTeams.has(permission.team)) {
+      if (!desiredTeams.has(permission.team)) {
         operations.push({
           type: "remove-team-permission",
           team: permission.team,
@@ -269,9 +269,9 @@ function planRulesets(
 
   const desiredNames = new Set(desired.rulesets.map((item) => item.name));
 
-  if (desired.rulesets.length === 0 || options.collections === "strict") {
+  if (options.collections === "strict") {
     for (const ruleset of current.rulesets) {
-      if (desired.rulesets.length === 0 || !desiredNames.has(ruleset.name)) {
+      if (!desiredNames.has(ruleset.name)) {
         operations.push({
           type: "delete-ruleset",
           id: ruleset.id,
@@ -323,12 +323,9 @@ function planEnvironments(
 
   const desiredNames = new Set(desired.environments.map((item) => item.name));
 
-  if (desired.environments.length === 0 || options.collections === "strict") {
+  if (options.collections === "strict") {
     for (const environment of current.environments) {
-      if (
-        desired.environments.length === 0 ||
-        !desiredNames.has(environment.name)
-      ) {
+      if (!desiredNames.has(environment.name)) {
         operations.push({
           type: "delete-environment",
           name: environment.name,
@@ -713,7 +710,9 @@ function mergeRules(
   options: BuildPlanOptions,
 ): readonly DesiredRulesetRule[] {
   if (desired.length === 0) {
-    return [];
+    return options.collections === "strict"
+      ? []
+      : current.map((rule) => structuredClone(rule));
   }
 
   assertUnique(desired.map((rule) => rule.type), "ruleset rule type");

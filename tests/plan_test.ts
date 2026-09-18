@@ -476,12 +476,7 @@ Deno.test("explicit empty collections do not remove repository values by default
 
   assertEquals(buildPlan(current, desired), {
     repository: "sample",
-    operations: [
-      { type: "remove-team-permission", team: "a" },
-      { type: "remove-team-permission", team: "b" },
-      { type: "delete-ruleset", id: 1, name: "protect" },
-      { type: "delete-environment", name: "production" },
-    ],
+    operations: [],
   });
 });
 
@@ -828,4 +823,88 @@ Deno.test("strict collection mode does not infer file deletion", () => {
       operations: [],
     },
   );
+});
+
+Deno.test("empty named collections prune only in strict mode", () => {
+  const current = currentState({
+    teams: [
+      { team: "a", permission: { kind: "built-in", name: "pull" } },
+    ],
+    rulesets: [{
+      id: 1,
+      name: "protect",
+      target: "push",
+      enforcement: "active",
+      bypassActors: [],
+      rules: [],
+    }],
+    environments: [{
+      name: "production",
+      secrets: [],
+      variables: [],
+    }],
+  });
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    teams: [],
+    rulesets: [],
+    environments: [],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [],
+  });
+
+  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+    repository: "sample",
+    operations: [
+      { type: "remove-team-permission", team: "a" },
+      { type: "delete-ruleset", id: 1, name: "protect" },
+      { type: "delete-environment", name: "production" },
+    ],
+  });
+});
+
+Deno.test("empty rules list is non-destructive in sparse mode", () => {
+  const current = currentState({
+    rulesets: [{
+      id: 1,
+      name: "protect",
+      target: "push",
+      enforcement: "active",
+      bypassActors: [],
+      rules: [
+        { type: "file-path-restriction", restrictedFilePaths: ["secrets/**"] },
+      ],
+    }],
+  });
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    rulesets: [{
+      name: "protect",
+      rules: [],
+    }],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [],
+  });
+
+  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+    repository: "sample",
+    operations: [{
+      type: "update-ruleset",
+      id: 1,
+      changes: {
+        name: "protect",
+        rules: [],
+      },
+    }],
+  });
 });
