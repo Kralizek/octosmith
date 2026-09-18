@@ -1,4 +1,4 @@
-import type { Operation } from "./plan.ts";
+import type { Operation } from "../plan/types.ts";
 
 export type RepositoryReportStatus =
   | "unchanged"

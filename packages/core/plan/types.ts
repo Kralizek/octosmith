@@ -3,15 +3,15 @@ import type {
   SecretName,
   TeamPermission,
   Variable,
-} from "./common.ts";
+} from "../types.ts";
 import type {
   CustomPropertyValue,
   DesiredActionsOidcSettings,
   DesiredActionsSettings,
-} from "./resources.ts";
-import type { DesiredRepositorySettings } from "./repository.ts";
-import type { DesiredRuleset, RulesetDefinition } from "./rulesets.ts";
-import type { DesiredFile } from "./state.ts";
+} from "../state/resources.ts";
+import type { DesiredRepositorySettings } from "../state/repository.ts";
+import type { DesiredRuleset, RulesetDefinition } from "../state/rulesets.ts";
+import type { DesiredFile } from "../state/types.ts";
 
 export interface Plan {
   readonly repository: string;

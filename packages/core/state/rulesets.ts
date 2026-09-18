@@ -1,4 +1,10 @@
-import type { MergeMethod } from "./common.ts";
+import type {
+  MergeMethod,
+  RulesetBypassActorType,
+  RulesetBypassMode,
+  RulesetEnforcement,
+  RulesetTarget,
+} from "../types.ts";
 
 export type RulesetTarget = "branch" | "tag" | "push";
 

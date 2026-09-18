@@ -5,7 +5,7 @@ import type {
   PropertyValue,
   RepositoryPermission,
   TeamPermission,
-} from "../models/common.ts";
+} from "../types.ts";
 import type {
   RepositorySettingsConfiguration,
   RepositoryTemplate,
@@ -15,9 +15,9 @@ import type {
 import type {
   DesiredMergeSettings,
   DesiredRepositorySettings,
-} from "../models/repository.ts";
-import type { DesiredRuleset, DesiredRulesetRule } from "../models/rulesets.ts";
-import type { DesiredFile, DesiredState } from "../models/state.ts";
+} from "../state/repository.ts";
+import type { DesiredRuleset, DesiredRulesetRule } from "../state/rulesets.ts";
+import type { DesiredFile, DesiredState } from "../state/types.ts";
 import type { LoadedConfiguration } from "./load.ts";
 
 export interface RepositoryMetadata {

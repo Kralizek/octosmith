@@ -1,24 +1,12 @@
-export type RepositoryVisibility = "public" | "private" | "internal";
-
-export type PullRequestCreationPolicy = "all" | "collaborators-only";
-
-export type SquashMergeCommitTitle =
-  | "pull-request-title"
-  | "commit-or-pull-request-title";
-
-export type SquashMergeCommitMessage =
-  | "pull-request-body"
-  | "commit-messages"
-  | "blank";
-
-export type MergeCommitTitle = "pull-request-title" | "merge-message";
-
-export type MergeCommitMessage =
-  | "pull-request-title"
-  | "pull-request-body"
-  | "blank";
-
-export type SecurityFeatureStatus = "enabled" | "disabled";
+import type {
+  MergeCommitMessage,
+  MergeCommitTitle,
+  PullRequestCreationPolicy,
+  RepositoryVisibility,
+  SecurityFeatureStatus,
+  SquashMergeCommitMessage,
+  SquashMergeCommitTitle,
+} from "../types.ts";
 
 export interface CurrentSecurityAndAnalysis {
   readonly advancedSecurity?: SecurityFeatureStatus;

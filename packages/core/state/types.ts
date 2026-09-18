@@ -3,7 +3,7 @@ import type {
   SecretName,
   TeamPermission,
   Variable,
-} from "./common.ts";
+} from "../types.ts";
 import type {
   CurrentActionsSettings,
   CurrentCopilotSettings,
