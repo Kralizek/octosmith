@@ -613,3 +613,199 @@ Deno.test("new pull-request rules require complete nested objects", () => {
     "requires complete dismissalRestriction",
   );
 });
+
+Deno.test("ruleset creation rejects duplicate rule types", () => {
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "push",
+          target: "push",
+          enforcement: "active",
+          rules: [
+            { type: "max-file-size", maxFileSizeMb: 10 },
+            { type: "max-file-size", maxFileSizeMb: 20 },
+          ],
+        }],
+      }),
+    Error,
+    "Duplicate ruleset rule type: max-file-size",
+  );
+});
+
+Deno.test("target transitions validate preserved rules even when rules are omitted", () => {
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState({
+          rulesets: [{
+            id: 1,
+            name: "protect",
+            target: "branch",
+            enforcement: "active",
+            bypassActors: [],
+            conditions: {
+              refName: {
+                include: ["~DEFAULT_BRANCH"],
+                exclude: [],
+              },
+            },
+            rules: [{ type: "deletion" }],
+          }],
+        }),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "protect",
+            target: "push",
+          }],
+        },
+      ),
+    Error,
+    "not valid for push rulesets",
+  );
+});
+
+Deno.test("existing matching rules are validated after merge against the effective target", () => {
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState({
+          rulesets: [{
+            id: 1,
+            name: "protect",
+            target: "branch",
+            enforcement: "active",
+            bypassActors: [],
+            conditions: {
+              refName: {
+                include: ["~DEFAULT_BRANCH"],
+                exclude: [],
+              },
+            },
+            rules: [{ type: "deletion" }],
+          }],
+        }),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "protect",
+            target: "push",
+            rules: [{ type: "deletion" }],
+          }],
+        },
+      ),
+    Error,
+    "not valid for push rulesets",
+  );
+});
+
+Deno.test("new rules validate nested object members", () => {
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"] },
+          },
+          rules: [{
+            type: "required-status-checks",
+            doNotEnforceOnCreate: false,
+            checks: [{}],
+            strict: true,
+          }],
+        }],
+      }),
+    Error,
+    "required status check at index 0 requires context",
+  );
+
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"] },
+          },
+          rules: [{
+            type: "workflows",
+            doNotEnforceOnCreate: false,
+            workflows: [{ path: ".github/workflows/ci.yml" }],
+          }],
+        }],
+      }),
+    Error,
+    "required workflow at index 0 requires repositoryId",
+  );
+
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"] },
+          },
+          rules: [{
+            type: "pull-request",
+            allowedMergeMethods: ["squash"],
+            dismissStaleReviewsOnPush: true,
+            dismissalRestriction: {
+              enabled: true,
+              allowedActors: [],
+            },
+            requireCodeOwnerReview: true,
+            requireLastPushApproval: true,
+            requiredApprovingReviewCount: 1,
+            requiredReviewThreadResolution: true,
+            requiredReviewers: [{ reviewerTeamId: 7 }],
+          }],
+        }],
+      }),
+    Error,
+    "pull-request required reviewer at index 0 requires filePatterns",
+  );
+
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"] },
+          },
+          rules: [{
+            type: "code-scanning",
+            tools: [{
+              tool: "CodeQL",
+              alertsThreshold: "errors",
+            }],
+          }],
+        }],
+      }),
+    Error,
+    "code scanning tool at index 0 requires securityAlertsThreshold",
+  );
+});
