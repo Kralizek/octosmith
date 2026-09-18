@@ -1,3 +1,17 @@
+import type {
+  MergeCommitMessage,
+  MergeCommitTitle,
+  PropertyValue,
+  RepositoryVisibility,
+  RulesetBypassActorType,
+  RulesetBypassMode,
+  RulesetEnforcement,
+  RulesetTarget,
+  SecurityFeatureStatus,
+  SquashMergeCommitMessage,
+  SquashMergeCommitTitle,
+} from "../types.ts";
+
 export interface Configuration {
   readonly version: 1;
   readonly organization: string;

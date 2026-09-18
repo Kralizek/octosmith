@@ -6,20 +6,6 @@ import type {
   RulesetTarget,
 } from "../types.ts";
 
-export type RulesetTarget = "branch" | "tag" | "push";
-
-export type RulesetEnforcement = "disabled" | "evaluate" | "active";
-
-export type RulesetBypassMode = "always" | "pull-request" | "exempt";
-
-export type RulesetBypassActorType =
-  | "integration"
-  | "organization-admin"
-  | "repository-role"
-  | "team"
-  | "deploy-key"
-  | "user";
-
 export interface RulesetBypassActor {
   readonly actorType: RulesetBypassActorType;
   readonly actorId?: number;
