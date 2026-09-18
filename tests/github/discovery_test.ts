@@ -138,6 +138,51 @@ Deno.test("discovery applies a single visibility as an organization-side filter"
   }]);
 });
 
+Deno.test("discovery narrows a one-item visibility array", async () => {
+  const client = new FakeGitHubClient({
+    "/orgs/acme/repos?page=1&per_page=100&type=private": [[
+      { name: "api", visibility: "private" },
+    ]],
+  });
+
+  const repositories = await discoverRepositories(
+    client,
+    configuration({
+      scope: { visibility: ["private"] },
+    }),
+  );
+
+  assertEquals(repositories, [{
+    name: "api",
+    visibility: "private",
+    teams: [],
+    properties: {},
+  }]);
+});
+
+Deno.test("discovery does not send unsupported internal visibility filtering", async () => {
+  const client = new FakeGitHubClient({
+    "/orgs/acme/repos?page=1&per_page=100": [[
+      { name: "internal-api", visibility: "internal" },
+      { name: "private-api", visibility: "private" },
+    ]],
+  });
+
+  const repositories = await discoverRepositories(
+    client,
+    configuration({
+      scope: { visibility: "internal" },
+    }),
+  );
+
+  assertEquals(repositories, [{
+    name: "internal-api",
+    visibility: "internal",
+    teams: [],
+    properties: {},
+  }]);
+});
+
 Deno.test("discovery falls back to organization listing for name globs", async () => {
   const client = new FakeGitHubClient({
     "/orgs/acme/repos?page=1&per_page=100": [[
