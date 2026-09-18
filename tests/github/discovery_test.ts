@@ -378,7 +378,10 @@ Deno.test("discovery requests an empty page after exactly 100 results", async ()
   );
 
   assertEquals(discovered.length, 100);
-  assertEquals(new Set(discovered.map((repository) => repository.name)).size, 100);
+  assertEquals(
+    new Set(discovered.map((repository) => repository.name)).size,
+    100,
+  );
   assertEquals(client.requests.map(requestKeyFromRequest), [
     "/orgs/acme/repos?page=1&per_page=100",
     "/orgs/acme/repos?page=2&per_page=100",
