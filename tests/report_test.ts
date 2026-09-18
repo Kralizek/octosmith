@@ -36,9 +36,55 @@ Deno.test("planned reports distinguish unchanged and drift", () => {
       repository: "drifted",
       template: "code",
       status: "planned",
-      operations: [{ operation, status: "planned" }],
+      operations: [{
+        operation: {
+          type: "set-custom-property",
+          details: { name: "tier", value: "critical" },
+        },
+        status: "planned",
+      }],
     },
   );
+});
+
+Deno.test("structured reports omit runtime values and file contents", () => {
+  const report = reportPlannedRepository("code", {
+    repository: "sample",
+    operations: [
+      {
+        type: "set-repository-variable",
+        variable: { name: "REGION", value: "repository-private-value" },
+      },
+      {
+        type: "create-environment",
+        environment: {
+          name: "production",
+          variables: [{
+            name: "ENDPOINT",
+            value: "environment-private-value",
+          }],
+          secrets: ["TOKEN"],
+        },
+      },
+      {
+        type: "create-file",
+        file: {
+          path: "config.txt",
+          ensure: "exact",
+          content: "file-private-content",
+        },
+      },
+    ],
+  });
+
+  const serialized = JSON.stringify(report);
+
+  assertEquals(serialized.includes("repository-private-value"), false);
+  assertEquals(serialized.includes("environment-private-value"), false);
+  assertEquals(serialized.includes("file-private-content"), false);
+  assertStringIncludes(serialized, "[redacted]");
+  assertStringIncludes(serialized, "config.txt");
+  assertStringIncludes(serialized, "TOKEN");
 });
 
 Deno.test("applied reports distinguish success and partial failure", () => {
