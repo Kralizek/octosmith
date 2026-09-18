@@ -26,7 +26,9 @@ export type Operation =
   | SetTeamPermissionOperation
   | RemoveTeamPermissionOperation
   | SetRepositoryVariableOperation
+  | RemoveRepositoryVariableOperation
   | SetRepositorySecretOperation
+  | RemoveRepositorySecretOperation
   | CreateRulesetOperation
   | UpdateRulesetOperation
   | DeleteRulesetOperation
@@ -73,8 +75,18 @@ export interface SetRepositoryVariableOperation {
   readonly variable: Variable;
 }
 
+export interface RemoveRepositoryVariableOperation {
+  readonly type: "remove-repository-variable";
+  readonly name: string;
+}
+
 export interface SetRepositorySecretOperation {
   readonly type: "set-repository-secret";
+  readonly secret: SecretName;
+}
+
+export interface RemoveRepositorySecretOperation {
+  readonly type: "remove-repository-secret";
   readonly secret: SecretName;
 }
 
