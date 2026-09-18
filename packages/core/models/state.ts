@@ -8,10 +8,7 @@ import type {
   CurrentRepositorySettings,
   DesiredRepositorySettings,
 } from "./repository.ts";
-import type {
-  CurrentRuleset,
-  DesiredRuleset,
-} from "./rulesets.ts";
+import type { CurrentRuleset, DesiredRuleset } from "./rulesets.ts";
 
 export interface CurrentState {
   readonly repository: string;
