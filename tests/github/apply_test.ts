@@ -58,13 +58,17 @@ Deno.test("applyPlan waits for each operation to finish before starting the next
   assertEquals(started, ["update-repository-settings"]);
 
   releaseFirst();
-  await applying;
+  const result = await applying;
 
   assertEquals(started, [
     "update-repository-settings",
     "set-custom-property",
     "create-file",
   ]);
+  assertEquals(
+    result.operations.map((operation) => operation.status),
+    ["applied", "applied", "applied"],
+  );
 });
 
 Deno.test("applyPlan preserves partial results and skips remaining work after failure", async () => {
