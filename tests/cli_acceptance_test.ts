@@ -282,6 +282,10 @@ Deno.test("partial apply skips later operations and continues with the next repo
     assertStringIncludes(rendered, "set-repository-variable — failed");
     assertStringIncludes(rendered, "create-file — skipped");
     assertStringIncludes(rendered, "next [code] — applied");
+    assertStringIncludes(
+      rendered,
+      "Summary: 0 unchanged, 0 planned, 1 applied, 1 partially-applied, 0 failed",
+    );
 
     assertEquals(
       requests.some((request) =>
