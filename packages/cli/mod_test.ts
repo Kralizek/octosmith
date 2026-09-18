@@ -11,7 +11,6 @@ Deno.test("version comes from package metadata", () => {
   assertStringIncludes(VERSION, "0.1.0");
 });
 
-
 Deno.test("missing GITHUB_TOKEN returns a clear CLI failure", async () => {
   const previous = Deno.env.get("GITHUB_TOKEN");
   const errors: string[] = [];
