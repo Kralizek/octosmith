@@ -43,9 +43,9 @@ export interface RepositoryConfiguration {
 }
 
 export interface RepositorySettingsConfiguration {
-  readonly name?: string;
   readonly description?: string | null;
-  readonly homepage?: string | null;
+  readonly website?: string | null;
+  readonly topics?: readonly string[];
   readonly visibility?: RepositoryVisibility;
   readonly hasWiki?: boolean;
   readonly hasIssues?: boolean;

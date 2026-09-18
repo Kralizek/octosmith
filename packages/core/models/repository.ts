@@ -65,7 +65,8 @@ export interface DesiredMergeSettings {
 export interface CurrentRepositorySettings {
   readonly name: string;
   readonly description: string | null;
-  readonly homepage: string | null;
+  readonly website: string | null;
+  readonly topics: readonly string[];
   readonly visibility: RepositoryVisibility;
   readonly hasIssues: boolean;
   readonly hasProjects: boolean;
@@ -83,9 +84,9 @@ export interface CurrentRepositorySettings {
 }
 
 export interface DesiredRepositorySettings {
-  readonly name?: string;
   readonly description?: string | null;
-  readonly homepage?: string | null;
+  readonly website?: string | null;
+  readonly topics?: readonly string[];
   readonly visibility?: RepositoryVisibility;
   readonly hasIssues?: boolean;
   readonly hasProjects?: boolean;
