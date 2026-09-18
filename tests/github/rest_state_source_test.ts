@@ -245,6 +245,7 @@ Deno.test("ruleset state mapping preserves literals and maps enum fields", async
   );
 
   const rulesets = await source.getRulesets("sample");
+  assertEquals(rulesets.length, 2);
   const rules = rulesets[0].rules;
 
   assertEquals(
