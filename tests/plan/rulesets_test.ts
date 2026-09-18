@@ -748,6 +748,57 @@ Deno.test("existing matching rules are validated after merge against the effecti
   );
 });
 
+Deno.test("ruleset required fields reject null values", () => {
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "push",
+            target: "push",
+            enforcement: "active",
+            rules: [{
+              type: "max-file-size",
+              maxFileSizeMb: null,
+            }],
+          }],
+        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+      ),
+    Error,
+    "requires maxFileSizeMb",
+  );
+
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "branch",
+            target: "branch",
+            enforcement: "active",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
+            },
+            rules: [{
+              type: "required-status-checks",
+              doNotEnforceOnCreate: false,
+              checks: [{ context: null }],
+              strict: true,
+            }],
+          }],
+        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+      ),
+    Error,
+    "required status check at index 0 requires context",
+  );
+});
+
 Deno.test("unsupported ruleset rule types are rejected", () => {
   assertThrows(
     () =>
