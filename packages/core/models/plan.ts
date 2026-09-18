@@ -1,0 +1,106 @@
+import type {
+  Environment,
+  Ruleset,
+  SecretName,
+  TeamPermission,
+  Variable,
+} from "./common.ts";
+import type {
+  DesiredFile,
+  DesiredRepositorySettings,
+} from "./state.ts";
+
+export interface Plan {
+  readonly repository: string;
+  readonly operations: readonly Operation[];
+}
+
+export type Operation =
+  | UpdateRepositorySettingsOperation
+  | SetTeamPermissionOperation
+  | RemoveTeamPermissionOperation
+  | SetRepositoryVariableOperation
+  | SetRepositorySecretOperation
+  | CreateRulesetOperation
+  | UpdateRulesetOperation
+  | DeleteRulesetOperation
+  | CreateEnvironmentOperation
+  | UpdateEnvironmentOperation
+  | DeleteEnvironmentOperation
+  | CreateFileOperation
+  | UpdateFileOperation
+  | DeleteFileOperation;
+
+export interface UpdateRepositorySettingsOperation {
+  readonly type: "update-repository-settings";
+  readonly settings: DesiredRepositorySettings;
+}
+
+export interface SetTeamPermissionOperation {
+  readonly type: "set-team-permission";
+  readonly permission: TeamPermission;
+}
+
+export interface RemoveTeamPermissionOperation {
+  readonly type: "remove-team-permission";
+  readonly team: string;
+}
+
+export interface SetRepositoryVariableOperation {
+  readonly type: "set-repository-variable";
+  readonly variable: Variable;
+}
+
+export interface SetRepositorySecretOperation {
+  readonly type: "set-repository-secret";
+  readonly secret: SecretName;
+}
+
+export interface CreateRulesetOperation {
+  readonly type: "create-ruleset";
+  readonly ruleset: Ruleset;
+}
+
+export interface UpdateRulesetOperation {
+  readonly type: "update-ruleset";
+  readonly id: number;
+  readonly ruleset: Ruleset;
+}
+
+export interface DeleteRulesetOperation {
+  readonly type: "delete-ruleset";
+  readonly id: number;
+  readonly name: string;
+}
+
+export interface CreateEnvironmentOperation {
+  readonly type: "create-environment";
+  readonly environment: Environment;
+}
+
+export interface UpdateEnvironmentOperation {
+  readonly type: "update-environment";
+  readonly environment: Environment;
+}
+
+export interface DeleteEnvironmentOperation {
+  readonly type: "delete-environment";
+  readonly name: string;
+}
+
+export interface CreateFileOperation {
+  readonly type: "create-file";
+  readonly file: Extract<DesiredFile, { readonly ensure: "exact" }>;
+}
+
+export interface UpdateFileOperation {
+  readonly type: "update-file";
+  readonly sha: string;
+  readonly file: Extract<DesiredFile, { readonly ensure: "exact" }>;
+}
+
+export interface DeleteFileOperation {
+  readonly type: "delete-file";
+  readonly path: string;
+  readonly sha: string;
+}

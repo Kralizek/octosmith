@@ -4,5 +4,7 @@
  * @module
  */
 
+export * from "./models/mod.ts";
+
 /** The reconciliation modes supported by OctoSmith. */
 export type ReconciliationMode = "plan" | "apply";
