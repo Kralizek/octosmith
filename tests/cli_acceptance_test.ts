@@ -295,13 +295,18 @@ Deno.test("partial apply skips later operations and continues with the next repo
       ),
       false,
     );
-    assertEquals(
-      requests.some((request) =>
-        request.method === "PATCH" &&
-        request.url.pathname === "/api/v3/repos/acme/next"
-      ),
-      true,
+    const failedIndex = requests.findIndex((request) =>
+      request.method === "PATCH" &&
+      request.url.pathname ===
+        "/api/v3/repos/acme/sample/actions/variables/DESIRED"
     );
+    const continuedIndex = requests.findIndex((request) =>
+      request.method === "PATCH" &&
+      request.url.pathname === "/api/v3/repos/acme/z-next"
+    );
+
+    assertEquals(failedIndex >= 0, true);
+    assertEquals(continuedIndex > failedIndex, true);
   } finally {
     if (previous === undefined) {
       Deno.env.delete("DESIRED");
@@ -521,11 +526,11 @@ function fakePartialGitHub(
     if (method === "GET" && url.pathname === "/api/v3/orgs/acme/repos") {
       return json([
         { name: "sample", visibility: "private" },
-        { name: "next", visibility: "private" },
+        { name: "z-next", visibility: "private" },
       ]);
     }
 
-    for (const name of ["sample", "next"]) {
+    for (const name of ["sample", "z-next"]) {
       if (method === "GET" && url.pathname === `/api/v3/repos/acme/${name}`) {
         return json(repository(name));
       }
