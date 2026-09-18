@@ -17,6 +17,7 @@ import {
   applyPlan,
   type ApplyPlanResult,
   discoverRepositories,
+  type RepositoryDiscoveryResult,
   FetchGitHubClient,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
@@ -28,7 +29,7 @@ export type ReconcileMode = "plan" | "apply";
 export interface ReconciliationRuntime {
   discover(
     loaded: LoadedConfiguration,
-  ): Promise<readonly RepositoryMetadata[]>;
+  ): Promise<RepositoryDiscoveryResult>;
 
   read(
     desired: DesiredState,
@@ -104,11 +105,14 @@ export async function reconcile(
   const now = options.now ?? (() => new Date());
   const startedAt = now();
   const loaded = await loadConfigurationDirectory(options.path);
-  const repositories = await runtime.discover(loaded);
-  const results: import("@octosmith/core").RepositoryReport[] = [];
+  const discovery = await runtime.discover(loaded);
+  const results: import("@octosmith/core").RepositoryReport[] =
+    discovery.failures.map((failure) =>
+      reportFailedRepository(failure.repository, failure.error)
+    );
   const values = options.values ?? environmentValue;
 
-  for (const repository of repositories) {
+  for (const repository of discovery.repositories) {
     let template: string | undefined;
 
     try {
