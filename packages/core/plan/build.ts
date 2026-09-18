@@ -735,7 +735,7 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
       },
     },
     rules: rules.map((rule) =>
-      materializeRule(rule, desired.target)
+      materializeRule(rule, target)
     ) as readonly CurrentRefRule[],
   };
 }
