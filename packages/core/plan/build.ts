@@ -940,6 +940,9 @@ function materializeRule(
     case "max-file-size":
       requireRuleFields(rule, ["maxFileSizeMb"]);
       return rule as CurrentPushRule;
+
+    default:
+      throw new Error("Unsupported ruleset rule type: " + String(rule.type));
   }
 }
 
