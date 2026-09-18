@@ -1,10 +1,10 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import {
   buildPlan,
-  diffRepositorySettings,
   type CurrentRepositorySettings,
   type CurrentState,
   type DesiredState,
+  diffRepositorySettings,
 } from "../packages/core/mod.ts";
 
 function currentRepositorySettings(): CurrentRepositorySettings {
