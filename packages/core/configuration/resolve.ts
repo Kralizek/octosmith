@@ -268,8 +268,9 @@ function normalizeMerge(
 
 function normalizeActions(
   actions: RepositoryTemplate["repository"] extends infer Repository
-    ? Repository extends { readonly actions?: infer Actions } ? NonNullable<Actions>
-    : never
+    ? Repository extends { readonly actions?: infer Actions }
+      ? NonNullable<Actions>
+      : never
     : never,
 ): DesiredActionsSettings {
   return {
