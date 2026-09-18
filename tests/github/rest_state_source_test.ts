@@ -1,9 +1,12 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
+import { buildPlan } from "@octosmith/core";
 import {
+  FetchGitHubClient,
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryStateSource,
 } from "@octosmith/github";
+import { currentState } from "../plan/fixtures.ts";
 
 class PagingClient implements GitHubClient {
   readonly requests: string[] = [];
@@ -316,3 +319,133 @@ Deno.test("ruleset state mapping preserves literals and maps enum fields", async
     maxFileSizeMb: 25,
   }]);
 });
+
+
+Deno.test("documented ruleset state supports sparse planner updates", async () => {
+  const source = new GitHubRepositoryStateSource(
+    new MappingStateClient(),
+    "acme",
+  );
+  const rulesets = await source.getRulesets("sample");
+
+  const plan = buildPlan(
+    currentState({ rulesets }),
+    {
+      repository: "sample",
+      template: "code",
+      rulesets: [{
+        name: "protect",
+        rules: [{
+          type: "required-status-checks",
+          strict: false,
+        }],
+      }],
+    },
+  );
+
+  const update = plan.operations[0];
+  assertEquals(update.type, "update-ruleset");
+  if (update.type !== "update-ruleset") {
+    throw new Error("Expected update-ruleset");
+  }
+
+  assertEquals(update.changes.rules?.[1], {
+    type: "required-status-checks",
+    doNotEnforceOnCreate: false,
+    checks: [{ context: "ci", integrationId: 123 }],
+    strict: false,
+  });
+  assertEquals(update.changes.rules?.[0], {
+    type: "branch-name-pattern",
+    operator: "starts-with",
+    pattern: "pull-request",
+  });
+  assertEquals(update.changes.enforcement, undefined);
+});
+
+Deno.test("managed files preserve UTF-8 content and SHA", async () => {
+  const source = fileSource(new Response(JSON.stringify({
+    type: "file",
+    content: encodeBase64("ciao 👋"),
+    encoding: "base64",
+    sha: "abc123",
+  }), { status: 200 }));
+
+  assertEquals(await source.getFile("sample", "README.md"), {
+    path: "README.md",
+    content: "ciao 👋",
+    sha: "abc123",
+  });
+});
+
+Deno.test("managed file 404 returns undefined", async () => {
+  const source = fileSource(new Response(
+    JSON.stringify({ message: "Not Found" }),
+    { status: 404, statusText: "Not Found" },
+  ));
+
+  assertEquals(await source.getFile("sample", "missing.txt"), undefined);
+});
+
+Deno.test("managed file directory responses are rejected", async () => {
+  const source = fileSource(new Response(JSON.stringify({
+    type: "dir",
+    content: "",
+    encoding: "base64",
+    sha: "abc123",
+  }), { status: 200 }));
+
+  await assertRejects(
+    () => source.getFile("sample", "docs"),
+    Error,
+    "Managed path is not a base64 file: docs",
+  );
+});
+
+Deno.test("managed files reject unsupported encodings", async () => {
+  const source = fileSource(new Response(JSON.stringify({
+    type: "file",
+    content: "hello",
+    encoding: "utf-8",
+    sha: "abc123",
+  }), { status: 200 }));
+
+  await assertRejects(
+    () => source.getFile("sample", "README.md"),
+    Error,
+    "Managed path is not a base64 file: README.md",
+  );
+});
+
+Deno.test("managed file permission failures propagate", async () => {
+  const source = fileSource(new Response(
+    JSON.stringify({ message: "Forbidden" }),
+    { status: 403, statusText: "Forbidden" },
+  ));
+
+  await assertRejects(
+    () => source.getFile("sample", "README.md"),
+    Error,
+    "403 Forbidden",
+  );
+});
+
+function fileSource(response: Response): GitHubRepositoryStateSource {
+  const client = new FetchGitHubClient({
+    token: "token",
+    fetch: () => Promise.resolve(response.clone()),
+  });
+
+  return new GitHubRepositoryStateSource(client, "acme");
+}
+
+function encodeBase64(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+
+  return btoa(binary);
+}
