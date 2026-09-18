@@ -566,9 +566,7 @@ function fakePartialGitHub(
         url.pathname ===
           `/api/v3/repos/acme/${name}/actions/variables/DESIRED`
       ) {
-        return name === "sample"
-          ? json({ message: "boom" }, 500)
-          : json({});
+        return name === "sample" ? json({ message: "boom" }, 500) : json({});
       }
     }
 
