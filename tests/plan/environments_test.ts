@@ -116,3 +116,109 @@ Deno.test("environments reject duplicate names", () => {
     "Duplicate environment: production",
   );
 });
+
+Deno.test("omitted environment secrets and variables remain unmanaged", () => {
+  assertEquals(
+    buildPlan(
+      currentState({
+        environments: [{
+          name: "production",
+          secrets: ["TOKEN"],
+          variables: [{ name: "REGION", value: "west" }],
+        }],
+      }),
+      {
+        repository: "sample",
+        template: "code",
+        environments: [{ name: "production" }],
+      },
+    ),
+    { repository: "sample", operations: [] },
+  );
+});
+
+Deno.test("explicit empty environment secrets clear them", () => {
+  assertEquals(
+    buildPlan(
+      currentState({
+        environments: [{
+          name: "production",
+          secrets: ["TOKEN"],
+          variables: [],
+        }],
+      }),
+      {
+        repository: "sample",
+        template: "code",
+        environments: [{
+          name: "production",
+          secrets: [],
+        }],
+      },
+    ),
+    {
+      repository: "sample",
+      operations: [{
+        type: "update-environment",
+        environment: {
+          name: "production",
+          secrets: [],
+        },
+      }],
+    },
+  );
+});
+
+Deno.test("new environments materialize omitted collections as empty", () => {
+  assertEquals(
+    buildPlan(currentState(), {
+      repository: "sample",
+      template: "code",
+      environments: [{ name: "staging" }],
+    }),
+    {
+      repository: "sample",
+      operations: [{
+        type: "create-environment",
+        environment: {
+          name: "staging",
+          secrets: [],
+          variables: [],
+        },
+      }],
+    },
+  );
+});
+
+Deno.test("environments reject duplicate nested secret and variable names", () => {
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        environments: [{
+          name: "production",
+          secrets: ["TOKEN", "TOKEN"],
+        }],
+      }),
+    Error,
+    "Duplicate environment secret: TOKEN",
+  );
+
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        environments: [{
+          name: "production",
+          variables: [
+            { name: "REGION", value: "west" },
+            { name: "REGION", value: "north" },
+          ],
+        }],
+      }),
+    Error,
+    "Duplicate environment variable: REGION",
+  );
+});

@@ -435,3 +435,180 @@ Deno.test("rulesets reject duplicate names and duplicate rule types", () => {
     "Duplicate ruleset rule type: max-file-size",
   );
 });
+
+Deno.test("ruleset conditions validate against the effective target", () => {
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState({
+          rulesets: [{
+            id: 1,
+            name: "protect",
+            target: "branch",
+            enforcement: "active",
+            bypassActors: [],
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+            },
+            rules: [],
+          }],
+        }),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "protect",
+            target: "push",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
+            },
+          }],
+        },
+      ),
+    Error,
+    "cannot declare ref conditions",
+  );
+
+  assertEquals(
+    buildPlan(
+      currentState({
+        rulesets: [{
+          id: 1,
+          name: "protect",
+          target: "push",
+          enforcement: "active",
+          bypassActors: [],
+          rules: [],
+        }],
+      }),
+      {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "protect",
+          target: "branch",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"] },
+          },
+        }],
+      },
+    ),
+    {
+      repository: "sample",
+      operations: [{
+        type: "update-ruleset",
+        id: 1,
+        changes: {
+          name: "protect",
+          target: "branch",
+          conditions: {
+            refName: {
+              include: ["~DEFAULT_BRANCH"],
+            },
+          },
+        },
+      }],
+    },
+  );
+});
+
+Deno.test("new rules must be complete before entering a plan", () => {
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState({
+          rulesets: [{
+            id: 1,
+            name: "protect",
+            target: "branch",
+            enforcement: "active",
+            bypassActors: [],
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+            },
+            rules: [],
+          }],
+        }),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "protect",
+            rules: [{ type: "update" }],
+          }],
+        },
+      ),
+    Error,
+    "requires updateAllowsFetchAndMerge",
+  );
+
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "push",
+          target: "push",
+          enforcement: "active",
+          rules: [{ type: "max-file-size" }],
+        }],
+      }),
+    Error,
+    "requires maxFileSizeMb",
+  );
+});
+
+Deno.test("new rules reject types incompatible with the ruleset target", () => {
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"] },
+          },
+          rules: [{ type: "max-file-size", maxFileSizeMb: 10 }],
+        }],
+      }),
+    Error,
+    "not valid for branch rulesets",
+  );
+});
+
+Deno.test("new pull-request rules require complete nested objects", () => {
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        rulesets: [{
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"] },
+          },
+          rules: [{
+            type: "pull-request",
+            allowedMergeMethods: ["squash"],
+            dismissStaleReviewsOnPush: true,
+            dismissalRestriction: {
+              enabled: true,
+            },
+            requireCodeOwnerReview: true,
+            requireLastPushApproval: true,
+            requiredApprovingReviewCount: 1,
+            requiredReviewThreadResolution: true,
+            requiredReviewers: [],
+          }],
+        }],
+      }),
+    Error,
+    "requires complete dismissalRestriction",
+  );
+});

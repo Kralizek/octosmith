@@ -246,3 +246,50 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
     await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test("preserves omitted environment members in desired state", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "scope:",
+        "  names:",
+        "    - sample",
+        "",
+      ].join("\n"),
+    );
+
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "match:",
+        "  names:",
+        "    - sample",
+        "environments:",
+        "  - name: production",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+    const desired = await resolveDesiredState(
+      loaded,
+      {
+        name: "sample",
+        teams: [],
+        properties: {},
+      },
+      (name) => name,
+    );
+
+    assertEquals(desired.environments, [{ name: "production" }]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
