@@ -70,6 +70,7 @@ Deno.test("selected actions compare patterns unordered and handle missing curren
       operations: [{
         type: "update-actions-settings",
         settings: {
+          allowedActions: "selected",
           selectedActions: {
             githubOwnedAllowed: true,
             verifiedAllowed: false,
