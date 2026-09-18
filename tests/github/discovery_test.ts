@@ -19,6 +19,18 @@ class FakeGitHubClient implements GitHubClient {
     this.#responses = new Map(Object.entries(responses));
   }
 
+  request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/github").GitHubRequestOptions = {},
+  ): Promise<T> {
+    if (method !== "GET") {
+      throw new Error("Unexpected method: " + method);
+    }
+
+    return this.get(path, options.query);
+  }
+
   get<T>(
     path: string,
     query: Readonly<Record<string, GitHubQueryValue>> = {},
