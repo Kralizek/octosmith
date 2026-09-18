@@ -68,6 +68,7 @@ Deno.test("environment secrets force update because values are opaque", () => {
       repository: "sample",
       operations: [{
         type: "update-environment",
+        collections: "sparse",
         environment: {
           name: "production",
           secrets: ["TOKEN"],
@@ -98,6 +99,40 @@ Deno.test("strict environments remove undeclared names while sparse preserves th
   assertEquals(buildPlan(current, desired, { collections: "strict" }), {
     repository: "sample",
     operations: [{ type: "delete-environment", name: "remove" }],
+  });
+});
+
+Deno.test("sparse environment variables preserve undeclared siblings", () => {
+  const current = currentState({
+    environments: [{
+      name: "production",
+      secrets: [],
+      variables: [
+        { name: "REGION", value: "north" },
+        { name: "EXTRA", value: "preserve" },
+      ],
+    }],
+  });
+  const desired = {
+    repository: "sample",
+    template: "code",
+    environments: [{
+      name: "production",
+      variables: [{ name: "REGION", value: "north" }],
+    }],
+  } as const;
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [],
+  });
+  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+    repository: "sample",
+    operations: [{
+      type: "update-environment",
+      collections: "strict",
+      environment: desired.environments[0],
+    }],
   });
 });
 
@@ -160,6 +195,7 @@ Deno.test("explicit empty environment secrets clear them", () => {
       repository: "sample",
       operations: [{
         type: "update-environment",
+        collections: "sparse",
         environment: {
           name: "production",
           secrets: [],
