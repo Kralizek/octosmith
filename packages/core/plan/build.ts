@@ -38,13 +38,13 @@ export function buildPlan(
   const operations: Operation[] = [];
 
   planRepositorySettings(current, desired, operations);
-  planCustomProperties(current, desired, operations);
+  planCustomProperties(current, desired, operations, options);
   planActions(current, desired, operations);
-  planTeams(current, desired, operations);
+  planTeams(current, desired, operations, options);
   planRepositorySecrets(current, desired, operations, options);
   planRepositoryVariables(current, desired, operations, options);
-  planRulesets(current, desired, operations);
-  planEnvironments(current, desired, operations);
+  planRulesets(current, desired, operations, options);
+  planEnvironments(current, desired, operations, options);
   planFiles(current, desired, operations);
 
   return {
@@ -76,9 +76,24 @@ function planCustomProperties(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  options: BuildPlanOptions,
 ): void {
   if (desired.customProperties === undefined) {
     return;
+  }
+
+  if (options.collections === "strict") {
+    const desiredNames = new Set(Object.keys(desired.customProperties));
+
+    for (const [name, value] of Object.entries(current.customProperties)) {
+      if (!desiredNames.has(name) && value !== null) {
+        operations.push({
+          type: "set-custom-property",
+          name,
+          value: null,
+        });
+      }
+    }
   }
 
   for (const [name, value] of Object.entries(desired.customProperties)) {
@@ -126,23 +141,26 @@ function planTeams(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  options: BuildPlanOptions,
 ): void {
   if (desired.teams === undefined) {
     return;
   }
 
-  if (desired.teams.length === 0) {
-    for (const permission of current.teams) {
-      operations.push({
-        type: "remove-team-permission",
-        team: permission.team,
-      });
-    }
-
-    return;
-  }
-
   assertUnique(desired.teams.map((item) => item.team), "team");
+
+  const desiredTeams = new Set(desired.teams.map((item) => item.team));
+
+  if (desired.teams.length === 0 || options.collections === "strict") {
+    for (const permission of current.teams) {
+      if (desired.teams.length === 0 || !desiredTeams.has(permission.team)) {
+        operations.push({
+          type: "remove-team-permission",
+          team: permission.team,
+        });
+      }
+    }
+  }
 
   const currentByTeam = new Map(current.teams.map((item) => [item.team, item]));
 
@@ -170,7 +188,7 @@ function planRepositorySecrets(
 
   assertUnique(desired.secrets, "repository secret");
 
-  if (options.strict) {
+  if (options.collections === "strict") {
     const desiredNames = new Set(desired.secrets);
 
     for (const secret of current.secrets) {
@@ -208,7 +226,7 @@ function planRepositoryVariables(
     "repository variable",
   );
 
-  if (options.strict) {
+  if (options.collections === "strict") {
     const desiredNames = new Set(desired.variables.map((item) => item.name));
 
     for (const variable of current.variables) {
@@ -241,24 +259,27 @@ function planRulesets(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  options: BuildPlanOptions,
 ): void {
   if (desired.rulesets === undefined) {
     return;
   }
 
-  if (desired.rulesets.length === 0) {
-    for (const ruleset of current.rulesets) {
-      operations.push({
-        type: "delete-ruleset",
-        id: ruleset.id,
-        name: ruleset.name,
-      });
-    }
-
-    return;
-  }
-
   assertUnique(desired.rulesets.map((item) => item.name), "ruleset");
+
+  const desiredNames = new Set(desired.rulesets.map((item) => item.name));
+
+  if (desired.rulesets.length === 0 || options.collections === "strict") {
+    for (const ruleset of current.rulesets) {
+      if (desired.rulesets.length === 0 || !desiredNames.has(ruleset.name)) {
+        operations.push({
+          type: "delete-ruleset",
+          id: ruleset.id,
+          name: ruleset.name,
+        });
+      }
+    }
+  }
 
   const currentByName = new Map(
     current.rulesets.map((item) => [item.name, item]),
@@ -276,7 +297,7 @@ function planRulesets(
       continue;
     }
 
-    const changes = diffRuleset(actual, ruleset);
+    const changes = diffRuleset(actual, ruleset, options);
 
     if (changes) {
       operations.push({
@@ -292,23 +313,29 @@ function planEnvironments(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  options: BuildPlanOptions,
 ): void {
   if (desired.environments === undefined) {
     return;
   }
 
-  if (desired.environments.length === 0) {
-    for (const environment of current.environments) {
-      operations.push({
-        type: "delete-environment",
-        name: environment.name,
-      });
-    }
-
-    return;
-  }
-
   assertUnique(desired.environments.map((item) => item.name), "environment");
+
+  const desiredNames = new Set(desired.environments.map((item) => item.name));
+
+  if (desired.environments.length === 0 || options.collections === "strict") {
+    for (const environment of current.environments) {
+      if (
+        desired.environments.length === 0 ||
+        !desiredNames.has(environment.name)
+      ) {
+        operations.push({
+          type: "delete-environment",
+          name: environment.name,
+        });
+      }
+    }
+  }
 
   const currentByName = new Map(
     current.environments.map((item) => [item.name, item]),
@@ -579,6 +606,7 @@ function diffActionsOidc(
 function diffRuleset(
   current: CurrentRuleset,
   desired: DesiredRuleset,
+  options: BuildPlanOptions,
 ): DesiredRuleset | undefined {
   const changes: Record<string, unknown> = {
     name: desired.name,
@@ -609,7 +637,7 @@ function diffRuleset(
   }
 
   if (desired.rules !== undefined) {
-    const merged = mergeRules(current.rules, desired.rules);
+    const merged = mergeRules(current.rules, desired.rules, options);
 
     if (!deepEqual(current.rules, merged)) {
       changes.rules = merged;
@@ -682,6 +710,7 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
 function mergeRules(
   current: readonly (CurrentRefRule | CurrentPushRule)[],
   desired: readonly DesiredRulesetRule[],
+  options: BuildPlanOptions,
 ): readonly DesiredRulesetRule[] {
   if (desired.length === 0) {
     return [];
@@ -689,7 +718,9 @@ function mergeRules(
 
   assertUnique(desired.map((rule) => rule.type), "ruleset rule type");
 
-  const result = current.map((rule) => structuredClone(rule)) as unknown[];
+  const result = options.collections === "strict"
+    ? []
+    : current.map((rule) => structuredClone(rule)) as unknown[];
   const indexByType = new Map(
     current.map((rule, index) => [rule.type, index]),
   );
@@ -702,7 +733,11 @@ function mergeRules(
       continue;
     }
 
-    result[index] = mergeOwned(result[index], rule);
+    if (options.collections === "strict") {
+      result.push(mergeOwned(current[index], rule));
+    } else {
+      result[index] = mergeOwned(result[index], rule);
+    }
   }
 
   return result as readonly DesiredRulesetRule[];

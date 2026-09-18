@@ -18,8 +18,10 @@ export interface Plan {
   readonly operations: readonly Operation[];
 }
 
+export type CollectionReconciliationMode = "sparse" | "strict";
+
 export interface BuildPlanOptions {
-  readonly strict?: boolean;
+  readonly collections?: CollectionReconciliationMode;
 }
 
 export type Operation =
