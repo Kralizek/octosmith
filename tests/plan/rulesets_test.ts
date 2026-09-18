@@ -669,6 +669,44 @@ Deno.test("target transitions validate preserved rules even when rules are omitt
   );
 });
 
+Deno.test("push to ref target transition materializes empty ref conditions", () => {
+  const plan = buildPlan(
+    currentState({
+      rulesets: [{
+        id: 1,
+        name: "protect",
+        target: "push",
+        enforcement: "active",
+        bypassActors: [],
+        rules: [],
+      }],
+    }),
+    {
+      repository: "sample",
+      template: "code",
+      rulesets: [{
+        name: "protect",
+        target: "branch",
+      }],
+    },
+  );
+
+  assertEquals(plan.operations, [{
+    type: "update-ruleset",
+    id: 1,
+    changes: {
+      name: "protect",
+      target: "branch",
+      conditions: {
+        refName: {
+          include: [],
+          exclude: [],
+        },
+      },
+    },
+  }]);
+});
+
 Deno.test("existing matching rules are validated after merge against the effective target", () => {
   assertThrows(
     () =>
