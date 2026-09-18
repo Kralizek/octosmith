@@ -5,10 +5,7 @@ import type {
   Variable,
 } from "./common.ts";
 import type { DesiredRepositorySettings } from "./repository.ts";
-import type {
-  DesiredRuleset,
-  RulesetDefinition,
-} from "./rulesets.ts";
+import type { DesiredRuleset, RulesetDefinition } from "./rulesets.ts";
 import type { DesiredFile } from "./state.ts";
 
 export interface Plan {
