@@ -17,7 +17,6 @@ import type {
   CurrentRuleset,
   DesiredRuleset,
   DesiredRulesetRule,
-  RulesetBypassActor,
   RulesetDefinition,
 } from "../state/rulesets.ts";
 import type {
