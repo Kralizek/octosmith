@@ -17,9 +17,9 @@ import type {
   DesiredSecurityAndAnalysis,
 } from "../state/repository.ts";
 import type {
+  CurrentPushRule,
   CurrentRefRule,
   CurrentRuleset,
-  CurrentPushRule,
   DesiredRuleset,
   DesiredRulesetRule,
   RulesetBypassActor,
@@ -208,7 +208,10 @@ function planRepositoryVariables(
     return;
   }
 
-  assertUnique(desired.variables.map((item) => item.name), "repository variable");
+  assertUnique(
+    desired.variables.map((item) => item.name),
+    "repository variable",
+  );
 
   if (desired.variables.length === 0) {
     for (const variable of current.variables) {
@@ -635,7 +638,8 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
     );
   }
 
-  const bypassActors = (desired.bypassActors ?? []) as readonly RulesetBypassActor[];
+  const bypassActors =
+    (desired.bypassActors ?? []) as readonly RulesetBypassActor[];
   const rules = (desired.rules ?? []) as readonly DesiredRulesetRule[];
 
   if (desired.target === "push") {
@@ -782,7 +786,8 @@ function equalUnorderedStrings(
 }
 
 function deepEqual(left: unknown, right: unknown): boolean {
-  return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+  return JSON.stringify(canonicalize(left)) ===
+    JSON.stringify(canonicalize(right));
 }
 
 function canonicalize(value: unknown): unknown {
@@ -818,7 +823,9 @@ function mergeOwned(current: unknown, desired: unknown): unknown {
 
   const result = structuredClone(current) as Record<string, unknown>;
 
-  for (const [key, value] of Object.entries(desired as Record<string, unknown>)) {
+  for (
+    const [key, value] of Object.entries(desired as Record<string, unknown>)
+  ) {
     result[key] = value === undefined
       ? result[key]
       : mergeOwned(result[key], value);
