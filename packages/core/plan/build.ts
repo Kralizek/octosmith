@@ -949,7 +949,10 @@ function materializeRule(
       return rule as CurrentPushRule;
 
     default:
-      throw new Error("Unsupported ruleset rule type: " + String(rule.type));
+      throw new Error(
+        "Unsupported ruleset rule type: " +
+          String(Reflect.get(rule as unknown as object, "type")),
+      );
   }
 }
 
