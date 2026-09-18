@@ -317,6 +317,265 @@ Deno.test("partial apply skips later operations and continues with the next repo
   }
 });
 
+Deno.test("CLI rejects a misspelled scope before any GitHub request", async () => {
+  const root = await safetyConfigurationDirectory({
+    code: {
+      match: { names: ["*"] },
+      repository: { settings: { has_issues: false } },
+    },
+  }, { nmaes: ["sample"] });
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+    const runtime = createGitHubRuntime({
+      token: "fake",
+      fetch: fakeGitHub(requests),
+    });
+    assertEquals(await main(["apply", "--path", root], { runtime }), 1);
+    assertEquals(requests, []);
+    assertStringIncludes(errors.join("\n"), "nmaes");
+    assertStringIncludes(errors.join("\n"), "octosmith.yml");
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI validates all templates before plan discovery", async () => {
+  const root = await safetyConfigurationDirectory({
+    valid: { match: { names: ["sample"] } },
+    invalid: { match: { nmaes: ["unrelated"] } },
+  });
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+    const runtime = createGitHubRuntime({
+      token: "fake",
+      fetch: fakeGitHub(requests),
+    });
+    assertEquals(await main(["plan", "--path", root], { runtime }), 1);
+    assertEquals(requests, []);
+    assertStringIncludes(errors.join("\n"), "invalid.yml");
+    assertStringIncludes(errors.join("\n"), "nmaes");
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI preflights repository secrets before strict cleanup and continues afterward", async () => {
+  const root = await safetyConfigurationDirectory({
+    code: {
+      match: { names: ["sample"] },
+      repository: { settings: { has_issues: false }, secrets: ["NEW"] },
+    },
+    healthy: {
+      match: { names: ["z-next"] },
+      repository: { settings: { has_issues: false } },
+    },
+  });
+  const requests: CapturedRequest[] = [];
+  const events: string[] = [];
+  const output: string[] = [];
+  try {
+    const runtime = createGitHubRuntime({
+      token: "fake",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakePreflightGitHub(requests, events),
+      secretValue: (name) => {
+        events.push("preflight:" + name);
+        throw new Error("Missing environment value: " + name);
+      },
+    });
+    assertEquals(
+      await main(["apply", "--path", root, "--collections", "strict"], {
+        runtime,
+        write: (value) => output.push(value),
+      }),
+      1,
+    );
+    assertEquals(
+      mutations(requests).map((request) =>
+        request.method + " " + request.url.pathname
+      ),
+      ["PATCH /api/v3/repos/acme/z-next"],
+    );
+    const preflightIndex = events.indexOf("preflight:NEW");
+    assertEquals(preflightIndex >= 0, true);
+    assertEquals(
+      events.indexOf("PATCH /api/v3/repos/acme/z-next") > preflightIndex,
+      true,
+    );
+    assertStringIncludes(output.join("\n"), "Missing environment value: NEW");
+    assertStringIncludes(
+      output.join("\n"),
+      "Summary: 0 unchanged, 0 planned, 1 applied, 0 partially-applied, 1 failed",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI preflights environment secrets before any strict mutation", async () => {
+  const root = await safetyConfigurationDirectory({
+    code: {
+      match: { names: ["sample"] },
+      repository: { settings: { has_issues: false } },
+      environments: [{ name: "production", secrets: ["NEW"], variables: [] }],
+    },
+  }, { names: ["sample"] });
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+  try {
+    const runtime = createGitHubRuntime({
+      token: "fake",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakePreflightGitHub(requests, []),
+      secretValue: (name) => {
+        throw new Error("Missing environment value: " + name);
+      },
+    });
+    assertEquals(
+      await main(["apply", "--path", root, "--collections", "strict"], {
+        runtime,
+        write: (value) => output.push(value),
+      }),
+      1,
+    );
+    assertEquals(mutations(requests), []);
+    assertStringIncludes(output.join("\n"), "Missing environment value: NEW");
+    assertStringIncludes(
+      output.join("\n"),
+      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 1 failed",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI plan identifies strict deletion targets and changed settings", async () => {
+  const root = await safetyConfigurationDirectory({
+    code: {
+      match: { names: ["sample"] },
+      repository: { settings: { has_issues: false }, secrets: ["NEW"] },
+      environments: [],
+    },
+  }, { names: ["sample"] });
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+  let secretCalls = 0;
+  try {
+    const runtime = createGitHubRuntime({
+      token: "fake",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakePreflightGitHub(requests, []),
+      secretValue: () => {
+        secretCalls++;
+        return "never-display-this-value";
+      },
+    });
+    assertEquals(
+      await main(["plan", "--path", root, "--collections", "strict"], {
+        runtime,
+        write: (value) => output.push(value),
+      }),
+      0,
+    );
+    assertEquals(mutations(requests), []);
+    assertEquals(secretCalls, 0);
+    const rendered = output.join("\n");
+    for (
+      const detail of [
+        '"hasIssues":false',
+        '"name":"OLD"',
+        '"name":"NEW"',
+        '"name":"production"',
+        '"name":"obsolete"',
+      ]
+    ) {
+      assertStringIncludes(rendered, detail);
+    }
+    assertEquals(rendered.includes("never-display-this-value"), false);
+    assertEquals(rendered.includes("private-variable-value"), false);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+async function safetyConfigurationDirectory(
+  templates: Readonly<Record<string, unknown>>,
+  scope: unknown = { names: ["*"] },
+): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    JSON.stringify({ version: 1, organization: "acme", scope }),
+  );
+  for (const [name, template] of Object.entries(templates)) {
+    await Deno.writeTextFile(
+      root + "/templates/" + name + ".yml",
+      JSON.stringify(template),
+    );
+  }
+  return root;
+}
+
+function fakePreflightGitHub(
+  requests: CapturedRequest[],
+  events: string[],
+): typeof globalThis.fetch {
+  return (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method ?? "GET";
+    requests.push({ method, url });
+    events.push(method + " " + url.pathname);
+    if (method !== "GET") {
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    if (url.pathname === "/api/v3/orgs/acme/repos") {
+      return Promise.resolve(
+        json([{ name: "sample", visibility: "private" }, {
+          name: "z-next",
+          visibility: "private",
+        }]),
+      );
+    }
+    for (const name of ["sample", "z-next"]) {
+      if (url.pathname === "/api/v3/repos/acme/" + name) {
+        return Promise.resolve(json(repository(name)));
+      }
+    }
+    if (url.pathname.endsWith("/secrets")) {
+      return Promise.resolve(json({ secrets: [{ name: "OLD" }] }));
+    }
+    if (url.pathname.endsWith("/variables")) {
+      return Promise.resolve(
+        json({
+          variables: [{
+            name: "OLD_VARIABLE",
+            value: "private-variable-value",
+          }],
+        }),
+      );
+    }
+    if (url.pathname.endsWith("/environments")) {
+      return Promise.resolve(
+        json({ environments: [{ name: "production" }, { name: "obsolete" }] }),
+      );
+    }
+    return Promise.resolve(
+      json({ message: "Unexpected request: " + url.pathname }, 500),
+    );
+  };
+}
+
 function fakeGitHub(
   requests: CapturedRequest[],
   state: { hasIssues: boolean } = { hasIssues: true },
@@ -452,7 +711,7 @@ async function configurationDirectory(
       : [
         "version: 1",
         "organization: acme",
-        "scope: {}",
+        'scope: { names: ["*"] }',
         "",
       ].join("\n"),
   );
@@ -596,7 +855,7 @@ async function secretConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      "scope: {}",
+      'scope: { names: ["*"] }',
       "",
     ].join("\n"),
   );
@@ -624,7 +883,7 @@ async function partialConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      "scope: {}",
+      'scope: { names: ["*"] }',
       "",
     ].join("\n"),
   );

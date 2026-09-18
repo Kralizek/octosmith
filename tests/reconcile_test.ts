@@ -164,7 +164,7 @@ async function configurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      "scope: {}",
+      'scope: { names: ["*"] }',
       "",
     ].join("\n"),
   );
