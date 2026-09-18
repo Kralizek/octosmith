@@ -408,7 +408,7 @@ function mapRule(value: Record<string, unknown>):
   const type = kebab(String(value.type));
   const parameters = camelizeObject(
     (value.parameters as Record<string, unknown> | undefined) ?? {},
-  );
+  ) as Record<string, unknown>;
 
   return {
     type,
