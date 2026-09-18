@@ -6,6 +6,7 @@ import type {
 } from "./common.ts";
 import type {
   CustomPropertyValue,
+  DesiredActionsOidcSettings,
   DesiredActionsSettings,
 } from "./resources.ts";
 import type { DesiredRepositorySettings } from "./repository.ts";
@@ -21,6 +22,7 @@ export type Operation =
   | UpdateRepositorySettingsOperation
   | SetCustomPropertyOperation
   | UpdateActionsSettingsOperation
+  | UpdateActionsOidcSettingsOperation
   | SetTeamPermissionOperation
   | RemoveTeamPermissionOperation
   | SetRepositoryVariableOperation
@@ -49,6 +51,11 @@ export interface SetCustomPropertyOperation {
 export interface UpdateActionsSettingsOperation {
   readonly type: "update-actions-settings";
   readonly settings: DesiredActionsSettings;
+}
+
+export interface UpdateActionsOidcSettingsOperation {
+  readonly type: "update-actions-oidc";
+  readonly settings: DesiredActionsOidcSettings;
 }
 
 export interface SetTeamPermissionOperation {

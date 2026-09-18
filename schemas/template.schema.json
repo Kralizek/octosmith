@@ -557,6 +557,9 @@
         },
         "selected_actions": {
           "$ref": "#/$defs/selectedActions"
+        },
+        "oidc": {
+          "$ref": "#/$defs/actionsOidc"
         }
       }
     },
@@ -572,6 +575,21 @@
         },
         "patterns_allowed": {
           "$ref": "#/$defs/ownedStringList"
+        }
+      }
+    },
+    "actionsOidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "use_default": {
+          "type": "boolean"
+        },
+        "include_claim_keys": {
+          "$ref": "#/$defs/ownedStringList"
+        },
+        "use_immutable_subject": {
+          "type": "boolean"
         }
       }
     }

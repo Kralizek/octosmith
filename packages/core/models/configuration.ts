@@ -92,12 +92,19 @@ export interface ActionsConfiguration {
   readonly allowedActions?: "all" | "local_only" | "selected";
   readonly shaPinningRequired?: boolean;
   readonly selectedActions?: SelectedActionsConfiguration;
+  readonly oidc?: ActionsOidcConfiguration;
 }
 
 export interface SelectedActionsConfiguration {
   readonly githubOwnedAllowed?: boolean;
   readonly verifiedAllowed?: boolean;
   readonly patternsAllowed?: readonly string[];
+}
+
+export interface ActionsOidcConfiguration {
+  readonly useDefault?: boolean;
+  readonly includeClaimKeys?: readonly string[];
+  readonly useImmutableSubject?: boolean;
 }
 
 export interface TeamPermissionConfiguration {
