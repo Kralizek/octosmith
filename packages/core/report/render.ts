@@ -25,6 +25,7 @@ export function renderReport(report: Report): string {
       summary.unchanged + " unchanged, " +
       summary.planned + " planned, " +
       summary.applied + " applied, " +
+      summary.partiallyApplied + " partially-applied, " +
       summary.failed + " failed",
   );
 
@@ -66,11 +67,13 @@ function summarize(report: Report): {
   readonly unchanged: number;
   readonly planned: number;
   readonly applied: number;
+  readonly partiallyApplied: number;
   readonly failed: number;
 } {
   let unchanged = 0;
   let planned = 0;
   let applied = 0;
+  let partiallyApplied = 0;
   let failed = 0;
 
   for (const repository of report.repositories) {
@@ -85,11 +88,13 @@ function summarize(report: Report): {
         applied++;
         break;
       case "partially-applied":
+        partiallyApplied++;
+        break;
       case "failed":
         failed++;
         break;
     }
   }
 
-  return { unchanged, planned, applied, failed };
+  return { unchanged, planned, applied, partiallyApplied, failed };
 }
