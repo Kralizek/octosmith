@@ -315,18 +315,20 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     base: string,
     variables: readonly Variable[],
   ): Promise<void> {
-    const response = await this.#client.get<{
-      readonly variables: readonly {
-        readonly name: string;
-        readonly value: string;
-      }[];
-    }>(base + "/variables", { per_page: 100 });
+    const currentVariables = await getAllWrappedPages<{
+      readonly name: string;
+      readonly value: string;
+    }>(
+      this.#client,
+      base + "/variables",
+      "variables",
+    );
     const current = new Set(
-      response.variables.map((variable) => variable.name),
+      currentVariables.map((variable) => variable.name),
     );
     const desired = new Set(variables.map((variable) => variable.name));
 
-    for (const variable of response.variables) {
+    for (const variable of currentVariables) {
       if (!desired.has(variable.name)) {
         await this.#client.request(
           "DELETE",
@@ -351,12 +353,16 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     base: string,
     secrets: readonly string[],
   ): Promise<void> {
-    const response = await this.#client.get<{
-      readonly secrets: readonly { readonly name: string }[];
-    }>(base + "/secrets", { per_page: 100 });
+    const currentSecrets = await getAllWrappedPages<{
+      readonly name: string;
+    }>(
+      this.#client,
+      base + "/secrets",
+      "secrets",
+    );
     const desired = new Set(secrets);
 
-    for (const secret of response.secrets) {
+    for (const secret of currentSecrets) {
       if (!desired.has(secret.name)) {
         await this.#client.request(
           "DELETE",
@@ -414,6 +420,29 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   private repo(repository: string): string {
     return "/repos/" + encodeURIComponent(this.#owner) + "/" +
       encodeURIComponent(repository);
+  }
+}
+
+const PAGE_SIZE = 100;
+
+async function getAllWrappedPages<T>(
+  client: GitHubClient,
+  path: string,
+  field: string,
+): Promise<readonly T[]> {
+  const result: T[] = [];
+
+  for (let page = 1;; page++) {
+    const response = await client.get<Record<string, unknown>>(path, {
+      per_page: PAGE_SIZE,
+      page,
+    });
+    const items = Reflect.get(response, field) as readonly T[];
+    result.push(...items);
+
+    if (items.length < PAGE_SIZE) {
+      return result;
+    }
   }
 }
 
