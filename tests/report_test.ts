@@ -136,4 +136,8 @@ Deno.test("text renderer includes repository, operation and summary status", () 
   assertStringIncludes(rendered, "1 planned");
   assertStringIncludes(rendered, "1 partially-applied");
   assertStringIncludes(rendered, "1 failed");
+  assertStringIncludes(
+    rendered,
+    "Summary: 0 unchanged, 1 planned, 0 applied, 1 partially-applied, 1 failed",
+  );
 });
