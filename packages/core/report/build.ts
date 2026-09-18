@@ -63,7 +63,6 @@ export function reportFailedRepository(
   };
 }
 
-
 function reportOperation(operation: Operation): ReportedOperation {
   return {
     type: operation.type,
