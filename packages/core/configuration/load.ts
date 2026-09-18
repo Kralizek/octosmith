@@ -3,7 +3,7 @@ import { parse } from "@std/yaml";
 import type {
   Configuration,
   RepositoryTemplate,
-} from "../models/configuration.ts";
+} from "./types.ts";
 
 export interface LoadedConfiguration {
   readonly root: string;

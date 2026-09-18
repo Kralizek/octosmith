@@ -1,4 +1,4 @@
-import type { PropertyValue } from "./common.ts";
+import type { PropertyValue } from "../models/common.ts";
 import type {
   MergeCommitMessage,
   MergeCommitTitle,
@@ -6,13 +6,13 @@ import type {
   SecurityFeatureStatus,
   SquashMergeCommitMessage,
   SquashMergeCommitTitle,
-} from "./repository.ts";
+} from "../models/repository.ts";
 import type {
   RulesetBypassActorType,
   RulesetBypassMode,
   RulesetEnforcement,
   RulesetTarget,
-} from "./rulesets.ts";
+} from "../models/rulesets.ts";
 
 export interface Configuration {
   readonly version: 1;

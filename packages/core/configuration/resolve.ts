@@ -11,7 +11,7 @@ import type {
   RepositoryTemplate,
   RulesetConfiguration,
   RulesetRuleConfiguration,
-} from "../models/configuration.ts";
+} from "./types.ts";
 import type {
   DesiredMergeSettings,
   DesiredRepositorySettings,
