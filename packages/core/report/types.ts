@@ -28,8 +28,13 @@ export interface RepositoryReport {
   readonly error?: string;
 }
 
+export interface ReportedOperation {
+  readonly type: Operation["type"];
+  readonly details: Readonly<Record<string, unknown>>;
+}
+
 export interface OperationReport {
-  readonly operation: Operation;
+  readonly operation: ReportedOperation;
   readonly status: OperationReportStatus;
   readonly error?: string;
 }
