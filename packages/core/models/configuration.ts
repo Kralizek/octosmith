@@ -101,10 +101,21 @@ export interface SelectedActionsConfiguration {
   readonly patternsAllowed?: readonly string[];
 }
 
+export type SubjectClaimTemplateConfiguration =
+  | {
+    readonly source: "default";
+  }
+  | {
+    readonly source: "organization";
+  }
+  | {
+    readonly source: "custom";
+    readonly claims: readonly string[];
+  };
+
 export interface ActionsOidcConfiguration {
-  readonly useDefault?: boolean;
-  readonly includeClaimKeys?: readonly string[];
-  readonly useImmutableSubject?: boolean;
+  readonly subjectClaimTemplate?: SubjectClaimTemplateConfiguration;
+  readonly immutableSubject?: boolean;
 }
 
 export interface TeamPermissionConfiguration {

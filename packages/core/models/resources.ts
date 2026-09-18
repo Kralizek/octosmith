@@ -17,16 +17,26 @@ export interface DesiredSelectedActions {
   readonly patternsAllowed?: readonly string[];
 }
 
+export type SubjectClaimTemplate =
+  | {
+    readonly source: "default";
+  }
+  | {
+    readonly source: "organization";
+  }
+  | {
+    readonly source: "custom";
+    readonly claims: readonly string[];
+  };
+
 export interface CurrentActionsOidcSettings {
-  readonly useDefault: boolean;
-  readonly includeClaimKeys: readonly string[];
-  readonly useImmutableSubject?: boolean;
+  readonly subjectClaimTemplate: SubjectClaimTemplate;
+  readonly immutableSubject: boolean;
 }
 
 export interface DesiredActionsOidcSettings {
-  readonly useDefault?: boolean;
-  readonly includeClaimKeys?: readonly string[];
-  readonly useImmutableSubject?: boolean;
+  readonly subjectClaimTemplate?: SubjectClaimTemplate;
+  readonly immutableSubject?: boolean;
 }
 
 export interface CurrentActionsSettings {

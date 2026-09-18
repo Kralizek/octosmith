@@ -582,16 +582,63 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "use_default": {
-          "type": "boolean"
+        "subject_claim_template": {
+          "$ref": "#/$defs/subjectClaimTemplate"
         },
-        "include_claim_keys": {
-          "$ref": "#/$defs/ownedStringList"
-        },
-        "use_immutable_subject": {
+        "immutable_subject": {
           "type": "boolean"
         }
       }
+    },
+    "subjectClaimTemplate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "const": "default"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "const": "organization"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "claims"
+          ],
+          "properties": {
+            "source": {
+              "const": "custom"
+            },
+            "claims": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      ]
     }
   }
 }
