@@ -71,7 +71,11 @@ export interface CodeScanningTool {
 
 export interface PullRequestDismissalActor {
   readonly id: number;
-  readonly type: "user" | "team" | "integration-installation" | "repository-role";
+  readonly type:
+    | "user"
+    | "team"
+    | "integration-installation"
+    | "repository-role";
 }
 
 export interface RequiredReviewer {
@@ -197,9 +201,8 @@ export type CurrentRuleset =
 
 type DeepPartial<T> = T extends readonly (infer Item)[]
   ? readonly DeepPartial<Item>[]
-  : T extends object
-    ? { readonly [Key in keyof T]?: DeepPartial<T[Key]> }
-    : T;
+  : T extends object ? { readonly [Key in keyof T]?: DeepPartial<T[Key]> }
+  : T;
 
 type SparseRule<Rule extends { readonly type: string }> =
   & Pick<Rule, "type">
