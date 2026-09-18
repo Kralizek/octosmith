@@ -43,7 +43,10 @@ interface RepositoryResponse {
   readonly archived: boolean;
   readonly allow_forking?: boolean;
   readonly web_commit_signoff_required?: boolean;
-  readonly security_and_analysis?: Record<string, { readonly status: "enabled" | "disabled" }>;
+  readonly security_and_analysis?: Record<
+    string,
+    { readonly status: "enabled" | "disabled" }
+  >;
 }
 
 export class GitHubRepositoryStateSource implements RepositoryStateSource {
@@ -52,7 +55,9 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     readonly owner: string,
   ) {}
 
-  async getRepositorySettings(repository: string): Promise<CurrentRepositorySettings> {
+  async getRepositorySettings(
+    repository: string,
+  ): Promise<CurrentRepositorySettings> {
     const response = await this.client.get<RepositoryResponse>(this.repo(repository));
 
     return {
@@ -66,9 +71,10 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       hasWiki: response.has_wiki,
       hasDiscussions: response.has_discussions,
       hasPullRequests: response.has_pull_requests,
-      pullRequestCreationPolicy: response.pull_request_creation_policy === "collaborators_only"
-        ? "collaborators-only"
-        : "all",
+      pullRequestCreationPolicy:
+        response.pull_request_creation_policy === "collaborators_only"
+          ? "collaborators-only"
+          : "all",
       isTemplate: response.is_template,
       defaultBranch: response.default_branch,
       merge: {
@@ -78,8 +84,12 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
         allowAutoMerge: response.allow_auto_merge,
         allowUpdateBranch: response.allow_update_branch ?? false,
         deleteBranchOnMerge: response.delete_branch_on_merge,
-        squashMergeCommitTitle: mapSquashTitle(response.squash_merge_commit_title),
-        squashMergeCommitMessage: mapSquashMessage(response.squash_merge_commit_message),
+        squashMergeCommitTitle: mapSquashTitle(
+          response.squash_merge_commit_title,
+        ),
+        squashMergeCommitMessage: mapSquashMessage(
+          response.squash_merge_commit_message,
+        ),
         mergeCommitTitle: mapMergeTitle(response.merge_commit_title),
         mergeCommitMessage: mapMergeMessage(response.merge_commit_message),
       },
@@ -156,10 +166,12 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   }
 
   async getTeams(repository: string): Promise<readonly TeamPermission[]> {
-    const teams = await this.client.get<readonly {
-      readonly slug: string;
-      readonly permission: string;
-    }[]>(this.repo(repository) + "/teams");
+    const teams = await this.client.get<
+      readonly {
+        readonly slug: string;
+        readonly permission: string;
+      }[]
+    >(this.repo(repository) + "/teams");
 
     return teams.map((team) => ({
       team: team.slug,
@@ -177,7 +189,10 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
 
   async getVariables(repository: string): Promise<readonly Variable[]> {
     const response = await this.client.get<{
-      readonly variables: readonly { readonly name: string; readonly value: string }[];
+      readonly variables: readonly {
+        readonly name: string;
+        readonly value: string;
+      }[];
     }>(this.repo(repository) + "/actions/variables", { per_page: 100 });
 
     return response.variables.map((variable) => ({
@@ -187,10 +202,12 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   }
 
   async getRulesets(repository: string): Promise<readonly CurrentRuleset[]> {
-    const summaries = await this.client.get<readonly {
-      readonly id: number;
-      readonly source_type?: string;
-    }[]>(this.repo(repository) + "/rulesets", {
+    const summaries = await this.client.get<
+      readonly {
+        readonly id: number;
+        readonly source_type?: string;
+      }[]
+    >(this.repo(repository) + "/rulesets", {
       per_page: 100,
       includes_parents: false,
     });
@@ -225,7 +242,10 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
             readonly secrets: readonly { readonly name: string }[];
           }>(base + "/secrets", { per_page: 100 }),
           this.client.get<{
-            readonly variables: readonly { readonly name: string; readonly value: string }[];
+            readonly variables: readonly {
+              readonly name: string;
+              readonly value: string;
+            }[];
           }>(base + "/variables", { per_page: 100 }),
         ]);
 
@@ -245,12 +265,14 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     repository: string,
     path: string,
   ): Promise<CurrentFile | undefined> {
-    const result = await this.client.request<{
-      readonly type: "file";
-      readonly content: string;
-      readonly encoding: "base64";
-      readonly sha: string;
-    } | undefined>(
+    const result = await this.client.request<
+      {
+        readonly type: "file";
+        readonly content: string;
+        readonly encoding: "base64";
+        readonly sha: string;
+      } | undefined
+    >(
       "GET",
       this.repo(repository) + "/contents/" + encodePath(path),
       { allowNotFound: true },
@@ -277,7 +299,9 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   }
 }
 
-function mapAllowedActions(value: "all" | "local_only" | "selected"): ActionsAllowedActions {
+function mapAllowedActions(
+  value: "all" | "local_only" | "selected",
+): ActionsAllowedActions {
   return value === "local_only" ? "local-only" : value;
 }
 
@@ -330,11 +354,15 @@ function mapRuleset(value: Record<string, unknown>): CurrentRuleset {
   const bypassActors = (
     value.bypass_actors as readonly Record<string, unknown>[] ?? []
   ).map((actor) => ({
-    actorType: kebab(String(actor.actor_type)) as import("@octosmith/core").RulesetBypassActor["actorType"],
+    actorType: kebab(
+      String(actor.actor_type),
+    ) as import("@octosmith/core").RulesetBypassActor["actorType"],
     ...(actor.actor_id !== null && actor.actor_id !== undefined && {
       actorId: Number(actor.actor_id),
     }),
-    bypassMode: kebab(String(actor.bypass_mode)) as import("@octosmith/core").RulesetBypassActor["bypassMode"],
+    bypassMode: kebab(
+      String(actor.bypass_mode),
+    ) as import("@octosmith/core").RulesetBypassActor["bypassMode"],
   }));
 
   const common = {
@@ -368,8 +396,9 @@ function mapRuleset(value: Record<string, unknown>): CurrentRuleset {
   } as CurrentRuleset;
 }
 
-function mapRule(value: Record<string, unknown>): import("@octosmith/core").CurrentRefRule |
-  import("@octosmith/core").CurrentPushRule {
+function mapRule(value: Record<string, unknown>):
+  | import("@octosmith/core").CurrentRefRule
+  | import("@octosmith/core").CurrentPushRule {
   const type = kebab(String(value.type));
   const parameters = camelizeObject(
     (value.parameters as Record<string, unknown> | undefined) ?? {},
@@ -378,8 +407,9 @@ function mapRule(value: Record<string, unknown>): import("@octosmith/core").Curr
   return {
     type,
     ...parameters,
-  } as import("@octosmith/core").CurrentRefRule |
-    import("@octosmith/core").CurrentPushRule;
+  } as
+    | import("@octosmith/core").CurrentRefRule
+    | import("@octosmith/core").CurrentPushRule;
 }
 
 function camelizeObject(value: unknown): unknown {
