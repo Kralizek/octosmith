@@ -1,8 +1,8 @@
 import { assert, assertEquals } from "@std/assert";
 import {
-  GitHubRepositoryMutationSink,
   type GitHubClient,
   type GitHubQueryValue,
+  GitHubRepositoryMutationSink,
 } from "@octosmith/github";
 
 interface Call {
