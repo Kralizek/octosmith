@@ -11,7 +11,7 @@ import type {
 } from "../state/resources.ts";
 import type { DesiredRepositorySettings } from "../state/repository.ts";
 import type { DesiredRuleset, RulesetDefinition } from "../state/rulesets.ts";
-import type { DesiredFile } from "../state/types.ts";
+import type { DesiredEnvironment, DesiredFile } from "../state/types.ts";
 
 export interface Plan {
   readonly repository: string;
@@ -120,7 +120,7 @@ export interface CreateEnvironmentOperation {
 
 export interface UpdateEnvironmentOperation {
   readonly type: "update-environment";
-  readonly environment: Environment;
+  readonly environment: DesiredEnvironment;
 }
 
 export interface DeleteEnvironmentOperation {

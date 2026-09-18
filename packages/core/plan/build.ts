@@ -20,7 +20,11 @@ import type {
   RulesetBypassActor,
   RulesetDefinition,
 } from "../state/rulesets.ts";
-import type { CurrentState, DesiredState } from "../state/types.ts";
+import type {
+  CurrentState,
+  DesiredEnvironment,
+  DesiredState,
+} from "../state/types.ts";
 import type { BuildPlanOptions, Operation, Plan } from "./types.ts";
 
 export function buildPlan(
@@ -321,6 +325,19 @@ function planEnvironments(
 
   assertUnique(desired.environments.map((item) => item.name), "environment");
 
+  for (const environment of desired.environments) {
+    if (environment.secrets !== undefined) {
+      assertUnique(environment.secrets, "environment secret");
+    }
+
+    if (environment.variables !== undefined) {
+      assertUnique(
+        environment.variables.map((item) => item.name),
+        "environment variable",
+      );
+    }
+  }
+
   const desiredNames = new Set(desired.environments.map((item) => item.name));
 
   if (options.collections === "strict") {
@@ -344,7 +361,7 @@ function planEnvironments(
     if (!actual) {
       operations.push({
         type: "create-environment",
-        environment,
+        environment: materializeEnvironment(environment),
       });
 
       continue;
@@ -620,7 +637,9 @@ function diffRuleset(
   }
 
   if (desired.conditions !== undefined) {
-    if (current.target === "push") {
+    const target = desired.target ?? current.target;
+
+    if (target === "push") {
       throw new Error(
         "Push ruleset " + desired.name + " cannot declare ref conditions",
       );
@@ -634,7 +653,12 @@ function diffRuleset(
   }
 
   if (desired.rules !== undefined) {
-    const merged = mergeRules(current.rules, desired.rules, options);
+    const merged = mergeRules(
+      current.rules,
+      desired.rules,
+      options,
+      desired.target ?? current.target,
+    );
 
     if (!deepEqual(current.rules, merged)) {
       changes.rules = merged;
@@ -660,9 +684,8 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
     );
   }
 
-  const bypassActors =
-    (desired.bypassActors ?? []) as readonly RulesetBypassActor[];
-  const rules = (desired.rules ?? []) as readonly DesiredRulesetRule[];
+  const bypassActors = desired.bypassActors ?? [];
+  const rules = desired.rules ?? [];
 
   if (desired.target === "push") {
     if (desired.conditions !== undefined) {
@@ -676,7 +699,9 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
       target: "push",
       enforcement: desired.enforcement,
       bypassActors,
-      rules: rules as readonly CurrentPushRule[],
+      rules: rules.map((rule) =>
+        materializeRule(rule, "push")
+      ) as readonly CurrentPushRule[],
     };
   }
 
@@ -700,7 +725,9 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
         exclude: refName.exclude ?? [],
       },
     },
-    rules: rules as readonly CurrentRefRule[],
+    rules: rules.map((rule) =>
+      materializeRule(rule, desired.target)
+    ) as readonly CurrentRefRule[],
   };
 }
 
@@ -708,6 +735,7 @@ function mergeRules(
   current: readonly (CurrentRefRule | CurrentPushRule)[],
   desired: readonly DesiredRulesetRule[],
   options: BuildPlanOptions,
+  target: "branch" | "tag" | "push",
 ): readonly DesiredRulesetRule[] {
   if (desired.length === 0) {
     return options.collections === "strict"
@@ -728,7 +756,7 @@ function mergeRules(
     const index = indexByType.get(rule.type);
 
     if (index === undefined) {
-      result.push(structuredClone(rule));
+      result.push(materializeRule(rule, target));
       continue;
     }
 
@@ -742,19 +770,164 @@ function mergeRules(
   return result as readonly DesiredRulesetRule[];
 }
 
+function materializeRule(
+  rule: DesiredRulesetRule,
+  target: "branch" | "tag" | "push",
+): CurrentRefRule | CurrentPushRule {
+  const pushTypes = new Set([
+    "file-path-restriction",
+    "max-file-path-length",
+    "file-extension-restriction",
+    "max-file-size",
+  ]);
+  const isPush = pushTypes.has(rule.type);
+
+  if ((target === "push") !== isPush) {
+    throw new Error(
+      "Rule " + rule.type + " is not valid for " + target + " rulesets",
+    );
+  }
+
+  switch (rule.type) {
+    case "creation":
+    case "deletion":
+    case "required-linear-history":
+    case "required-signatures":
+    case "non-fast-forward":
+    case "license-compliance-scanning":
+      return rule;
+
+    case "update":
+      requireRuleFields(rule, ["updateAllowsFetchAndMerge"]);
+      return rule as CurrentRefRule;
+
+    case "merge-queue":
+      requireRuleFields(rule, [
+        "checkResponseTimeoutMinutes",
+        "groupingStrategy",
+        "maxEntriesToBuild",
+        "maxEntriesToMerge",
+        "mergeMethod",
+        "minEntriesToMerge",
+        "minEntriesToMergeWaitMinutes",
+      ]);
+      return rule as CurrentRefRule;
+
+    case "required-deployments":
+      requireRuleFields(rule, ["environments"]);
+      return rule as CurrentRefRule;
+
+    case "pull-request": {
+      requireRuleFields(rule, [
+        "allowedMergeMethods",
+        "dismissStaleReviewsOnPush",
+        "dismissalRestriction",
+        "requireCodeOwnerReview",
+        "requireLastPushApproval",
+        "requiredApprovingReviewCount",
+        "requiredReviewThreadResolution",
+        "requiredReviewers",
+      ]);
+      const restriction = rule.dismissalRestriction;
+      if (
+        restriction?.enabled === undefined ||
+        restriction.allowedActors === undefined
+      ) {
+        throw new Error(
+          "Rule pull-request requires complete dismissalRestriction",
+        );
+      }
+      return rule as CurrentRefRule;
+    }
+
+    case "required-status-checks":
+      requireRuleFields(rule, ["doNotEnforceOnCreate", "checks", "strict"]);
+      return rule as CurrentRefRule;
+
+    case "commit-message-pattern":
+    case "commit-author-email-pattern":
+    case "committer-email-pattern":
+    case "branch-name-pattern":
+    case "tag-name-pattern":
+      requireRuleFields(rule, ["operator", "pattern"]);
+      return rule as CurrentRefRule;
+
+    case "workflows":
+      requireRuleFields(rule, ["doNotEnforceOnCreate", "workflows"]);
+      return rule as CurrentRefRule;
+
+    case "code-scanning":
+      requireRuleFields(rule, ["tools"]);
+      return rule as CurrentRefRule;
+
+    case "code-quality":
+      requireRuleFields(rule, ["severity"]);
+      return rule as CurrentRefRule;
+
+    case "code-coverage":
+      return rule as CurrentRefRule;
+
+    case "copilot-code-review":
+      requireRuleFields(rule, ["reviewDraftPullRequests", "reviewOnPush"]);
+      return rule as CurrentRefRule;
+
+    case "file-path-restriction":
+      requireRuleFields(rule, ["restrictedFilePaths"]);
+      return rule as CurrentPushRule;
+
+    case "max-file-path-length":
+      requireRuleFields(rule, ["maxFilePathLength"]);
+      return rule as CurrentPushRule;
+
+    case "file-extension-restriction":
+      requireRuleFields(rule, ["restrictedFileExtensions"]);
+      return rule as CurrentPushRule;
+
+    case "max-file-size":
+      requireRuleFields(rule, ["maxFileSizeMb"]);
+      return rule as CurrentPushRule;
+  }
+}
+
+function requireRuleFields(
+  rule: DesiredRulesetRule,
+  fields: readonly string[],
+): void {
+  for (const field of fields) {
+    if (Reflect.get(rule, field) === undefined) {
+      throw new Error(
+        "Rule " + rule.type + " requires " + field + " when it is new",
+      );
+    }
+  }
+}
+
 function environmentNeedsUpdate(
   current: Environment,
-  desired: Environment,
+  desired: DesiredEnvironment,
 ): boolean {
-  if (desired.secrets.length > 0) {
-    return true;
+  if (desired.secrets !== undefined) {
+    if (desired.secrets.length > 0) {
+      return true;
+    }
+
+    if (current.secrets.length > 0) {
+      return true;
+    }
   }
 
-  if (!equalUnorderedStrings(current.secrets, desired.secrets)) {
-    return true;
-  }
+  return desired.variables !== undefined &&
+    !equalVariables(current.variables, desired.variables);
+}
 
-  return !equalVariables(current.variables, desired.variables);
+function materializeEnvironment(
+  desired: DesiredEnvironment,
+): Environment {
+  return {
+    name: desired.name,
+    secrets: desired.secrets ?? [],
+    variables: desired.variables ?? [],
+  };
 }
 
 function equalVariables(
