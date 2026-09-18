@@ -190,12 +190,18 @@ function collectReferencedProperties(
 
 function singleVisibility(
   visibility: RepositorySelector["visibility"],
-): RepositoryVisibility | undefined {
-  if (!visibility || Array.isArray(visibility)) {
+): "public" | "private" | undefined {
+  if (!visibility) {
     return undefined;
   }
 
-  return visibility as RepositoryVisibility;
+  const value = Array.isArray(visibility)
+    ? visibility.length === 1
+      ? visibility[0]
+      : undefined
+    : visibility;
+
+  return value === "public" || value === "private" ? value : undefined;
 }
 
 function isExactRepositoryName(pattern: string): boolean {
