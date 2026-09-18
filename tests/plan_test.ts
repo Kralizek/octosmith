@@ -626,7 +626,7 @@ Deno.test("strict mode removes undeclared repository secrets and variables", () 
     ],
   });
 
-  assertEquals(buildPlan(current, desired, { strict: true }), {
+  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
     repository: "sample",
     operations: [
       { type: "remove-repository-secret", secret: "REMOVE" },
@@ -662,7 +662,7 @@ Deno.test("strict mode allows explicit empty repository value collections to cle
     operations: [],
   });
 
-  assertEquals(buildPlan(current, desired, { strict: true }), {
+  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
     repository: "sample",
     operations: [
       { type: "remove-repository-secret", secret: "A" },
@@ -671,4 +671,161 @@ Deno.test("strict mode allows explicit empty repository value collections to cle
       { type: "remove-repository-variable", name: "B" },
     ],
   });
+});
+
+Deno.test("strict collection mode prunes undeclared named resources", () => {
+  const current = currentState({
+    customProperties: {
+      keep: "same",
+      remove: "value",
+    },
+    teams: [
+      { team: "keep", permission: { kind: "built-in", name: "pull" } },
+      { team: "remove", permission: { kind: "built-in", name: "push" } },
+    ],
+    rulesets: [
+      {
+        id: 1,
+        name: "keep",
+        target: "push",
+        enforcement: "active",
+        bypassActors: [],
+        rules: [],
+      },
+      {
+        id: 2,
+        name: "remove",
+        target: "push",
+        enforcement: "active",
+        bypassActors: [],
+        rules: [],
+      },
+    ],
+    environments: [
+      { name: "keep", secrets: [], variables: [] },
+      { name: "remove", secrets: [], variables: [] },
+    ],
+  });
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    customProperties: { keep: "same" },
+    teams: [
+      { team: "keep", permission: { kind: "built-in", name: "pull" } },
+    ],
+    rulesets: [{
+      name: "keep",
+      target: "push",
+      enforcement: "active",
+      rules: [],
+    }],
+    environments: [
+      { name: "keep", secrets: [], variables: [] },
+    ],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [],
+  });
+
+  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+    repository: "sample",
+    operations: [
+      { type: "set-custom-property", name: "remove", value: null },
+      { type: "remove-team-permission", team: "remove" },
+      { type: "delete-ruleset", id: 2, name: "remove" },
+      { type: "delete-environment", name: "remove" },
+    ],
+  });
+});
+
+Deno.test("strict collection mode prunes undeclared rules within an owned ruleset", () => {
+  const current = currentState({
+    rulesets: [{
+      id: 1,
+      name: "protect",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: {
+        refName: {
+          include: ["~DEFAULT_BRANCH"],
+          exclude: [],
+        },
+      },
+      rules: [
+        { type: "deletion" },
+        { type: "update", updateAllowsFetchAndMerge: false },
+      ],
+    }],
+  });
+
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    rulesets: [{
+      name: "protect",
+      rules: [{
+        type: "update",
+        updateAllowsFetchAndMerge: true,
+      }],
+    }],
+  };
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [{
+      type: "update-ruleset",
+      id: 1,
+      changes: {
+        name: "protect",
+        rules: [
+          { type: "deletion" },
+          { type: "update", updateAllowsFetchAndMerge: true },
+        ],
+      },
+    }],
+  });
+
+  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+    repository: "sample",
+    operations: [{
+      type: "update-ruleset",
+      id: 1,
+      changes: {
+        name: "protect",
+        rules: [
+          { type: "update", updateAllowsFetchAndMerge: true },
+        ],
+      },
+    }],
+  });
+});
+
+Deno.test("strict collection mode does not infer file deletion", () => {
+  const current = currentState({
+    files: [{
+      path: "README.md",
+      content: "content",
+      sha: "sha",
+    }],
+  });
+
+  assertEquals(
+    buildPlan(
+      current,
+      {
+        repository: "sample",
+        template: "code",
+        files: [],
+      },
+      { collections: "strict" },
+    ),
+    {
+      repository: "sample",
+      operations: [],
+    },
+  );
 });
