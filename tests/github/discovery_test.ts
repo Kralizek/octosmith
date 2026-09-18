@@ -1,8 +1,5 @@
 import { assertEquals } from "@std/assert";
-import type {
-  LoadedConfiguration,
-  RepositoryTemplate,
-} from "@octosmith/core";
+import type { LoadedConfiguration, RepositoryTemplate } from "@octosmith/core";
 import {
   discoverRepositories,
   type GitHubClient,
@@ -212,7 +209,8 @@ function requestKey(
     .filter(([, value]) => value !== undefined)
     .sort(([left], [right]) => left.localeCompare(right));
 
-  return path + (entries.length
-    ? "?" + entries.map(([name, value]) => name + "=" + value).join("&")
-    : "");
+  return path +
+    (entries.length
+      ? "?" + entries.map(([name, value]) => name + "=" + value).join("&")
+      : "");
 }
