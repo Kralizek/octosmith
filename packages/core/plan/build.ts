@@ -556,6 +556,13 @@ function diffActionsSettings(
   copyChangedScalar(current, desired, changes, "shaPinningRequired");
 
   if (desired.selectedActions) {
+    if (
+      desired.allowedActions === undefined &&
+      current.allowedActions !== "selected"
+    ) {
+      changes.allowedActions = "selected";
+    }
+
     const selectedChanges: Record<string, unknown> = {};
     const actual = current.selectedActions;
 
