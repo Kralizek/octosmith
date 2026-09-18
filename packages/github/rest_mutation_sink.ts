@@ -61,7 +61,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           "PUT",
           "/orgs/" + encodeURIComponent(this.#owner) + "/teams/" +
             encodeURIComponent(operation.permission.team) + "/repos/" +
-            encodeURIComponent(this.#owner) + "/" + encodeURIComponent(repository),
+            encodeURIComponent(this.#owner) + "/" +
+            encodeURIComponent(repository),
           { body: { permission: operation.permission.permission.name } },
         );
         return;
@@ -70,7 +71,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           "DELETE",
           "/orgs/" + encodeURIComponent(this.#owner) + "/teams/" +
             encodeURIComponent(operation.team) + "/repos/" +
-            encodeURIComponent(this.#owner) + "/" + encodeURIComponent(repository),
+            encodeURIComponent(this.#owner) + "/" +
+            encodeURIComponent(repository),
         );
         return;
       case "set-repository-variable":
