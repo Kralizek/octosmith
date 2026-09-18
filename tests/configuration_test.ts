@@ -47,27 +47,30 @@ for (
     "config-repository",
   ]
 ) {
-  Deno.test("resolves " + repository + " to its golden DesiredState", async () => {
-    const loaded = await loadConfigurationDirectory(CONFIGURATION_ROOT);
-    const metadata = JSON.parse(
-      await Deno.readTextFile(
-        join(FIXTURE_ROOT, "repositories", repository + ".json"),
-      ),
-    );
-    const expected = JSON.parse(
-      await Deno.readTextFile(
-        join(FIXTURE_ROOT, "expected", repository + ".json"),
-      ),
-    );
+  Deno.test(
+    "resolves " + repository + " to its golden DesiredState",
+    async () => {
+      const loaded = await loadConfigurationDirectory(CONFIGURATION_ROOT);
+      const metadata = JSON.parse(
+        await Deno.readTextFile(
+          join(FIXTURE_ROOT, "repositories", repository + ".json"),
+        ),
+      );
+      const expected = JSON.parse(
+        await Deno.readTextFile(
+          join(FIXTURE_ROOT, "expected", repository + ".json"),
+        ),
+      );
 
-    const desired = await resolveDesiredState(
-      loaded,
-      metadata,
-      (name) => name + "-value",
-    );
+      const desired = await resolveDesiredState(
+        loaded,
+        metadata,
+        (name) => name + "-value",
+      );
 
-    assertEquals(desired, expected);
-  });
+      assertEquals(desired, expected);
+    },
+  );
 }
 
 Deno.test("fixture organization agrees with root configuration", async () => {
