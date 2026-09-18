@@ -364,12 +364,17 @@ Deno.test("documented ruleset state supports sparse planner updates", async () =
 });
 
 Deno.test("managed files preserve UTF-8 content and SHA", async () => {
-  const source = fileSource(new Response(JSON.stringify({
-    type: "file",
-    content: encodeBase64("ciao 👋"),
-    encoding: "base64",
-    sha: "abc123",
-  }), { status: 200 }));
+  const source = fileSource(
+    new Response(
+      JSON.stringify({
+        type: "file",
+        content: encodeBase64("ciao 👋"),
+        encoding: "base64",
+        sha: "abc123",
+      }),
+      { status: 200 },
+    ),
+  );
 
   assertEquals(await source.getFile("sample", "README.md"), {
     path: "README.md",
@@ -379,21 +384,28 @@ Deno.test("managed files preserve UTF-8 content and SHA", async () => {
 });
 
 Deno.test("managed file 404 returns undefined", async () => {
-  const source = fileSource(new Response(
-    JSON.stringify({ message: "Not Found" }),
-    { status: 404, statusText: "Not Found" },
-  ));
+  const source = fileSource(
+    new Response(
+      JSON.stringify({ message: "Not Found" }),
+      { status: 404, statusText: "Not Found" },
+    ),
+  );
 
   assertEquals(await source.getFile("sample", "missing.txt"), undefined);
 });
 
 Deno.test("managed file directory responses are rejected", async () => {
-  const source = fileSource(new Response(JSON.stringify({
-    type: "dir",
-    content: "",
-    encoding: "base64",
-    sha: "abc123",
-  }), { status: 200 }));
+  const source = fileSource(
+    new Response(
+      JSON.stringify({
+        type: "dir",
+        content: "",
+        encoding: "base64",
+        sha: "abc123",
+      }),
+      { status: 200 },
+    ),
+  );
 
   await assertRejects(
     () => source.getFile("sample", "docs"),
@@ -403,12 +415,17 @@ Deno.test("managed file directory responses are rejected", async () => {
 });
 
 Deno.test("managed files reject unsupported encodings", async () => {
-  const source = fileSource(new Response(JSON.stringify({
-    type: "file",
-    content: "hello",
-    encoding: "utf-8",
-    sha: "abc123",
-  }), { status: 200 }));
+  const source = fileSource(
+    new Response(
+      JSON.stringify({
+        type: "file",
+        content: "hello",
+        encoding: "utf-8",
+        sha: "abc123",
+      }),
+      { status: 200 },
+    ),
+  );
 
   await assertRejects(
     () => source.getFile("sample", "README.md"),
@@ -418,10 +435,12 @@ Deno.test("managed files reject unsupported encodings", async () => {
 });
 
 Deno.test("managed file permission failures propagate", async () => {
-  const source = fileSource(new Response(
-    JSON.stringify({ message: "Forbidden" }),
-    { status: 403, statusText: "Forbidden" },
-  ));
+  const source = fileSource(
+    new Response(
+      JSON.stringify({ message: "Forbidden" }),
+      { status: 403, statusText: "Forbidden" },
+    ),
+  );
 
   await assertRejects(
     () => source.getFile("sample", "README.md"),
