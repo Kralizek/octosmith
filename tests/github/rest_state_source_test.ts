@@ -105,10 +105,10 @@ class MappingStateClient implements GitHubClient {
     }
 
     if (path.endsWith("/rulesets")) {
-      return Promise.resolve([{
-        id: 1,
-        source_type: "Repository",
-      }] as T);
+      return Promise.resolve([
+        { id: 1, source_type: "Repository" },
+        { id: 2, source_type: "Repository" },
+      ] as T);
     }
 
     if (path.endsWith("/rulesets/1")) {
@@ -133,6 +133,45 @@ class MappingStateClient implements GitHubClient {
             },
           },
           {
+            type: "required_status_checks",
+            parameters: {
+              do_not_enforce_on_create: false,
+              required_status_checks: [{
+                context: "ci",
+                integration_id: 123,
+              }],
+              strict_required_status_checks_policy: true,
+            },
+          },
+          {
+            type: "required_deployments",
+            parameters: {
+              required_deployment_environments: ["production"],
+            },
+          },
+          {
+            type: "code_scanning",
+            parameters: {
+              code_scanning_tools: [{
+                tool: "CodeQL",
+                alerts_threshold: "errors_and_warnings",
+                security_alerts_threshold: "high_or_higher",
+              }],
+            },
+          },
+          {
+            type: "merge_queue",
+            parameters: {
+              check_response_timeout_minutes: 60,
+              grouping_strategy: "ALLGREEN",
+              max_entries_to_build: 5,
+              max_entries_to_merge: 5,
+              merge_method: "SQUASH",
+              min_entries_to_merge: 1,
+              min_entries_to_merge_wait_minutes: 0,
+            },
+          },
+          {
             type: "pull_request",
             parameters: {
               allowed_merge_methods: ["squash"],
@@ -148,10 +187,33 @@ class MappingStateClient implements GitHubClient {
               require_last_push_approval: true,
               required_approving_review_count: 1,
               required_review_thread_resolution: true,
-              required_reviewers: [],
+              required_reviewers: [{
+                file_patterns: ["src/**"],
+                minimum_approvals: 2,
+                reviewer: {
+                  id: 77,
+                  type: "Team",
+                },
+              }],
             },
           },
         ],
+      } as T);
+    }
+
+    if (path.endsWith("/rulesets/2")) {
+      return Promise.resolve({
+        id: 2,
+        name: "push",
+        target: "push",
+        enforcement: "active",
+        bypass_actors: [],
+        rules: [{
+          type: "max_file_size",
+          parameters: {
+            max_file_size: 25,
+          },
+        }],
       } as T);
     }
 
@@ -196,6 +258,50 @@ Deno.test("ruleset state mapping preserves literals and maps enum fields", async
     operator: "starts-with",
     pattern: "pull-request",
   });
+  assertEquals(rules[1], {
+    type: "required-status-checks",
+    doNotEnforceOnCreate: false,
+    checks: [{ context: "ci", integrationId: 123 }],
+    strict: true,
+  });
+  assertEquals(rules[2], {
+    type: "required-deployments",
+    environments: ["production"],
+  });
+  assertEquals(rules[3], {
+    type: "code-scanning",
+    tools: [{
+      tool: "CodeQL",
+      alertsThreshold: "errors-and-warnings",
+      securityAlertsThreshold: "high-or-higher",
+    }],
+  });
+  assertEquals(rules[4], {
+    type: "merge-queue",
+    checkResponseTimeoutMinutes: 60,
+    groupingStrategy: "all-green",
+    maxEntriesToBuild: 5,
+    maxEntriesToMerge: 5,
+    mergeMethod: "squash",
+    minEntriesToMerge: 1,
+    minEntriesToMergeWaitMinutes: 0,
+  });
+  assertEquals(
+    (rules[5] as Extract<
+      typeof rules[number],
+      { readonly type: "pull-request" }
+    >).requiredReviewers,
+    [{
+      reviewerTeamId: 77,
+      filePatterns: ["src/**"],
+      minimumApprovals: 2,
+    }],
+  );
+  assertEquals(
+    (rules[5] as Extract<
+      typeof rules[number],
+      { readonly type: "pull-request" }
+    >).dismissalRestriction,});
   assertEquals(
     (rules[1] as Extract<
       typeof rules[number],
@@ -209,4 +315,9 @@ Deno.test("ruleset state mapping preserves literals and maps enum fields", async
       }],
     },
   );
+
+  assertEquals(rulesets[1].rules, [{
+    type: "max-file-size",
+    maxFileSizeMb: 25,
+  }]);
 });
