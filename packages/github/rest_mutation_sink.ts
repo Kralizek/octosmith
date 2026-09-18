@@ -119,10 +119,20 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "create-environment":
-        await this.applyEnvironment(repository, operation.environment, true);
+        await this.applyEnvironment(
+          repository,
+          operation.environment,
+          true,
+          "sparse",
+        );
         return;
       case "update-environment":
-        await this.applyEnvironment(repository, operation.environment, false);
+        await this.applyEnvironment(
+          repository,
+          operation.environment,
+          false,
+          operation.collections,
+        );
         return;
       case "delete-environment":
         await this.#client.request(
@@ -294,6 +304,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     environment: DesiredEnvironment,
     create: boolean,
+    collections: "sparse" | "strict",
   ): Promise<void> {
     const name = encodeURIComponent(environment.name);
     const base = this.repo(repository) + "/environments/" + name;
@@ -303,17 +314,26 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     if (environment.variables !== undefined) {
-      await this.syncEnvironmentVariables(base, environment.variables);
+      await this.syncEnvironmentVariables(
+        base,
+        environment.variables,
+        collections,
+      );
     }
 
     if (environment.secrets !== undefined) {
-      await this.syncEnvironmentSecrets(base, environment.secrets);
+      await this.syncEnvironmentSecrets(
+        base,
+        environment.secrets,
+        collections,
+      );
     }
   }
 
   async syncEnvironmentVariables(
     base: string,
     variables: readonly Variable[],
+    collections: "sparse" | "strict",
   ): Promise<void> {
     const currentVariables = await getAllWrappedPages<{
       readonly name: string;
@@ -328,8 +348,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
     const desired = new Set(variables.map((variable) => variable.name));
 
+    const removeUndeclared = collections === "strict" || variables.length === 0;
+
     for (const variable of currentVariables) {
-      if (!desired.has(variable.name)) {
+      if (removeUndeclared && !desired.has(variable.name)) {
         await this.#client.request(
           "DELETE",
           base + "/variables/" + encodeURIComponent(variable.name),
@@ -352,6 +374,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   async syncEnvironmentSecrets(
     base: string,
     secrets: readonly string[],
+    collections: "sparse" | "strict",
   ): Promise<void> {
     const currentSecrets = await getAllWrappedPages<{
       readonly name: string;
@@ -362,8 +385,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
     const desired = new Set(secrets);
 
+    const removeUndeclared = collections === "strict" || secrets.length === 0;
+
     for (const secret of currentSecrets) {
-      if (!desired.has(secret.name)) {
+      if (removeUndeclared && !desired.has(secret.name)) {
         await this.#client.request(
           "DELETE",
           base + "/secrets/" + encodeURIComponent(secret.name),
