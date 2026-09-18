@@ -63,10 +63,12 @@ Deno.test("GitHub client throws on an ordinary 404", async () => {
 });
 
 Deno.test("GitHub client returns undefined for an allowed 404", async () => {
-  const client = responseClient(new Response("missing", {
-    status: 404,
-    statusText: "Not Found",
-  }));
+  const client = responseClient(
+    new Response("missing", {
+      status: 404,
+      statusText: "Not Found",
+    }),
+  );
 
   assertEquals(
     await client.request("GET", "/repos/acme/missing", {
