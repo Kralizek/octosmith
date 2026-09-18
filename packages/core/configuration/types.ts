@@ -1,6 +1,7 @@
 import type {
   MergeCommitMessage,
   MergeCommitTitle,
+  CollectionReconciliationMode,
   PropertyValue,
   RepositoryVisibility,
   RulesetBypassActorType,
@@ -16,6 +17,11 @@ export interface Configuration {
   readonly version: 1;
   readonly organization: string;
   readonly scope: RepositorySelector;
+  readonly reconciliation?: ReconciliationConfiguration;
+}
+
+export interface ReconciliationConfiguration {
+  readonly collections?: CollectionReconciliationMode;
 }
 
 export interface RepositorySelector {
