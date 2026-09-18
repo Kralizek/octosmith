@@ -488,8 +488,27 @@ function mapRule(value: Record<string, unknown>):
 
     case "merge-queue":
       if (typeof parameters.groupingStrategy === "string") {
-        parameters.groupingStrategy = kebab(parameters.groupingStrategy);
+        parameters.groupingStrategy = parameters.groupingStrategy === "ALLGREEN"
+          ? "all-green"
+          : parameters.groupingStrategy === "HEADGREEN"
+          ? "head-green"
+          : kebab(parameters.groupingStrategy);
       }
+      if (typeof parameters.mergeMethod === "string") {
+        parameters.mergeMethod = parameters.mergeMethod.toLowerCase();
+      }
+      break;
+
+    case "required-deployments":
+      parameters.environments = parameters.requiredDeploymentEnvironments ?? [];
+      delete parameters.requiredDeploymentEnvironments;
+      break;
+
+    case "required-status-checks":
+      parameters.checks = parameters.requiredStatusChecks ?? [];
+      parameters.strict = parameters.strictRequiredStatusChecksPolicy;
+      delete parameters.requiredStatusChecks;
+      delete parameters.strictRequiredStatusChecksPolicy;
       break;
 
     case "pull-request": {
@@ -506,25 +525,48 @@ function mapRule(value: Record<string, unknown>):
           type: kebab(String(actor.type)),
         }));
       }
-      break;
-    }
 
-    case "code-scanning": {
-      const tools = parameters.tools as
-        | readonly Record<string, unknown>[]
+      const requiredReviewers = parameters.requiredReviewers as
+        | readonly {
+          readonly filePatterns?: readonly string[];
+          readonly minimumApprovals?: number;
+          readonly reviewer?: {
+            readonly id?: number;
+            readonly type?: string;
+          };
+        }[]
         | undefined;
 
-      if (tools !== undefined) {
-        parameters.tools = tools.map((tool) => ({
-          ...tool,
-          alertsThreshold: kebab(String(tool.alertsThreshold)),
-          securityAlertsThreshold: kebab(
-            String(tool.securityAlertsThreshold),
-          ),
+      if (requiredReviewers !== undefined) {
+        parameters.requiredReviewers = requiredReviewers.map((reviewer) => ({
+          reviewerTeamId: Number(reviewer.reviewer?.id),
+          filePatterns: reviewer.filePatterns ?? [],
+          minimumApprovals: Number(reviewer.minimumApprovals),
         }));
       }
       break;
     }
+
+    case "code-scanning": {
+      const tools = parameters.codeScanningTools as
+        | readonly Record<string, unknown>[]
+        | undefined;
+
+      parameters.tools = (tools ?? []).map((tool) => ({
+        tool: String(tool.tool),
+        alertsThreshold: kebab(String(tool.alertsThreshold)),
+        securityAlertsThreshold: kebab(
+          String(tool.securityAlertsThreshold),
+        ),
+      }));
+      delete parameters.codeScanningTools;
+      break;
+    }
+
+    case "max-file-size":
+      parameters.maxFileSizeMb = parameters.maxFileSize;
+      delete parameters.maxFileSize;
+      break;
   }
 
   return {
