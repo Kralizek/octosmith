@@ -18,6 +18,10 @@ export interface ApplyPlanOptions {
 }
 
 export interface RepositoryMutationSink {
+  prepare?(
+    repository: string,
+    operations: readonly Operation[],
+  ): RepositoryMutationSink | Promise<RepositoryMutationSink>;
   apply(repository: string, operation: Operation): Promise<void>;
 }
 
@@ -26,6 +30,9 @@ export async function applyPlan(
   plan: Plan,
   options: ApplyPlanOptions = {},
 ): Promise<ApplyPlanResult> {
+  const preparedSink = sink.prepare
+    ? await sink.prepare(plan.repository, plan.operations)
+    : sink;
   const results: ApplyOperationResult[] = [];
   let failed = false;
 
@@ -39,7 +46,7 @@ export async function applyPlan(
     }
 
     try {
-      await sink.apply(plan.repository, operation);
+      await preparedSink.apply(plan.repository, operation);
       results.push({
         operation,
         status: "applied",

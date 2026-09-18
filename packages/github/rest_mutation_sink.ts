@@ -31,6 +31,44 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     this.#secretValue = options.secretValue;
   }
 
+  prepare(
+    _repository: string,
+    operations: readonly Operation[],
+  ): RepositoryMutationSink {
+    const names = new Set(operations.flatMap((operation) => {
+      switch (operation.type) {
+        case "set-repository-secret":
+          return [operation.secret];
+        case "create-environment":
+        case "update-environment":
+          return operation.environment.secrets ?? [];
+        default:
+          return [];
+      }
+    }));
+    const values = new Map<string, string>();
+
+    for (const name of names) {
+      const value = this.#secretValue(name);
+      if (typeof value !== "string") {
+        throw new Error("Missing secret value: " + name);
+      }
+      values.set(name, value);
+    }
+
+    return new GitHubRepositoryMutationSink({
+      client: this.#client,
+      owner: this.#owner,
+      secretValue: (name) => {
+        const value = values.get(name);
+        if (value === undefined) {
+          throw new Error("Secret was not prepared: " + name);
+        }
+        return value;
+      },
+    });
+  }
+
   async apply(repository: string, operation: Operation): Promise<void> {
     switch (operation.type) {
       case "update-repository-settings":
