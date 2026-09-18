@@ -1,10 +1,13 @@
 import sodium from "libsodium-wrappers";
+import { buildPlan } from "@octosmith/core";
 import { assert, assertEquals } from "@std/assert";
 import {
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryMutationSink,
+  GitHubRepositoryStateSource,
 } from "@octosmith/github";
+import { currentState } from "../plan/fixtures.ts";
 
 interface Call {
   readonly method: string;
@@ -575,3 +578,236 @@ Deno.test("repository secrets are sealed with GitHub's public key", async () => 
   assertEquals(body.key_id, "key-1");
   assertEquals(sodium.to_string(decrypted), "super-secret");
 });
+
+
+class StatefulRulesetClient implements GitHubClient {
+  readonly requests: RecordedRequest[] = [];
+  ruleset: Record<string, unknown>;
+
+  constructor(ruleset: Record<string, unknown>) {
+    this.ruleset = structuredClone(ruleset);
+  }
+
+  request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/github").GitHubRequestOptions = {},
+  ): Promise<T> {
+    this.requests.push({ method, path, body: options.body });
+
+    if (method === "GET") {
+      return this.get(path, options.query);
+    }
+
+    if (method === "PUT" && path.endsWith("/rulesets/1")) {
+      this.ruleset = {
+        id: 1,
+        source_type: "Repository",
+        ...(options.body as Record<string, unknown>),
+      };
+      return Promise.resolve(this.ruleset as T);
+    }
+
+    if (method === "POST" && path.endsWith("/rulesets")) {
+      this.ruleset = {
+        id: 1,
+        source_type: "Repository",
+        ...(options.body as Record<string, unknown>),
+      };
+      return Promise.resolve(this.ruleset as T);
+    }
+
+    return Promise.resolve(undefined as T);
+  }
+
+  get<T>(
+    path: string,
+    _query: Readonly<Record<string, GitHubQueryValue>> = {},
+  ): Promise<T> {
+    if (path.endsWith("/rulesets")) {
+      return Promise.resolve([{
+        id: 1,
+        source_type: "Repository",
+      }] as T);
+    }
+
+    if (path.endsWith("/rulesets/1")) {
+      return Promise.resolve(structuredClone(this.ruleset) as T);
+    }
+
+    throw new Error("Unexpected GET " + path);
+  }
+}
+
+Deno.test("ruleset sparse update converges through GitHub round trip", async () => {
+  const client = new StatefulRulesetClient({
+    id: 1,
+    source_type: "Repository",
+    name: "protect",
+    target: "branch",
+    enforcement: "active",
+    bypass_actors: [{
+      actor_id: 7,
+      actor_type: "Team",
+      bypass_mode: "always",
+    }],
+    conditions: {
+      ref_name: {
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      },
+    },
+    rules: [
+      {
+        type: "required_status_checks",
+        parameters: {
+          do_not_enforce_on_create: false,
+          required_status_checks: [{
+            context: "ci",
+            integration_id: 123,
+          }],
+          strict_required_status_checks_policy: true,
+        },
+      },
+      { type: "deletion" },
+    ],
+  });
+  const source = new GitHubRepositoryStateSource(client, "acme");
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+  const desired = {
+    repository: "sample",
+    template: "code",
+    rulesets: [{
+      name: "protect",
+      rules: [{
+        type: "required-status-checks",
+        strict: false,
+      }],
+    }],
+  } as const;
+
+  const before = await source.getRulesets("sample");
+  const plan = buildPlan(currentState({ rulesets: before }), desired);
+  assertEquals(plan.operations.length, 1);
+
+  await sink.apply("sample", plan.operations[0]);
+
+  const after = await source.getRulesets("sample");
+  assertEquals(buildPlan(currentState({ rulesets: after }), desired), {
+    repository: "sample",
+    operations: [],
+  });
+  assertEquals(after[0].enforcement, "active");
+  assertEquals(after[0].bypassActors, [{
+    actorType: "team",
+    actorId: 7,
+    bypassMode: "always",
+  }]);
+  assertEquals(
+    "conditions" in after[0] ? after[0].conditions : undefined,
+    {
+      refName: {
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      },
+    },
+  );
+  assertEquals(after[0].rules, [
+    {
+      type: "required-status-checks",
+      doNotEnforceOnCreate: false,
+      checks: [{ context: "ci", integrationId: 123 }],
+      strict: false,
+    },
+    { type: "deletion" },
+  ]);
+});
+
+for (
+  const [groupingStrategy, restGrouping] of [
+    ["all-green", "ALLGREEN"],
+    ["head-green", "HEADGREEN"],
+  ] as const
+) {
+  for (
+    const [mergeMethod, restMethod] of [
+      ["merge", "MERGE"],
+      ["squash", "SQUASH"],
+      ["rebase", "REBASE"],
+    ] as const
+  ) {
+    Deno.test(
+      `merge queue maps ${groupingStrategy} and ${mergeMethod} round trip`,
+      async () => {
+        const client = new StatefulRulesetClient({
+          id: 1,
+          source_type: "Repository",
+          name: "queue",
+          target: "branch",
+          enforcement: "active",
+          bypass_actors: [],
+          conditions: {
+            ref_name: {
+              include: ["~DEFAULT_BRANCH"],
+              exclude: [],
+            },
+          },
+          rules: [],
+        });
+        const sink = new GitHubRepositoryMutationSink({
+          client,
+          owner: "acme",
+          secretValue: () => "unused",
+        });
+        const source = new GitHubRepositoryStateSource(client, "acme");
+
+        await sink.apply("sample", {
+          type: "create-ruleset",
+          ruleset: {
+            name: "queue",
+            target: "branch",
+            enforcement: "active",
+            bypassActors: [],
+            conditions: {
+              refName: {
+                include: ["~DEFAULT_BRANCH"],
+                exclude: [],
+              },
+            },
+            rules: [{
+              type: "merge-queue",
+              checkResponseTimeoutMinutes: 60,
+              groupingStrategy,
+              maxEntriesToBuild: 5,
+              maxEntriesToMerge: 5,
+              mergeMethod,
+              minEntriesToMerge: 1,
+              minEntriesToMergeWaitMinutes: 0,
+            }],
+          },
+        });
+
+        const restRule = (client.ruleset.rules as readonly {
+          parameters: Record<string, unknown>;
+        }[])[0];
+        assertEquals(restRule.parameters.grouping_strategy, restGrouping);
+        assertEquals(restRule.parameters.merge_method, restMethod);
+
+        const readBack = await source.getRulesets("sample");
+        const rule = readBack[0].rules[0];
+        assertEquals(
+          rule.type === "merge-queue" ? rule.groupingStrategy : undefined,
+          groupingStrategy,
+        );
+        assertEquals(
+          rule.type === "merge-queue" ? rule.mergeMethod : undefined,
+          mergeMethod,
+        );
+      },
+    );
+  }
+}
