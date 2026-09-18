@@ -72,6 +72,20 @@ Deno.test("applied reports distinguish success and partial failure", () => {
   );
 });
 
+Deno.test("applied reports reject skipped operations without a failure", () => {
+  let message: string | undefined;
+
+  try {
+    reportAppliedRepository("code", "sample", [
+      { operation, status: "skipped" },
+    ]);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  assertEquals(message, "Skipped operations require a failed operation");
+});
+
 Deno.test("failed reports can represent errors before template resolution", () => {
   assertEquals(
     reportFailedRepository("broken", new Error("no template")),
@@ -94,6 +108,17 @@ Deno.test("text renderer includes repository, operation and summary status", () 
         repository: "api",
         operations: [operation],
       }),
+      reportAppliedRepository("code", "partial", [
+        { operation, status: "applied" },
+        {
+          operation: {
+            type: "remove-team-permission",
+            team: "legacy",
+          },
+          status: "failed",
+          error: "forbidden",
+        },
+      ]),
       reportFailedRepository("broken", "read failed"),
     ],
   };
@@ -106,7 +131,9 @@ Deno.test("text renderer includes repository, operation and summary status", () 
     rendered,
     "set-custom-property — planned",
   );
+  assertStringIncludes(rendered, "! partial [code] — partially-applied");
   assertStringIncludes(rendered, "! broken — failed");
   assertStringIncludes(rendered, "1 planned");
+  assertStringIncludes(rendered, "1 partially-applied");
   assertStringIncludes(rendered, "1 failed");
 });
