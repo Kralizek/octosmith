@@ -23,7 +23,7 @@ Deno.test("missing GITHUB_TOKEN returns a clear CLI failure", async () => {
       errors.push(values.map(String).join(" "));
     };
 
-    assertStringIncludes(String(await main(["plan"])), "1");
+    assertEquals(await main(["plan"]), 1);
     assertStringIncludes(errors.join("\n"), "GITHUB_TOKEN is required");
   } finally {
     console.error = originalError;
