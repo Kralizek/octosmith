@@ -102,7 +102,10 @@ async function discoverCandidates(
   teamRepositories: Map<string, ReadonlySet<string>>,
 ): Promise<CandidateDiscoveryResult> {
   if (scope.names?.length && scope.names.every(isExactRepositoryName)) {
-    const results = await Promise.all(
+    const results: readonly (
+      | { readonly repository: RepositoryResponse }
+      | { readonly name: string; readonly error: unknown }
+    )[] = await Promise.all(
       [...new Set(scope.names)].map(async (name) => {
         try {
           return {
