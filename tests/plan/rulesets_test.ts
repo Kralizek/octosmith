@@ -162,6 +162,82 @@ Deno.test("ruleset sparse updates preserve unowned fields and sibling rules", ()
   );
 });
 
+Deno.test("buildPlan does not mutate ruleset inputs during sparse merges", () => {
+  const current = currentState({
+    rulesets: [{
+      id: 1,
+      name: "protect",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [{
+        actorType: "team",
+        actorId: 1,
+        bypassMode: "always",
+      }],
+      conditions: {
+        refName: {
+          include: ["~DEFAULT_BRANCH"],
+          exclude: [],
+        },
+      },
+      rules: [
+        {
+          type: "required-status-checks",
+          doNotEnforceOnCreate: false,
+          checks: [{ context: "ci", integrationId: 123 }],
+          strict: true,
+        },
+        { type: "deletion" },
+      ],
+    }],
+  });
+  const desired = {
+    repository: "sample",
+    template: "code",
+    rulesets: [{
+      name: "protect",
+      conditions: {
+        refName: {
+          exclude: ["refs/heads/generated"],
+        },
+      },
+      rules: [{
+        type: "required-status-checks",
+        strict: false,
+      }],
+    }],
+  } as const;
+  const currentSnapshot = structuredClone(current);
+  const desiredSnapshot = structuredClone(desired);
+
+  const plan = buildPlan(current, desired);
+
+  assertEquals(current, currentSnapshot);
+  assertEquals(desired, desiredSnapshot);
+  assertEquals(plan.operations, [{
+    type: "update-ruleset",
+    id: 1,
+    changes: {
+      name: "protect",
+      conditions: {
+        refName: {
+          include: ["~DEFAULT_BRANCH"],
+          exclude: ["refs/heads/generated"],
+        },
+      },
+      rules: [
+        {
+          type: "required-status-checks",
+          doNotEnforceOnCreate: false,
+          checks: [{ context: "ci", integrationId: 123 }],
+          strict: false,
+        },
+        { type: "deletion" },
+      ],
+    },
+  }]);
+});
+
 Deno.test("ruleset bypass actors and target drift are planned", () => {
   const current = currentState({
     rulesets: [{
