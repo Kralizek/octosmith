@@ -600,79 +600,148 @@ function mapRepositorySettings(
 }
 
 function mapRuleset(ruleset: RulesetDefinition): Record<string, unknown> {
-  return mapDesiredRuleset(ruleset);
-}
-
-function mapDesiredRuleset(ruleset: DesiredRuleset): Record<string, unknown> {
   return {
     name: ruleset.name,
-    ...(ruleset.target !== undefined && { target: ruleset.target }),
-    ...(ruleset.enforcement !== undefined && {
-      enforcement: ruleset.enforcement,
+    target: ruleset.target,
+    enforcement: ruleset.enforcement,
+    bypass_actors: mapBypassActors(ruleset.bypassActors),
+    ...(ruleset.target !== "push" && {
+      conditions: snakeKeys(ruleset.conditions),
     }),
-    ...(ruleset.bypassActors !== undefined && {
-      bypass_actors: ruleset.bypassActors.map((actor) => ({
-        ...(actor.actorId !== undefined && { actor_id: actor.actorId }),
-        actor_type: pascal(actor.actorType),
-        bypass_mode: snake(actor.bypassMode),
-      })),
-    }),
-    ...(ruleset.conditions !== undefined && {
-      conditions: snakeObject(ruleset.conditions),
-    }),
-    ...(ruleset.rules !== undefined && {
-      rules: ruleset.rules.map((rule) => {
-        const { type, ...parameters } = rule as unknown as Record<
-          string,
-          unknown
-        >;
-        return {
-          type: snake(String(type)),
-          ...(Object.keys(parameters).length > 0 && {
-            parameters: snakeObject(parameters),
-          }),
-        };
-      }),
-    }),
+    rules: ruleset.rules.map(mapRule),
   };
 }
 
-function snakeObject(value: unknown): unknown {
+function materializeRulesetUpdate(
+  current: Record<string, unknown>,
+  changes: DesiredRuleset,
+): Record<string, unknown> {
+  const target = changes.target ?? String(current.target);
+
+  return {
+    name: changes.name || String(current.name),
+    target,
+    enforcement: changes.enforcement ?? current.enforcement,
+    bypass_actors: changes.bypassActors !== undefined
+      ? mapBypassActors(changes.bypassActors)
+      : current.bypass_actors ?? [],
+    ...(target !== "push" && {
+      conditions: changes.conditions !== undefined
+        ? snakeKeys(changes.conditions)
+        : current.conditions ?? {
+          ref_name: {
+            include: [],
+            exclude: [],
+          },
+        },
+    }),
+    rules: changes.rules !== undefined
+      ? changes.rules.map(mapRule)
+      : current.rules ?? [],
+  };
+}
+
+function mapBypassActors(
+  actors: readonly import("@octosmith/core").RulesetBypassActor[],
+): readonly Record<string, unknown>[] {
+  return actors.map((actor) => ({
+    ...(actor.actorId !== undefined && { actor_id: actor.actorId }),
+    actor_type: pascal(actor.actorType),
+    bypass_mode: snake(actor.bypassMode),
+  }));
+}
+
+function mapRule(
+  rule: import("@octosmith/core").DesiredRulesetRule,
+): Record<string, unknown> {
+  const { type, ...parameters } = rule as unknown as Record<string, unknown>;
+  const mapped = snakeKeys(parameters) as Record<string, unknown>;
+
+  switch (type) {
+    case "commit-message-pattern":
+    case "commit-author-email-pattern":
+    case "committer-email-pattern":
+    case "branch-name-pattern":
+    case "tag-name-pattern":
+      if (typeof mapped.operator === "string") {
+        mapped.operator = snake(mapped.operator);
+      }
+      break;
+
+    case "merge-queue":
+      if (typeof mapped.grouping_strategy === "string") {
+        mapped.grouping_strategy = snake(mapped.grouping_strategy);
+      }
+      break;
+
+    case "pull-request": {
+      const restriction = Reflect.get(rule, "dismissalRestriction") as
+        | {
+          readonly enabled?: boolean;
+          readonly allowedActors?: readonly {
+            readonly id: number;
+            readonly type: string;
+          }[];
+        }
+        | undefined;
+
+      if (restriction !== undefined) {
+        mapped.dismissal_restriction = {
+          ...(restriction.enabled !== undefined && {
+            enabled: restriction.enabled,
+          }),
+          ...(restriction.allowedActors !== undefined && {
+            allowed_actors: restriction.allowedActors.map((actor) => ({
+              id: actor.id,
+              type: pascal(actor.type),
+            })),
+          }),
+        };
+      }
+      break;
+    }
+
+    case "code-scanning": {
+      const tools = Reflect.get(rule, "tools") as
+        | readonly {
+          readonly tool: string;
+          readonly alertsThreshold: string;
+          readonly securityAlertsThreshold: string;
+        }[]
+        | undefined;
+
+      if (tools !== undefined) {
+        mapped.tools = tools.map((tool) => ({
+          tool: tool.tool,
+          alerts_threshold: snake(tool.alertsThreshold),
+          security_alerts_threshold: snake(tool.securityAlertsThreshold),
+        }));
+      }
+      break;
+    }
+  }
+
+  return {
+    type: snake(String(type)),
+    ...(Object.keys(mapped).length > 0 && { parameters: mapped }),
+  };
+}
+
+function snakeKeys(value: unknown): unknown {
   if (Array.isArray(value)) {
-    return value.map(snakeObject);
+    return value.map(snakeKeys);
   }
 
   if (value === null || typeof value !== "object") {
-    return denormalizeEnum(value);
+    return value;
   }
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, child]) => [
       snake(key),
-      snakeObject(child),
+      snakeKeys(child),
     ]),
   );
-}
-
-function denormalizeEnum(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
-
-  const values = new Set([
-    "starts-with",
-    "ends-with",
-    "all-green",
-    "head-green",
-    "pull-request",
-    "integration-installation",
-    "repository-role",
-    "errors-and-warnings",
-    "high-or-higher",
-    "medium-or-higher",
-  ]);
-
-  return values.has(value) ? snake(value) : value;
 }
 
 function snake(value: string): string {
