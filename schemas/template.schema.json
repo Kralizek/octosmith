@@ -130,6 +130,28 @@
         },
         "variables": {
           "$ref": "#/$defs/ownedStringList"
+        },
+        "custom_properties": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "actions": {
+          "$ref": "#/$defs/actionsSettings"
         }
       }
     },
@@ -488,6 +510,23 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
+            "ensure",
+            "source"
+          ],
+          "properties": {
+            "ensure": {
+              "const": "exists"
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
             "ensure"
           ],
           "properties": {
@@ -497,6 +536,44 @@
           }
         }
       ]
+    },
+    "actionsSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "allowed_actions": {
+          "type": "string",
+          "enum": [
+            "all",
+            "local_only",
+            "selected"
+          ]
+        },
+        "sha_pinning_required": {
+          "type": "boolean"
+        },
+        "selected_actions": {
+          "$ref": "#/$defs/selectedActions"
+        }
+      }
+    },
+    "selectedActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "github_owned_allowed": {
+          "type": "boolean"
+        },
+        "verified_allowed": {
+          "type": "boolean"
+        },
+        "patterns_allowed": {
+          "$ref": "#/$defs/ownedStringList"
+        }
+      }
     }
   }
 }

@@ -4,6 +4,10 @@ import type {
   TeamPermission,
   Variable,
 } from "./common.ts";
+import type {
+  CustomPropertyValue,
+  DesiredActionsSettings,
+} from "./resources.ts";
 import type { DesiredRepositorySettings } from "./repository.ts";
 import type { DesiredRuleset, RulesetDefinition } from "./rulesets.ts";
 import type { DesiredFile } from "./state.ts";
@@ -15,6 +19,8 @@ export interface Plan {
 
 export type Operation =
   | UpdateRepositorySettingsOperation
+  | SetCustomPropertyOperation
+  | UpdateActionsSettingsOperation
   | SetTeamPermissionOperation
   | RemoveTeamPermissionOperation
   | SetRepositoryVariableOperation
@@ -32,6 +38,17 @@ export type Operation =
 export interface UpdateRepositorySettingsOperation {
   readonly type: "update-repository-settings";
   readonly settings: DesiredRepositorySettings;
+}
+
+export interface SetCustomPropertyOperation {
+  readonly type: "set-custom-property";
+  readonly name: string;
+  readonly value: CustomPropertyValue;
+}
+
+export interface UpdateActionsSettingsOperation {
+  readonly type: "update-actions-settings";
+  readonly settings: DesiredActionsSettings;
 }
 
 export interface SetTeamPermissionOperation {
@@ -88,7 +105,7 @@ export interface DeleteEnvironmentOperation {
 
 export interface CreateFileOperation {
   readonly type: "create-file";
-  readonly file: Extract<DesiredFile, { readonly ensure: "exact" }>;
+  readonly file: Extract<DesiredFile, { readonly ensure: "exact" | "exists" }>;
 }
 
 export interface UpdateFileOperation {

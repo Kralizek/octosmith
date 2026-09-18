@@ -37,6 +37,8 @@ export interface RepositoryTemplate {
 
 export interface RepositoryConfiguration {
   readonly settings?: RepositorySettingsConfiguration;
+  readonly customProperties?: Readonly<Record<string, string | readonly string[] | null>>;
+  readonly actions?: ActionsConfiguration;
   readonly teams?: readonly TeamPermissionConfiguration[];
   readonly secrets?: readonly string[];
   readonly variables?: readonly string[];
@@ -81,6 +83,19 @@ export interface SecurityAndAnalysisConfiguration {
   readonly secretScanning?: SecurityFeatureStatus;
   readonly secretScanningPushProtection?: SecurityFeatureStatus;
   readonly secretScanningAiDetection?: SecurityFeatureStatus;
+}
+
+export interface ActionsConfiguration {
+  readonly enabled?: boolean;
+  readonly allowedActions?: "all" | "local_only" | "selected";
+  readonly shaPinningRequired?: boolean;
+  readonly selectedActions?: SelectedActionsConfiguration;
+}
+
+export interface SelectedActionsConfiguration {
+  readonly githubOwnedAllowed?: boolean;
+  readonly verifiedAllowed?: boolean;
+  readonly patternsAllowed?: readonly string[];
 }
 
 export interface TeamPermissionConfiguration {
@@ -153,6 +168,10 @@ export interface EnvironmentConfiguration {
 export type FileConfiguration =
   | {
     readonly ensure: "exact";
+    readonly source: string;
+  }
+  | {
+    readonly ensure: "exists";
     readonly source: string;
   }
   | {
