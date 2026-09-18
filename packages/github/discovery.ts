@@ -196,9 +196,7 @@ function singleVisibility(
   }
 
   const value = Array.isArray(visibility)
-    ? visibility.length === 1
-      ? visibility[0]
-      : undefined
+    ? visibility.length === 1 ? visibility[0] : undefined
     : visibility;
 
   return value === "public" || value === "private" ? value : undefined;
