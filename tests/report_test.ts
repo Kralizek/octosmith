@@ -86,6 +86,40 @@ Deno.test("applied reports reject skipped operations without a failure", () => {
   assertEquals(message, "Skipped operations require a failed operation");
 });
 
+Deno.test("empty applied results are unchanged", () => {
+  assertEquals(
+    reportAppliedRepository("code", "sample", []).status,
+    "unchanged",
+  );
+});
+
+Deno.test("failed-only applied results are failed and preserve the operation error", () => {
+  const report = reportAppliedRepository("code", "sample", [{
+    operation,
+    status: "failed",
+    error: "boom",
+  }]);
+
+  assertEquals(report.status, "failed");
+  assertEquals(report.operations[0].error, "boom");
+});
+
+Deno.test("failed plus skipped without success is failed", () => {
+  assertEquals(
+    reportAppliedRepository("code", "sample", [
+      { operation, status: "failed", error: "boom" },
+      {
+        operation: {
+          type: "delete-environment",
+          name: "later",
+        },
+        status: "skipped",
+      },
+    ]).status,
+    "failed",
+  );
+});
+
 Deno.test("failed reports can represent errors before template resolution", () => {
   assertEquals(
     reportFailedRepository("broken", new Error("no template")),
@@ -139,5 +173,63 @@ Deno.test("text renderer includes repository, operation and summary status", () 
   assertStringIncludes(
     rendered,
     "Summary: 0 unchanged, 1 planned, 0 applied, 1 partially-applied, 1 failed",
+  );
+});
+
+
+Deno.test("summary counts every repository outcome exactly", () => {
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [
+      reportPlannedRepository("code", {
+        repository: "unchanged",
+        operations: [],
+      }),
+      reportPlannedRepository("code", {
+        repository: "planned",
+        operations: [operation],
+      }),
+      reportAppliedRepository("code", "applied", [{
+        operation,
+        status: "applied",
+      }]),
+      reportAppliedRepository("code", "partial", [
+        { operation, status: "applied" },
+        {
+          operation: {
+            type: "remove-team-permission",
+            team: "legacy",
+          },
+          status: "failed",
+          error: "forbidden",
+        },
+      ]),
+      reportAppliedRepository("code", "failed", [{
+        operation,
+        status: "failed",
+        error: "boom",
+      }]),
+    ],
+  };
+
+  assertStringIncludes(
+    renderReport(report),
+    "Summary: 1 unchanged, 1 planned, 1 applied, 1 partially-applied, 1 failed",
+  );
+});
+
+Deno.test("empty reports render an all-zero summary", () => {
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [],
+  };
+
+  assertStringIncludes(
+    renderReport(report),
+    "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 0 failed",
   );
 });
