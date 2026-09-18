@@ -90,13 +90,38 @@ export async function readCurrentState(
       ? []
       : strict
       ? environments
-      : filterNamed(
-        environments,
-        desired.environments.map((item) => item.name),
-        "name",
-      ),
+      : filterSparseEnvironments(environments, desired.environments),
     files,
   };
+}
+
+function filterSparseEnvironments(
+  environments: CurrentState["environments"],
+  desired: NonNullable<DesiredState["environments"]>,
+): CurrentState["environments"] {
+  const desiredByName = new Map(desired.map((item) => [item.name, item]));
+
+  return environments.flatMap((environment) => {
+    const owned = desiredByName.get(environment.name);
+
+    if (!owned) {
+      return [];
+    }
+
+    return [{
+      ...environment,
+      secrets: owned.secrets === undefined
+        ? []
+        : environment.secrets.filter((name) => owned.secrets?.includes(name)),
+      variables: owned.variables === undefined
+        ? []
+        : filterNamed(
+          environment.variables,
+          owned.variables.map((item) => item.name),
+          "name",
+        ),
+    }];
+  });
 }
 
 async function readOwnedFiles(
