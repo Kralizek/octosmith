@@ -1,8 +1,4 @@
-import type {
-  Environment,
-  RepositoryPermission,
-  Variable,
-} from "../types.ts";
+import type { Environment, RepositoryPermission, Variable } from "../types.ts";
 import type {
   CurrentActionsSettings,
   CustomPropertyValue,
@@ -24,10 +20,7 @@ import type {
   RulesetBypassActor,
   RulesetDefinition,
 } from "../state/rulesets.ts";
-import type {
-  CurrentState,
-  DesiredState,
-} from "../state/types.ts";
+import type { CurrentState, DesiredState } from "../state/types.ts";
 import type { Operation, Plan } from "./types.ts";
 
 export function buildPlan(
