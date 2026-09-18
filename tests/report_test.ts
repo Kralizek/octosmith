@@ -176,7 +176,6 @@ Deno.test("text renderer includes repository, operation and summary status", () 
   );
 });
 
-
 Deno.test("summary counts every repository outcome exactly", () => {
   const report: Report = {
     organization: "acme",
