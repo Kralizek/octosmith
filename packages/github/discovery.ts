@@ -83,7 +83,7 @@ async function discoverCandidates(
 ): Promise<readonly RepositoryResponse[]> {
   if (scope.names?.length && scope.names.every(isExactRepositoryName)) {
     return await Promise.all(
-      scope.names.map((name) =>
+      [...new Set(scope.names)].map((name) =>
         client.get<RepositoryResponse>(
           "/repos/" + encodeURIComponent(organization) + "/" +
             encodeURIComponent(name),
