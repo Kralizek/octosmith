@@ -469,32 +469,34 @@ async function configurationDirectory(
 function fakeSecretGitHub(
   requests: CapturedRequest[],
 ): typeof globalThis.fetch {
-  return async (input, init) => {
+  return (input, init) => {
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
     requests.push({ method, url });
 
     if (method === "GET" && url.pathname === "/api/v3/orgs/acme/repos") {
-      return json([{ name: "sample", visibility: "private" }]);
+      return Promise.resolve(
+        json([{ name: "sample", visibility: "private" }]),
+      );
     }
     if (method === "GET" && url.pathname === "/api/v3/repos/acme/sample") {
-      return json(repository());
+      return Promise.resolve(json(repository()));
     }
     if (
       method === "GET" &&
       url.pathname === "/api/v3/repos/acme/sample/actions/secrets"
     ) {
-      return json({ secrets: [] });
+      return Promise.resolve(json({ secrets: [] }));
     }
     if (
       method === "GET" &&
       url.pathname === "/api/v3/repos/acme/sample/actions/secrets/public-key"
     ) {
-      return json({ key_id: "key-1", key: "unused" });
+      return Promise.resolve(json({ key_id: "key-1", key: "unused" }));
     }
 
-    return json({ message: "Unexpected request" }, 500);
+    return Promise.resolve(json({ message: "Unexpected request" }, 500));
   };
 }
 
