@@ -130,7 +130,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "create-file":
-        await this.putFile(repository, operation.file.path, operation.file.content);
+        await this.putFile(
+          repository,
+          operation.file.path,
+          operation.file.content,
+        );
         return;
       case "update-file":
         await this.putFile(
@@ -201,8 +205,9 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
             : settings.allowedActions === "local-only"
             ? "local_only"
             : settings.allowedActions,
-          sha_pinning_required:
-            settings.shaPinningRequired ?? current.sha_pinning_required ?? false,
+          sha_pinning_required: settings.shaPinningRequired ??
+            current.sha_pinning_required ??
+            false,
         },
       });
     }
@@ -217,13 +222,12 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 
       await this.#client.request("PUT", path, {
         body: {
-          github_owned_allowed:
-            settings.selectedActions.githubOwnedAllowed ??
-              current.github_owned_allowed,
-          verified_allowed:
-            settings.selectedActions.verifiedAllowed ?? current.verified_allowed,
-          patterns_allowed:
-            settings.selectedActions.patternsAllowed ?? current.patterns_allowed,
+          github_owned_allowed: settings.selectedActions.githubOwnedAllowed ??
+            current.github_owned_allowed,
+          verified_allowed: settings.selectedActions.verifiedAllowed ??
+            current.verified_allowed,
+          patterns_allowed: settings.selectedActions.patternsAllowed ??
+            current.patterns_allowed,
         },
       });
     }
@@ -234,11 +238,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     settings: DesiredActionsOidcSettings,
   ): Promise<void> {
     const path = this.repo(repository) + "/actions/oidc/customization/sub";
-    const current = await this.#client.request<{
-      readonly use_default: boolean;
-      readonly include_claim_keys?: readonly string[];
-      readonly use_immutable_subject?: boolean;
-    } | undefined>("GET", path, { allowNotFound: true });
+    const current = await this.#client.request<
+      {
+        readonly use_default: boolean;
+        readonly include_claim_keys?: readonly string[];
+        readonly use_immutable_subject?: boolean;
+      } | undefined
+    >("GET", path, { allowNotFound: true });
 
     const subject = settings.subjectClaimTemplate;
     const useDefault = subject === undefined
@@ -252,10 +258,9 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       body: {
         use_default: useDefault,
         include_claim_keys: claims,
-        use_immutable_subject:
-          settings.immutableSubject ??
-            current?.use_immutable_subject ??
-            false,
+        use_immutable_subject: settings.immutableSubject ??
+          current?.use_immutable_subject ??
+          false,
       },
     });
   }
@@ -271,14 +276,16 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       { allowNotFound: true },
     );
 
-    await this.#client.request(existing ? "PATCH" : "POST", existing
-      ? base + "/" + encodeURIComponent(variable.name)
-      : base, {
-      body: {
-        name: variable.name,
-        value: variable.value,
+    await this.#client.request(
+      existing ? "PATCH" : "POST",
+      existing ? base + "/" + encodeURIComponent(variable.name) : base,
+      {
+        body: {
+          name: variable.name,
+          value: variable.value,
+        },
       },
-    });
+    );
   }
 
   async applyEnvironment(
@@ -307,9 +314,14 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     variables: readonly Variable[],
   ): Promise<void> {
     const response = await this.#client.get<{
-      readonly variables: readonly { readonly name: string; readonly value: string }[];
+      readonly variables: readonly {
+        readonly name: string;
+        readonly value: string;
+      }[];
     }>(base + "/variables", { per_page: 100 });
-    const current = new Set(response.variables.map((variable) => variable.name));
+    const current = new Set(
+      response.variables.map((variable) => variable.name),
+    );
     const desired = new Set(variables.map((variable) => variable.name));
 
     for (const variable of response.variables) {
@@ -403,7 +415,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   }
 }
 
-async function encryptSecret(value: string, publicKey: string): Promise<string> {
+async function encryptSecret(
+  value: string,
+  publicKey: string,
+): Promise<string> {
   await sodium.ready;
   const key = sodium.from_base64(
     publicKey,
@@ -541,7 +556,10 @@ function mapDesiredRuleset(ruleset: DesiredRuleset): Record<string, unknown> {
     }),
     ...(ruleset.rules !== undefined && {
       rules: ruleset.rules.map((rule) => {
-        const { type, ...parameters } = rule as unknown as Record<string, unknown>;
+        const { type, ...parameters } = rule as unknown as Record<
+          string,
+          unknown
+        >;
         return {
           type: snake(String(type)),
           ...(Object.keys(parameters).length > 0 && {
