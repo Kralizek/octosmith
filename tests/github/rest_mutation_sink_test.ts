@@ -275,6 +275,34 @@ Deno.test("ruleset mapping preserves literals and maps only enum fields", async 
           pattern: "pull-request",
         },
         {
+          type: "required-status-checks",
+          doNotEnforceOnCreate: false,
+          checks: [{ context: "ci", integrationId: 123 }],
+          strict: true,
+        },
+        {
+          type: "required-deployments",
+          environments: ["production"],
+        },
+        {
+          type: "code-scanning",
+          tools: [{
+            tool: "CodeQL",
+            alertsThreshold: "errors-and-warnings",
+            securityAlertsThreshold: "high-or-higher",
+          }],
+        },
+        {
+          type: "merge-queue",
+          checkResponseTimeoutMinutes: 60,
+          groupingStrategy: "all-green",
+          maxEntriesToBuild: 5,
+          maxEntriesToMerge: 5,
+          mergeMethod: "squash",
+          minEntriesToMerge: 1,
+          minEntriesToMergeWaitMinutes: 0,
+        },
+        {
           type: "pull-request",
           allowedMergeMethods: ["squash"],
           dismissStaleReviewsOnPush: true,
@@ -289,7 +317,11 @@ Deno.test("ruleset mapping preserves literals and maps only enum fields", async 
           requireLastPushApproval: true,
           requiredApprovingReviewCount: 1,
           requiredReviewThreadResolution: true,
-          requiredReviewers: [],
+          requiredReviewers: [{
+            reviewerTeamId: 77,
+            filePatterns: ["src/**"],
+            minimumApprovals: 2,
+          }],
         },
       ],
     },
@@ -308,12 +340,83 @@ Deno.test("ruleset mapping preserves literals and maps only enum fields", async 
     operator: "starts_with",
     pattern: "pull-request",
   });
-  assertEquals(body.rules[1].parameters?.dismissal_restriction, {
+  assertEquals(body.rules[1].parameters, {
+    do_not_enforce_on_create: false,
+    required_status_checks: [{ context: "ci", integration_id: 123 }],
+    strict_required_status_checks_policy: true,
+  });
+  assertEquals(body.rules[2].parameters, {
+    required_deployment_environments: ["production"],
+  });
+  assertEquals(body.rules[3].parameters, {
+    code_scanning_tools: [{
+      tool: "CodeQL",
+      alerts_threshold: "errors_and_warnings",
+      security_alerts_threshold: "high_or_higher",
+    }],
+  });
+  assertEquals(body.rules[4].parameters, {
+    check_response_timeout_minutes: 60,
+    grouping_strategy: "ALLGREEN",
+    max_entries_to_build: 5,
+    max_entries_to_merge: 5,
+    merge_method: "SQUASH",
+    min_entries_to_merge: 1,
+    min_entries_to_merge_wait_minutes: 0,
+  });
+  assertEquals(body.rules[5].parameters?.required_reviewers, [{
+    file_patterns: ["src/**"],
+    minimum_approvals: 2,
+    reviewer: {
+      id: 77,
+      type: "Team",
+    },
+  }]);
+  assertEquals(body.rules[5].parameters?.dismissal_restriction, {
     enabled: true,
     allowed_actors: [{
       id: 42,
       type: "IntegrationInstallation",
     }],
+  });
+});
+
+Deno.test("push rules map max file size to GitHub's parameter name", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "create-ruleset",
+    ruleset: {
+      name: "push",
+      target: "push",
+      enforcement: "active",
+      bypassActors: [],
+      rules: [{
+        type: "max-file-size",
+        maxFileSizeMb: 25,
+      }],
+    },
+  });
+
+  const body = client.requests.find((request) =>
+    request.method === "POST" && request.path.endsWith("/rulesets")
+  )?.body as {
+    rules: readonly {
+      type: string;
+      parameters?: Record<string, unknown>;
+    }[];
+  };
+
+  assertEquals(body.rules[0], {
+    type: "max_file_size",
+    parameters: {
+      max_file_size: 25,
+    },
   });
 });
 
