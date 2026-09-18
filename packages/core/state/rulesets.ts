@@ -191,8 +191,7 @@ export type CurrentRuleset =
   | (RefRulesetDefinition & { readonly id: number })
   | (PushRulesetDefinition & { readonly id: number });
 
-type DeepPartial<T> = T extends readonly (infer Item)[]
-  ? readonly Item[]
+type DeepPartial<T> = T extends readonly (infer Item)[] ? readonly Item[]
   : T extends object ? { readonly [Key in keyof T]?: DeepPartial<T[Key]> }
   : T;
 
