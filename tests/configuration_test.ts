@@ -299,39 +299,39 @@ Deno.test("preserves omitted environment members in desired state", async () => 
 
 for (
   const testCase of [
-  {
-    name: "YAML rules reject null required scalar before planning",
-    rule: [
-      "      - type: max_file_size",
-      "        parameters:",
-      "          max_file_size_mb: null",
-    ],
-    message: "requires maxFileSizeMb",
-  },
-  {
-    name: "YAML rules reject null nested required field before planning",
-    rule: [
-      "      - type: required_status_checks",
-      "        parameters:",
-      "          do_not_enforce_on_create: false",
-      "          checks:",
-      "            - context: null",
-      "          strict: true",
-    ],
-    message: "required status check at index 0 requires context",
-  },
-  {
-    name: "YAML rules reject non-object nested entries before planning",
-    rule: [
-      "      - type: required_status_checks",
-      "        parameters:",
-      "          do_not_enforce_on_create: false",
-      "          checks:",
-      "            - bad",
-      "          strict: true",
-    ],
-    message: "required status check at index 0 must be an object",
-  },
+    {
+      name: "YAML rules reject null required scalar before planning",
+      rule: [
+        "      - type: max_file_size",
+        "        parameters:",
+        "          max_file_size_mb: null",
+      ],
+      message: "requires maxFileSizeMb",
+    },
+    {
+      name: "YAML rules reject null nested required field before planning",
+      rule: [
+        "      - type: required_status_checks",
+        "        parameters:",
+        "          do_not_enforce_on_create: false",
+        "          checks:",
+        "            - context: null",
+        "          strict: true",
+      ],
+      message: "required status check at index 0 requires context",
+    },
+    {
+      name: "YAML rules reject non-object nested entries before planning",
+      rule: [
+        "      - type: required_status_checks",
+        "        parameters:",
+        "          do_not_enforce_on_create: false",
+        "          checks:",
+        "            - bad",
+        "          strict: true",
+      ],
+      message: "required status check at index 0 must be an object",
+    },
   ] as const
 ) {
   Deno.test(testCase.name, async () => {
@@ -359,7 +359,7 @@ for (
           "rulesets:",
           "  - name: policy",
           "    target: " +
-            (testCase.rule[0].includes("max_file") ? "push" : "branch"),
+          (testCase.rule[0].includes("max_file") ? "push" : "branch"),
           "    enforcement: active",
           ...(testCase.rule[0].includes("max_file") ? [] : [
             "    conditions:",
