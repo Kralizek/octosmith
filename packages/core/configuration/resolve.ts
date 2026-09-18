@@ -16,10 +16,7 @@ import type {
   DesiredMergeSettings,
   DesiredRepositorySettings,
 } from "../models/repository.ts";
-import type {
-  DesiredRuleset,
-  DesiredRulesetRule,
-} from "../models/rulesets.ts";
+import type { DesiredRuleset, DesiredRulesetRule } from "../models/rulesets.ts";
 import type { DesiredFile, DesiredState } from "../models/state.ts";
 import type { LoadedConfiguration } from "./load.ts";
 
