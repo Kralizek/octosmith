@@ -21,9 +21,11 @@ export interface RepositoryStateSource {
 
   getTeams(repository: string): Promise<readonly TeamPermission[]>;
 
-  getSecrets(repository: string): Promise<readonly SecretName[]>;
+  getActionsSecrets(repository: string): Promise<readonly SecretName[]>;
 
-  getVariables(repository: string): Promise<readonly Variable[]>;
+  getActionsVariables(repository: string): Promise<readonly Variable[]>;
+
+  getDependabotSecrets(repository: string): Promise<readonly SecretName[]>;
 
   getRulesets(repository: string): Promise<readonly CurrentRuleset[]>;
 
