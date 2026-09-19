@@ -51,7 +51,7 @@ Deno.test("environment secrets force update because values are opaque", () => {
       currentState({
         environments: [{
           name: "production",
-          secrets: ["TOKEN"],
+          secrets: [{ name: "TOKEN", source: "TOKEN" }],
           variables: [],
         }],
       }),
@@ -72,7 +72,7 @@ Deno.test("environment secrets force update because values are opaque", () => {
         collections: "explicit",
         environment: {
           name: "production",
-          secrets: ["TOKEN"],
+          secrets: [{ name: "TOKEN", source: "TOKEN" }],
           variables: [],
         },
       }],
@@ -235,7 +235,10 @@ Deno.test("environments reject duplicate nested secret and variable names", () =
         template: "code",
         environments: [{
           name: "production",
-          secrets: ["TOKEN", "TOKEN"],
+          secrets: [
+            { name: "TOKEN", source: "FIRST" },
+            { name: "TOKEN", source: "SECOND" },
+          ],
         }],
       }),
     Error,
