@@ -43,7 +43,7 @@ export function buildPlan(
   }
 
   const operations: Operation[] = [];
-  const collections = desired.collections ?? "sparse";
+  const collections = desired.collections ?? "explicit";
 
   planRepositorySettings(current, desired, operations);
   planCustomProperties(current, desired, operations, collections);
