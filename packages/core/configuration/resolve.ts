@@ -374,7 +374,9 @@ function camelizeRuleParameters(
 }
 
 function normalizeEnvironment(
-  environment: NonNullable<RepositoryTemplate["repository"]["environments"]>[number],
+  environment: NonNullable<
+    RepositoryTemplate["repository"]["environments"]
+  >[number],
   values: RuntimeValueProvider,
 ): DesiredEnvironment {
   return {
