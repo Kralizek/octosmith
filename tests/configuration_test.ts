@@ -256,6 +256,99 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
   }
 });
 
+Deno.test("resolves variable and secret binding forms", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  actions:",
+        "    variables:",
+        "      - SIMPLE_VARIABLE",
+        "      - from: EXTERNAL_VARIABLE",
+        "        to: IMPORTED_VARIABLE",
+        "      - name: STATIC_VARIABLE",
+        "        value: literal-value",
+        "    secrets:",
+        "      - SIMPLE_SECRET",
+        "      - from: EXTERNAL_SECRET",
+        "        to: IMPORTED_SECRET",
+        "  dependabot:",
+        "    secrets:",
+        "      - from: EXTERNAL_DEPENDABOT_SECRET",
+        "        to: IMPORTED_DEPENDABOT_SECRET",
+        "  environments:",
+        "    - name: production",
+        "      variables:",
+        "        - from: EXTERNAL_ENV_VARIABLE",
+        "          to: IMPORTED_ENV_VARIABLE",
+        "        - name: STATIC_ENV_VARIABLE",
+        "          value: environment-literal",
+        "      secrets:",
+        "        - from: EXTERNAL_ENV_SECRET",
+        "          to: IMPORTED_ENV_SECRET",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+    const desired = await resolveDesiredState(
+      loaded,
+      { name: "sample", teams: [], properties: {} },
+      (name) => "runtime:" + name,
+    );
+
+    assertEquals(desired.actions?.variables, [
+      { name: "SIMPLE_VARIABLE", value: "runtime:SIMPLE_VARIABLE" },
+      { name: "IMPORTED_VARIABLE", value: "runtime:EXTERNAL_VARIABLE" },
+      { name: "STATIC_VARIABLE", value: "literal-value" },
+    ]);
+    assertEquals(desired.actions?.secrets, [
+      { name: "SIMPLE_SECRET", source: "SIMPLE_SECRET" },
+      { name: "IMPORTED_SECRET", source: "EXTERNAL_SECRET" },
+    ]);
+    assertEquals(desired.dependabot?.secrets, [{
+      name: "IMPORTED_DEPENDABOT_SECRET",
+      source: "EXTERNAL_DEPENDABOT_SECRET",
+    }]);
+    assertEquals(desired.environments, [{
+      name: "production",
+      variables: [
+        {
+          name: "IMPORTED_ENV_VARIABLE",
+          value: "runtime:EXTERNAL_ENV_VARIABLE",
+        },
+        { name: "STATIC_ENV_VARIABLE", value: "environment-literal" },
+      ],
+      secrets: [{
+        name: "IMPORTED_ENV_SECRET",
+        source: "EXTERNAL_ENV_SECRET",
+      }],
+    }]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("preserves omitted environment members in desired state", async () => {
   const root = await Deno.makeTempDir();
 
