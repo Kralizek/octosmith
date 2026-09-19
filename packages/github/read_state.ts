@@ -24,7 +24,7 @@ export async function readCurrentState(
     desired.customProperties !== undefined
       ? source.getCustomProperties(repository)
       : Promise.resolve({}),
-    desired.actions !== undefined
+    desired.actions !== undefined && hasActionsSettings(desired.actions)
       ? source.getActionsSettings(repository)
       : defaultActionsSettings(),
     desired.actions?.secrets !== undefined
@@ -176,6 +176,16 @@ function filterNamed<T extends object>(
   return values.filter((value) =>
     wanted.has(String(Reflect.get(value, field)))
   );
+}
+
+function hasActionsSettings(
+  actions: NonNullable<DesiredState["actions"]>,
+): boolean {
+  return actions.enabled !== undefined ||
+    actions.allowedActions !== undefined ||
+    actions.shaPinningRequired !== undefined ||
+    actions.selectedActions !== undefined ||
+    actions.oidc !== undefined;
 }
 
 function defaultActionsSettings(): Omit<CurrentState["actions"], "secrets" | "variables"> {
