@@ -1,4 +1,4 @@
-import type { SecretName, Variable } from "../types.ts";
+import type { DesiredSecret, SecretName, Variable } from "../types.ts";
 
 export type CustomPropertyValue =
   | string
@@ -63,7 +63,7 @@ export interface CurrentActions extends CurrentActionsSettings {
 }
 
 export interface DesiredActions extends DesiredActionsSettings {
-  readonly secrets?: readonly SecretName[];
+  readonly secrets?: readonly DesiredSecret[];
   readonly variables?: readonly Variable[];
 }
 
@@ -72,7 +72,7 @@ export interface CurrentDependabot {
 }
 
 export interface DesiredDependabot {
-  readonly secrets?: readonly SecretName[];
+  readonly secrets?: readonly DesiredSecret[];
 }
 
 export interface CopilotEnabledTools {
