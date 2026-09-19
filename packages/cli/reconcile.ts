@@ -1,6 +1,5 @@
 import {
   buildPlan,
-  type BuildPlanOptions,
   type DesiredState,
   loadConfigurationDirectory,
   type LoadedConfiguration,
@@ -32,7 +31,6 @@ export interface ReconciliationRuntime {
 
   read(
     desired: DesiredState,
-    options: BuildPlanOptions,
   ): Promise<import("@octosmith/core").CurrentState>;
 
   apply(plan: Plan): Promise<ApplyPlanResult>;
@@ -72,12 +70,12 @@ export function createGitHubRuntime(
       return await discoverRepositories(client, loaded);
     },
 
-    async read(desired, planOptions) {
+    async read(desired) {
       if (!source) {
         throw new Error("GitHub runtime has not discovered repositories yet");
       }
 
-      return await readCurrentState(source, desired, planOptions);
+      return await readCurrentState(source, desired);
     },
 
     async apply(plan) {
@@ -90,7 +88,7 @@ export function createGitHubRuntime(
   };
 }
 
-export interface ReconcileOptions extends BuildPlanOptions {
+export interface ReconcileOptions {
   readonly path: string;
   readonly mode: ReconcileMode;
   readonly values?: RuntimeValueProvider;
@@ -117,12 +115,8 @@ export async function reconcile(
     try {
       const desired = await resolveDesiredState(loaded, repository, values);
       template = desired.template;
-      const current = await runtime.read(desired, {
-        collections: options.collections,
-      });
-      const plan = buildPlan(current, desired, {
-        collections: options.collections,
-      });
+      const current = await runtime.read(desired);
+      const plan = buildPlan(current, desired);
 
       if (options.mode === "plan") {
         results.push(reportPlannedRepository(desired.template, plan));
