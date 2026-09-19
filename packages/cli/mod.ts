@@ -45,7 +45,7 @@ function createCli(options: CliExecutionOptions = {}): Command {
           const report = await reconcile(runtime, {
             path: commandOptions.path,
             mode,
-            ...(repository && { repository }),
+            ...(repository !== undefined && { repository }),
           });
 
           write(renderReport(report));
