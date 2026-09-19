@@ -17,9 +17,6 @@
       "type": "string",
       "minLength": 1
     },
-    "settings": {
-      "$ref": "#/$defs/settings"
-    },
     "repositories": {
       "type": "object",
       "additionalProperties": false,
@@ -29,6 +26,9 @@
       "properties": {
         "scope": {
           "$ref": "#/$defs/selector"
+        },
+        "settings": {
+          "$ref": "#/$defs/settings"
         }
       }
     }
