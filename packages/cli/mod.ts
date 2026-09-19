@@ -2,6 +2,7 @@
 
 import { Command } from "@cliffy/command";
 import { renderReport, type Report } from "@octosmith/core";
+import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ReconciliationRuntime } from "./reconcile.ts";
 import { createGitHubRuntime, reconcile } from "./reconcile.ts";
 import cliMetadata from "./deno.json" with { type: "json" };
@@ -40,7 +41,11 @@ function createCli(options: CliExecutionOptions = {}): Command {
         .option("-p, --path <path:string>", "Configuration directory.", {
           default: ".",
         })
+        .option("--format <format:string>", "Output format: text or json.", {
+          default: "text",
+        })
         .action(async (commandOptions, repository?: string) => {
+          const format = parseOutputFormat(commandOptions.format);
           const runtime = options.runtime ?? createDefaultRuntime();
           const report = await reconcile(runtime, {
             path: commandOptions.path,
@@ -48,7 +53,7 @@ function createCli(options: CliExecutionOptions = {}): Command {
             ...(repository !== undefined && { repository }),
           });
 
-          write(renderReport(report));
+          write(renderOutput(format, report, renderReport));
 
           if (hasFailures(report)) {
             throw new ReconciliationFailedError();
@@ -144,6 +149,7 @@ function hasExplicitEmptyRepositoryTarget(args: readonly string[]): boolean {
   return false;
 }
 
+export * from "./output.ts";
 export * from "./reconcile.ts";
 
 if (import.meta.main) {
