@@ -1,7 +1,7 @@
 import type {
   CollectionReconciliationMode,
+  DesiredSecret,
   Environment,
-  SecretName,
   TeamPermission,
   Variable,
 } from "../types.ts";
@@ -48,7 +48,7 @@ export interface DesiredState {
 
 export interface DesiredEnvironment {
   readonly name: string;
-  readonly secrets?: readonly SecretName[];
+  readonly secrets?: readonly DesiredSecret[];
   readonly variables?: readonly Variable[];
 }
 
