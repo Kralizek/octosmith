@@ -63,7 +63,8 @@ export async function resolveDesiredState(
   return {
     repository: repository.name,
     template: templateName,
-    collections: loaded.configuration.settings?.collectionManagement ?? "sparse",
+    collections: loaded.configuration.settings?.collectionManagement ??
+      "sparse",
     ...(template.repository?.settings && {
       settings: normalizeRepositorySettings(template.repository.settings),
     }),
