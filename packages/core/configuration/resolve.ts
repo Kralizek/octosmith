@@ -81,7 +81,7 @@ export async function resolveDesiredState(
     ...(template.repository.dependabot && {
       dependabot: {
         ...(template.repository.dependabot.secrets !== undefined && {
-          secrets: template.repository.dependabot.secrets,
+          secrets: template.repository.dependabot.secrets.map(normalizeSecret),
         }),
       },
     }),
@@ -280,13 +280,12 @@ function normalizeActions(
 ): DesiredActions {
   return {
     ...(actions.secrets !== undefined && {
-      secrets: actions.secrets,
+      secrets: actions.secrets.map(normalizeSecret),
     }),
     ...(actions.variables !== undefined && {
-      variables: actions.variables.map((name) => ({
-        name,
-        value: values(name),
-      })),
+      variables: actions.variables.map((variable) =>
+        normalizeVariable(variable, values)
+      ),
     }),
     ...(actions.enabled !== undefined && { enabled: actions.enabled }),
     ...(actions.allowedActions !== undefined && {
@@ -375,23 +374,44 @@ function camelizeRuleParameters(
 }
 
 function normalizeEnvironment(
-  environment: {
-    readonly name: string;
-    readonly secrets?: readonly string[];
-    readonly variables?: readonly string[];
-  },
+  environment: NonNullable<RepositoryTemplate["repository"]["environments"]>[number],
   values: RuntimeValueProvider,
 ): DesiredEnvironment {
   return {
     name: environment.name,
     ...(environment.secrets !== undefined && {
-      secrets: environment.secrets,
+      secrets: environment.secrets.map(normalizeSecret),
     }),
     ...(environment.variables !== undefined && {
-      variables: environment.variables.map((name) => ({
-        name,
-        value: values(name),
-      })),
+      variables: environment.variables.map((variable) =>
+        normalizeVariable(variable, values)
+      ),
     }),
   };
+}
+
+function normalizeSecret(
+  secret: string | { readonly from: string; readonly to: string },
+) {
+  return typeof secret === "string"
+    ? { name: secret, source: secret }
+    : { name: secret.to, source: secret.from };
+}
+
+function normalizeVariable(
+  variable:
+    | string
+    | { readonly from: string; readonly to: string }
+    | { readonly name: string; readonly value: string },
+  values: RuntimeValueProvider,
+) {
+  if (typeof variable === "string") {
+    return { name: variable, value: values(variable) };
+  }
+
+  if ("from" in variable) {
+    return { name: variable.to, value: values(variable.from) };
+  }
+
+  return { name: variable.name, value: variable.value };
 }
