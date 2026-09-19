@@ -15,8 +15,8 @@ Deno.test("destructive plans identify every removed resource", () => {
     { type: "delete-file", path: ".github/workflows/build.yml", sha: "sha" },
     { type: "delete-ruleset", id: 42, name: "branch-protection" },
     { type: "remove-team-permission", team: "maintainers" },
-    { type: "remove-repository-secret", secret: "DEPLOY_TOKEN" },
-    { type: "remove-repository-variable", name: "REGION" },
+    { type: "remove-actions-secret", secret: "DEPLOY_TOKEN" },
+    { type: "remove-actions-variable", name: "REGION" },
   ]);
   for (
     const target of [
@@ -128,9 +128,9 @@ Deno.test("environment plans identify owned members and collection mode without 
 
 Deno.test("repository value plans show names without runtime values", () => {
   const rendered = render([
-    { type: "set-repository-secret", secret: "TOKEN" },
+    { type: "set-actions-secret", secret: "TOKEN" },
     {
-      type: "set-repository-variable",
+      type: "set-actions-variable",
       variable: { name: "REGION", value: "repository-private-value" },
     },
   ]);
