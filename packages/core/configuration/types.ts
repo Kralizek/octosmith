@@ -17,14 +17,14 @@ export interface Configuration {
   readonly version: 1;
   readonly organization: string;
   readonly repositories: RepositoriesConfiguration;
-  readonly settings?: SettingsConfiguration;
 }
 
 export interface RepositoriesConfiguration {
   readonly scope: RepositorySelector;
+  readonly settings?: RepositoryManagementSettings;
 }
 
-export interface SettingsConfiguration {
+export interface RepositoryManagementSettings {
   readonly collectionManagement?: CollectionReconciliationMode;
 }
 
