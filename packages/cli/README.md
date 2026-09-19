@@ -14,6 +14,9 @@ octosmith apply --path ./configuration
 # Narrow execution to one repository in the configured scope
 octosmith plan my-repo --path ./configuration
 octosmith apply my-repo --path ./configuration
+
+# Machine-readable output
+octosmith plan --format json --path ./configuration
 ```
 
 Collection management is configured in `octosmith.yml`. It defaults to explicit
@@ -42,8 +45,10 @@ not require secret values. Secrets are written on each apply because GitHub
 cannot expose their current values for comparison.
 
 A repository argument narrows execution but never bypasses the configured scope.
-Targeted and full-scope executions return the same report shape; a targeted run
-contains one repository result. A repository outside the configured scope is
+`--format text` is the default. `--format json` emits the structured report with
+ISO 8601 timestamps and the same redaction guarantees as text output. Targeted
+and full-scope executions return the same report shape; a targeted run contains
+one repository result. A repository outside the configured scope is
 reported as failed and is never mutated.
 
 Apply is not transactional. A later API failure can leave earlier operations
