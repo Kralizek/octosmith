@@ -41,7 +41,12 @@ const PAGE_SIZE = 100;
 export async function discoverRepositories(
   client: GitHubClient,
   loaded: LoadedConfiguration,
+  repository?: string,
 ): Promise<RepositoryDiscoveryResult> {
+  if (repository !== undefined && repository.length === 0) {
+    throw new Error("Repository target must not be empty");
+  }
+
   const organization = loaded.configuration.organization;
   const selectors = [
     loaded.configuration.scope,
@@ -50,6 +55,16 @@ export async function discoverRepositories(
   const referencedTeams = collectReferencedTeams(selectors);
   const referencedProperties = collectReferencedProperties(selectors);
   const teamRepositories = new Map<string, ReadonlySet<string>>();
+
+  if (repository) {
+    return await discoverTargetRepository(
+      client,
+      loaded,
+      repository,
+      referencedTeams,
+      referencedProperties,
+    );
+  }
 
   const discovery = await discoverCandidates(
     client,
@@ -93,6 +108,68 @@ export async function discoverRepositories(
       .sort((left, right) => left.name.localeCompare(right.name)),
     failures: discovery.failures,
   };
+}
+
+async function discoverTargetRepository(
+  client: GitHubClient,
+  loaded: LoadedConfiguration,
+  repository: string,
+  referencedTeams: ReadonlySet<string>,
+  referencedProperties: ReadonlySet<string>,
+): Promise<RepositoryDiscoveryResult> {
+  const organization = loaded.configuration.organization;
+  const path = "/repos/" + encodeURIComponent(organization) + "/" +
+    encodeURIComponent(repository);
+
+  try {
+    const response = await client.get<RepositoryResponse>(path);
+    const teams = referencedTeams.size > 0
+      ? await getAllPages<{ readonly slug: string }>(client, path + "/teams")
+      : [];
+    // GitHub returns all repository property values in one unpaginated response.
+    const propertyValues = referencedProperties.size > 0
+      ? await client.get<
+        readonly {
+          readonly property_name: string;
+          readonly value: PropertyValue;
+        }[]
+      >(path + "/properties/values")
+      : [];
+
+    const metadata: RepositoryMetadata = {
+      name: response.name,
+      visibility: response.visibility,
+      teams: teams
+        .map((team) => team.slug)
+        .filter((team) => referencedTeams.has(team)),
+      properties: Object.fromEntries(
+        propertyValues
+          .filter((property) =>
+            referencedProperties.has(property.property_name)
+          )
+          .map((property) => [property.property_name, property.value]),
+      ),
+    };
+
+    if (!matchesSelector(loaded.configuration.scope, metadata)) {
+      return {
+        repositories: [],
+        failures: [{
+          repository,
+          error: new Error(
+            "Repository " + repository + " is outside the configured scope",
+          ),
+        }],
+      };
+    }
+
+    return { repositories: [metadata], failures: [] };
+  } catch (error) {
+    return {
+      repositories: [],
+      failures: [{ repository, error }],
+    };
+  }
 }
 
 async function discoverCandidates(

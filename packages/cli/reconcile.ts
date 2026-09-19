@@ -27,6 +27,7 @@ export type ReconcileMode = "plan" | "apply";
 export interface ReconciliationRuntime {
   discover(
     loaded: LoadedConfiguration,
+    repository?: string,
   ): Promise<RepositoryDiscoveryResult>;
 
   read(
@@ -56,7 +57,7 @@ export function createGitHubRuntime(
   let sink: GitHubRepositoryMutationSink | undefined;
 
   return {
-    async discover(loaded) {
+    async discover(loaded, repository) {
       source = new GitHubRepositoryStateSource(
         client,
         loaded.configuration.organization,
@@ -67,7 +68,7 @@ export function createGitHubRuntime(
         secretValue,
       });
 
-      return await discoverRepositories(client, loaded);
+      return await discoverRepositories(client, loaded, repository);
     },
 
     async read(desired) {
@@ -91,6 +92,7 @@ export function createGitHubRuntime(
 export interface ReconcileOptions {
   readonly path: string;
   readonly mode: ReconcileMode;
+  readonly repository?: string;
   readonly values?: RuntimeValueProvider;
   readonly now?: () => Date;
 }
@@ -101,8 +103,13 @@ export async function reconcile(
 ): Promise<Report> {
   const now = options.now ?? (() => new Date());
   const startedAt = now();
+
+  if (options.repository !== undefined && options.repository.length === 0) {
+    throw new Error("Repository target must not be empty");
+  }
+
   const loaded = await loadConfigurationDirectory(options.path);
-  const discovery = await runtime.discover(loaded);
+  const discovery = await runtime.discover(loaded, options.repository);
   const results: import("@octosmith/core").RepositoryReport[] = discovery
     .failures.map((failure) =>
       reportFailedRepository(failure.repository, failure.error)
