@@ -42,6 +42,80 @@ Deno.test("configuration rejects an empty scope", async () => {
   );
 });
 
+Deno.test("configuration rejects legacy top-level scope", async () => {
+  await withConfiguration(
+    {
+      version: 1,
+      organization: "acme",
+      scope: { names: ["sample"] },
+    },
+    template,
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "scope",
+      ),
+  );
+});
+
+Deno.test("configuration rejects missing template kind", async () => {
+  await withConfiguration(
+    configuration,
+    { match: { names: ["*"] }, repository: {} },
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "kind",
+      ),
+  );
+});
+
+Deno.test("configuration rejects unsupported template kind", async () => {
+  await withConfiguration(
+    configuration,
+    { kind: "organization", match: { names: ["*"] }, repository: {} },
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "kind",
+      ),
+  );
+});
+
+Deno.test("configuration rejects repository template without repository body", async () => {
+  await withConfiguration(
+    configuration,
+    { kind: "repository", match: { names: ["*"] } },
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "repository",
+      ),
+  );
+});
+
+Deno.test("configuration rejects legacy top-level repository resource fields", async () => {
+  await withConfiguration(
+    configuration,
+    {
+      kind: "repository",
+      match: { names: ["*"] },
+      repository: {},
+      rulesets: [],
+    },
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "rulesets",
+      ),
+  );
+});
+
 Deno.test("configuration rejects unsupported versions", async () => {
   await withConfiguration(
     { ...configuration, version: 2 },
