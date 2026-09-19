@@ -136,10 +136,10 @@ Deno.test("current-state reader fetches only desired resource families", async (
     sha: "sha",
   }]);
   assertEquals(source.calls.sort(), [
+    "actions-variables:sample",
     "file:sample:exists.txt",
     "file:sample:missing.txt",
     "settings:sample",
-    "actions-variables:sample",
   ]);
 });
 
