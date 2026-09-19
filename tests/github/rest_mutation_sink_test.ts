@@ -554,7 +554,7 @@ Deno.test("repository secrets are sealed with GitHub's public key", async () => 
   });
 
   await sink.apply("sample", {
-    type: "set-repository-secret",
+    type: "set-actions-secret",
     secret: "TOKEN",
   });
 
