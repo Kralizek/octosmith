@@ -89,12 +89,34 @@ Deno.test("configuration accepts Actions and Dependabot value blocks", async () 
       match: { names: ["*"] },
       repository: {
         actions: {
-          secrets: ["DEPLOY_TOKEN"],
-          variables: ["REGION"],
+          secrets: [
+            "DEPLOY_TOKEN",
+            { from: "EXTERNAL_TOKEN", to: "IMPORTED_TOKEN" },
+          ],
+          variables: [
+            "REGION",
+            { from: "EXTERNAL_REGION", to: "IMPORTED_REGION" },
+            { name: "STATIC_REGION", value: "eu-north-1" },
+          ],
         },
         dependabot: {
-          secrets: ["NUGET_FEED_TOKEN"],
+          secrets: [
+            "NUGET_FEED_TOKEN",
+            { from: "EXTERNAL_NUGET_TOKEN", to: "IMPORTED_NUGET_TOKEN" },
+          ],
         },
+        environments: [{
+          name: "production",
+          secrets: [
+            "DEPLOY_TOKEN",
+            { from: "EXTERNAL_ENV_TOKEN", to: "IMPORTED_ENV_TOKEN" },
+          ],
+          variables: [
+            "REGION",
+            { from: "EXTERNAL_ENV_REGION", to: "IMPORTED_ENV_REGION" },
+            { name: "STATIC_ENV_REGION", value: "eu-west-1" },
+          ],
+        }],
       },
     },
     async (root) => {
