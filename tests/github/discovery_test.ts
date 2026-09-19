@@ -536,7 +536,9 @@ async function discoverRepositoryList(
 }
 
 function configuration(
-  root: { readonly scope: LoadedConfiguration["configuration"]["scope"] },
+  root: {
+    readonly scope: LoadedConfiguration["configuration"]["repositories"]["scope"];
+  },
   templates: Readonly<Record<string, RepositoryTemplate>> = {},
 ): LoadedConfiguration {
   return {
@@ -544,7 +546,7 @@ function configuration(
     configuration: {
       version: 1,
       organization: "acme",
-      scope: root.scope,
+      repositories: { scope: root.scope },
     },
     templates,
   };
