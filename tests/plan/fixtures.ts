@@ -75,12 +75,12 @@ export function currentState(
     repository: "sample",
     settings: currentRepositorySettings(),
     customProperties: {},
-    actions,
-    dependabot,
     teams: [],
     rulesets: [],
     environments: [],
     files: [],
     ...overrides,
+    actions,
+    dependabot,
   };
 }
