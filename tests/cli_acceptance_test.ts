@@ -143,6 +143,38 @@ Deno.test("CLI targets one in-scope repository without enumerating the organizat
   }
 });
 
+Deno.test("CLI rejects an explicitly empty repository target without discovery", async () => {
+  const root = await configurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "", "--path", root],
+        { runtime },
+      ),
+      1,
+    );
+
+    assertEquals(requests, []);
+    assertStringIncludes(errors.join("\n"), "Repository target must not be empty");
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("CLI reports an out-of-scope targeted repository without mutation", async () => {
   const root = await configurationDirectory(true);
   const requests: CapturedRequest[] = [];
