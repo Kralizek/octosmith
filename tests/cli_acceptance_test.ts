@@ -693,14 +693,27 @@ async function safetyConfigurationDirectory(
     JSON.stringify({
       version: 1,
       organization: "acme",
-      scope,
+      repositories: { scope },
       ...(collections && { settings: { collection_management: collections } }),
     }),
   );
   for (const [name, template] of Object.entries(templates)) {
+    const value = template as Record<string, unknown>;
+    const repository = {
+      ...((value.repository as Record<string, unknown> | undefined) ?? {}),
+      ...(value.rulesets !== undefined && { rulesets: value.rulesets }),
+      ...(value.environments !== undefined && {
+        environments: value.environments,
+      }),
+      ...(value.files !== undefined && { files: value.files }),
+    };
     await Deno.writeTextFile(
       root + "/templates/" + name + ".yml",
-      JSON.stringify(template),
+      JSON.stringify({
+        kind: "repository",
+        match: value.match,
+        repository,
+      }),
     );
   }
   return root;
