@@ -138,7 +138,7 @@ Deno.test("current-state reader fetches only desired resource families", async (
   ]);
 });
 
-Deno.test("sparse current-state reading keeps only named owned members", async () => {
+Deno.test("explicit current-state reading keeps only named owned members", async () => {
   const source = new FakeStateSource();
   const state = await readCurrentState(source, fullDesired());
 
@@ -154,7 +154,7 @@ Deno.test("sparse current-state reading keeps only named owned members", async (
   }]);
 });
 
-Deno.test("sparse current-state reading preserves members for explicit clears", async () => {
+Deno.test("explicit current-state reading preserves members for explicit clears", async () => {
   const source = new FakeStateSource();
   const state = await readCurrentState(source, {
     repository: "sample",
