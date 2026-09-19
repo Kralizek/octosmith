@@ -5,13 +5,13 @@ import { loadConfigurationDirectory } from "../packages/core/mod.ts";
 const configuration = {
   version: 1,
   organization: "acme",
-  scope: { names: ["sample"] },
+  repositories: { scope: { names: ["sample"] } },
 };
-const template = { match: { names: ["*"] } };
+const template = { kind: "repository", match: { names: ["*"] }, repository: {} };
 
 Deno.test("configuration rejects misspelled scope selectors", async () => {
   await withConfiguration(
-    { ...configuration, scope: { nmaes: ["sample"] } },
+    { ...configuration, repositories: { scope: { nmaes: ["sample"] } } },
     template,
     async (root) => {
       const error = await assertRejects(
@@ -20,17 +20,17 @@ Deno.test("configuration rejects misspelled scope selectors", async () => {
         "nmaes",
       );
       assertStringIncludes(error.message, "octosmith.yml");
-      assertStringIncludes(error.message, "/scope");
+      assertStringIncludes(error.message, "/repositories/scope");
     },
   );
 });
 
 Deno.test("configuration rejects an empty scope", async () => {
   await withConfiguration(
-    { ...configuration, scope: {} },
+    { ...configuration, repositories: { scope: {} } },
     template,
     (root) =>
-      assertRejects(() => loadConfigurationDirectory(root), Error, "/scope"),
+      assertRejects(() => loadConfigurationDirectory(root), Error, "/repositories/scope"),
   );
 });
 
@@ -46,7 +46,7 @@ Deno.test("configuration rejects unsupported versions", async () => {
 Deno.test("configuration rejects misspelled template selectors", async () => {
   await withConfiguration(
     configuration,
-    { match: { nmaes: ["sample"] } },
+    { kind: "repository", match: { nmaes: ["sample"] }, repository: {} },
     async (root) => {
       const error = await assertRejects(
         () => loadConfigurationDirectory(root),
@@ -77,13 +77,13 @@ Deno.test("configuration rejects unknown file reconciliation modes", async () =>
     configuration,
     {
       ...template,
-      files: { "README.md": { ensure: "absnet" } },
+      repository: { files: { "README.md": { ensure: "absnet" } } },
     },
     (root) =>
       assertRejects(
         () => loadConfigurationDirectory(root),
         Error,
-        "/files/README.md",
+        "/repository/files/README.md",
       ),
   );
 });
