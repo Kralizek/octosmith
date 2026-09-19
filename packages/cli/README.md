@@ -103,6 +103,25 @@ repository can already have been applied. Remaining operations for the failed
 repository are skipped, while reconciliation can continue with other
 repositories.
 
+## Output formats
+
+Text output is the default:
+
+```sh
+octosmith plan --format text --path ./configuration
+```
+
+Use JSON for machine-readable output:
+
+```sh
+octosmith plan --format json --path ./configuration
+octosmith apply --format json --path ./configuration
+```
+
+JSON serializes the existing structured report, including ISO 8601 timestamps,
+and preserves the same sensitive-data redaction guarantees as text output.
+Targeted and full-scope executions use the same report shape.
+
 ## Target one repository
 
 Both commands accept an optional repository name:
