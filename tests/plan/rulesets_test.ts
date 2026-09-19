@@ -97,7 +97,7 @@ Deno.test("ruleset creation validates required fields and ref conditions", () =>
   );
 });
 
-Deno.test("ruleset sparse updates preserve unowned fields and sibling rules", () => {
+Deno.test("ruleset explicit updates preserve unowned fields and sibling rules", () => {
   const current = currentState({
     rulesets: [{
       id: 1,
@@ -162,7 +162,7 @@ Deno.test("ruleset sparse updates preserve unowned fields and sibling rules", ()
   );
 });
 
-Deno.test("buildPlan does not mutate ruleset inputs during sparse merges", () => {
+Deno.test("buildPlan does not mutate ruleset inputs during explicit merges", () => {
   const current = currentState({
     rulesets: [{
       id: 1,
@@ -317,7 +317,7 @@ Deno.test("push rulesets reject ref conditions on update", () => {
   );
 });
 
-Deno.test("rulesets and nested rules are sparse by default and authoritative in strict mode", () => {
+Deno.test("rulesets and nested rules are explicit by default and authoritative in strict mode", () => {
   const current = currentState({
     rulesets: [
       {
@@ -387,7 +387,7 @@ Deno.test("rulesets and nested rules are sparse by default and authoritative in 
   });
 });
 
-Deno.test("empty rulesets and empty rules are non-destructive in sparse mode", () => {
+Deno.test("empty rulesets and empty rules are non-destructive in explicit mode", () => {
   const current = currentState({
     rulesets: [{
       id: 1,
