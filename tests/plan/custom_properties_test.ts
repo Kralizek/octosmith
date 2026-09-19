@@ -53,7 +53,7 @@ Deno.test("strict custom properties clear undeclared current values", () => {
     repository: "sample",
     operations: [],
   });
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
       { type: "set-custom-property", name: "remove", value: null },
