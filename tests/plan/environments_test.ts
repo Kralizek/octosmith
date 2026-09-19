@@ -51,7 +51,7 @@ Deno.test("environment secrets force update because values are opaque", () => {
       currentState({
         environments: [{
           name: "production",
-          secrets: [{ name: "TOKEN", source: "TOKEN" }],
+          secrets: ["TOKEN"],
           variables: [],
         }],
       }),
@@ -60,7 +60,7 @@ Deno.test("environment secrets force update because values are opaque", () => {
         template: "code",
         environments: [{
           name: "production",
-          secrets: ["TOKEN"],
+          secrets: [{ name: "TOKEN", source: "TOKEN" }],
           variables: [],
         }],
       },
