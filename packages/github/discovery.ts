@@ -43,6 +43,10 @@ export async function discoverRepositories(
   loaded: LoadedConfiguration,
   repository?: string,
 ): Promise<RepositoryDiscoveryResult> {
+  if (repository !== undefined && repository.length === 0) {
+    throw new Error("Repository target must not be empty");
+  }
+
   const organization = loaded.configuration.organization;
   const selectors = [
     loaded.configuration.scope,
@@ -123,10 +127,10 @@ async function discoverTargetRepository(
       ? await getAllPages<{ readonly slug: string }>(client, path + "/teams")
       : [];
     const propertyValues = referencedProperties.size > 0
-      ? await getAllPages<{
+      ? await client.get<readonly {
         readonly property_name: string;
         readonly value: PropertyValue;
-      }>(client, path + "/properties/values")
+      }[]>(path + "/properties/values")
       : [];
 
     const metadata: RepositoryMetadata = {
