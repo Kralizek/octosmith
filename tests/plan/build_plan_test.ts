@@ -34,7 +34,7 @@ Deno.test("buildPlan reconciles a mixed desired state", () => {
       team: "platform",
       permission: { kind: "built-in", name: "pull" },
     }],
-    variables: [{ name: "REGION", value: "west" }],
+    actions: { variables: [{ name: "REGION", value: "west" }] },
     files: [{ path: "README.md", content: "old", sha: "sha" }],
   });
 
@@ -47,7 +47,7 @@ Deno.test("buildPlan reconciles a mixed desired state", () => {
       team: "platform",
       permission: { kind: "built-in", name: "maintain" },
     }],
-    variables: [{ name: "REGION", value: "north" }],
+    actions: { variables: [{ name: "REGION", value: "north" }] },
     files: [{ path: "README.md", ensure: "exact", content: "new" }],
   };
 
@@ -71,7 +71,7 @@ Deno.test("buildPlan reconciles a mixed desired state", () => {
         },
       },
       {
-        type: "set-repository-variable",
+        type: "set-actions-variable",
         variable: { name: "REGION", value: "north" },
       },
       {
