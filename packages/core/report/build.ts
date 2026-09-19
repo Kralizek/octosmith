@@ -85,12 +85,14 @@ function operationDetails(operation: Operation): Record<string, unknown> {
       };
     case "remove-team-permission":
       return { team: operation.team };
-    case "set-repository-variable":
+    case "set-actions-variable":
       return { name: operation.variable.name, value: "[redacted]" };
-    case "remove-repository-variable":
+    case "remove-actions-variable":
       return { name: operation.name };
-    case "set-repository-secret":
-    case "remove-repository-secret":
+    case "set-actions-secret":
+    case "remove-actions-secret":
+    case "set-dependabot-secret":
+    case "remove-dependabot-secret":
       return { name: operation.secret };
     case "create-ruleset":
       return { ruleset: operation.ruleset };
