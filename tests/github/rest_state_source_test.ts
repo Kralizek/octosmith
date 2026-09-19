@@ -244,9 +244,9 @@ Deno.test("state source distinguishes organization OIDC templates", async () => 
     "acme",
   );
 
-  const actions = await source.getActionsSettings("sample");
+  const oidc = await source.getActionsOidcSettings("sample");
 
-  assertEquals(actions.oidc, {
+  assertEquals(oidc, {
     subjectClaimTemplate: { source: "organization" },
     immutableSubject: true,
   });
