@@ -100,9 +100,10 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
       [
         "version: 1",
         "organization: example-org",
-        "scope:",
-        "  properties:",
-        "    repository_type: code",
+        "repositories:",
+        "  scope:",
+        "    properties:",
+        "      repository_type: code",
         "",
       ].join("\n"),
     );
@@ -110,16 +111,17 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "code.yml"),
       [
+        "kind: repository",
         "match:",
         "  properties:",
         "    repository_type: code",
         "repository:",
         "  custom_properties:",
         "    deployment_region: eu-north-1",
-        "files:",
-        "  .github/workflows/release_candidate.yml:",
-        "    ensure: exact",
-        "    source: files/workflow.yml",
+        "  files:",
+        "    .github/workflows/release_candidate.yml:",
+        "      ensure: exact",
+        "      source: files/workflow.yml",
         "",
       ].join("\n"),
     );
@@ -185,9 +187,10 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
       [
         "version: 1",
         "organization: example-org",
-        "scope:",
-        "  names:",
-        "    - sample",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
         "",
       ].join("\n"),
     );
@@ -195,6 +198,7 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "kind: repository",
         "match:",
         "  names:",
         "    - sample",
@@ -209,12 +213,12 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
         "        claims:",
         "          - repo",
         "      immutable_subject: true",
-        "rulesets:",
-        "  - name: protect",
-        "    bypass_actors:",
-        "      - actor_type: team",
-        "        actor_id: 42",
-        "        bypass_mode: pull-request",
+        "  rulesets:",
+        "    - name: protect",
+        "      bypass_actors:",
+        "        - actor_type: team",
+        "          actor_id: 42",
+        "          bypass_mode: pull-request",
         "",
       ].join("\n"),
     );
@@ -263,9 +267,10 @@ Deno.test("preserves omitted environment members in desired state", async () => 
       [
         "version: 1",
         "organization: example-org",
-        "scope:",
-        "  names:",
-        "    - sample",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
         "",
       ].join("\n"),
     );
@@ -273,11 +278,13 @@ Deno.test("preserves omitted environment members in desired state", async () => 
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "kind: repository",
         "match:",
         "  names:",
         "    - sample",
-        "environments:",
-        "  - name: production",
+        "repository:",
+        "  environments:",
+        "    - name: production",
         "",
       ].join("\n"),
     );
@@ -362,15 +369,15 @@ for (
           "  - name: policy",
           "    target: " +
           (testCase.rule[0].includes("max_file") ? "push" : "branch"),
-          "    enforcement: active",
+          "      enforcement: active",
           ...(testCase.rule[0].includes("max_file") ? [] : [
-            "    conditions:",
-            "      ref_name:",
-            "        include:",
-            "          - ~DEFAULT_BRANCH",
+            "      conditions:",
+            "        ref_name:",
+            "          include:",
+            "            - ~DEFAULT_BRANCH",
           ]),
-          "    rules:",
-          ...testCase.rule,
+          "      rules:",
+          ...testCase.rule.map((line) => "  " + line),
           "",
         ].join("\n"),
       );
