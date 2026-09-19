@@ -116,6 +116,42 @@ Deno.test("configuration rejects legacy top-level repository resource fields", a
   );
 });
 
+Deno.test("configuration rejects legacy top-level environments", async () => {
+  await withConfiguration(
+    configuration,
+    {
+      kind: "repository",
+      match: { names: ["*"] },
+      repository: {},
+      environments: [],
+    },
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "environments",
+      ),
+  );
+});
+
+Deno.test("configuration rejects legacy top-level files", async () => {
+  await withConfiguration(
+    configuration,
+    {
+      kind: "repository",
+      match: { names: ["*"] },
+      repository: {},
+      files: {},
+    },
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "files",
+      ),
+  );
+});
+
 Deno.test("configuration rejects unsupported versions", async () => {
   await withConfiguration(
     { ...configuration, version: 2 },
