@@ -112,12 +112,6 @@
             "$ref": "#/$defs/teamPermission"
           }
         },
-        "secrets": {
-          "$ref": "#/$defs/ownedStringList"
-        },
-        "variables": {
-          "$ref": "#/$defs/ownedStringList"
-        },
         "custom_properties": {
           "type": "object",
           "additionalProperties": {
@@ -139,6 +133,9 @@
         },
         "actions": {
           "$ref": "#/$defs/actionsSettings"
+        },
+        "dependabot": {
+          "$ref": "#/$defs/dependabot"
         },
         "rulesets": {
           "type": "array",
@@ -548,6 +545,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "secrets": {
+          "$ref": "#/$defs/ownedStringList"
+        },
+        "variables": {
+          "$ref": "#/$defs/ownedStringList"
+        },
         "enabled": {
           "type": "boolean"
         },
@@ -646,6 +649,15 @@
           }
         }
       ]
+    },
+    "dependabot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "secrets": {
+          "$ref": "#/$defs/ownedStringList"
+        }
+      }
     }
   }
 }
