@@ -101,7 +101,7 @@ Deno.test("environment plans identify owned members and collection mode without 
       environment: {
         name: "staging",
         variables: [{ name: "REGION", value: "environment-private-value" }],
-        secrets: ["DEPLOY_TOKEN"],
+        secrets: [{ name: "DEPLOY_TOKEN", source: "EXTERNAL_TOKEN" }],
       },
     },
     {
@@ -128,7 +128,7 @@ Deno.test("environment plans identify owned members and collection mode without 
 
 Deno.test("repository value plans show names without runtime values", () => {
   const rendered = render([
-    { type: "set-actions-secret", secret: "TOKEN" },
+    { type: "set-actions-secret", secret: { name: "TOKEN", source: "SOURCE_TOKEN" } },
     {
       type: "set-actions-variable",
       variable: { name: "REGION", value: "repository-private-value" },
