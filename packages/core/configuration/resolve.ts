@@ -86,17 +86,17 @@ export async function resolveDesiredState(
     ...(template.repository?.actions && {
       actions: normalizeActions(template.repository.actions),
     }),
-    ...(template.rulesets && {
-      rulesets: template.rulesets.map(normalizeRuleset),
+    ...(template.repository.rulesets && {
+      rulesets: template.repository.rulesets.map(normalizeRuleset),
     }),
-    ...(template.environments && {
-      environments: template.environments.map((environment) =>
+    ...(template.repository.environments && {
+      environments: template.repository.environments.map((environment) =>
         normalizeEnvironment(environment, values)
       ),
     }),
-    ...(template.files && {
+    ...(template.repository.files && {
       files: await Promise.all(
-        Object.entries(template.files).map(async ([path, file]) => {
+        Object.entries(template.repository.files).map(async ([path, file]) => {
           if (file.ensure === "absent") {
             return { path, ensure: "absent" } satisfies DesiredFile;
           }
