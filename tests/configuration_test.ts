@@ -353,21 +353,24 @@ for (
         [
           "version: 1",
           "organization: example-org",
-          "scope:",
-          "  names:",
-          "    - sample",
+          "repositories:",
+          "  scope:",
+          "    names:",
+          "      - sample",
           "",
         ].join("\n"),
       );
       await Deno.writeTextFile(
         join(root, "templates", "sample.yml"),
         [
+          "kind: repository",
           "match:",
           "  names:",
           "    - sample",
-          "rulesets:",
-          "  - name: policy",
-          "    target: " +
+          "repository:",
+          "  rulesets:",
+          "    - name: policy",
+          "      target: " +
           (testCase.rule[0].includes("max_file") ? "push" : "branch"),
           "      enforcement: active",
           ...(testCase.rule[0].includes("max_file") ? [] : [
@@ -377,7 +380,7 @@ for (
             "            - ~DEFAULT_BRANCH",
           ]),
           "      rules:",
-          ...testCase.rule.map((line) => "  " + line),
+          ...testCase.rule.map((line) => "      " + line),
           "",
         ].join("\n"),
       );
