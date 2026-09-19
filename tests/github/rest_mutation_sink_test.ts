@@ -555,7 +555,7 @@ Deno.test("Actions secrets are sealed with GitHub's public key", async () => {
 
   await sink.apply("sample", {
     type: "set-actions-secret",
-    secret: "TOKEN",
+    secret: { name: "TOKEN", source: "SOURCE_TOKEN" },
   });
 
   const request = client.requests.find((item) =>
@@ -595,7 +595,7 @@ Deno.test("Dependabot secrets are sealed with GitHub's public key", async () => 
 
   await sink.apply("sample", {
     type: "set-dependabot-secret",
-    secret: "TOKEN",
+    secret: { name: "TOKEN", source: "SOURCE_TOKEN" },
   });
 
   const request = client.requests.find((item) =>
