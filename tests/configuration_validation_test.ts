@@ -7,7 +7,11 @@ const configuration = {
   organization: "acme",
   repositories: { scope: { names: ["sample"] } },
 };
-const template = { kind: "repository", match: { names: ["*"] }, repository: {} };
+const template = {
+  kind: "repository",
+  match: { names: ["*"] },
+  repository: {},
+};
 
 Deno.test("configuration rejects misspelled scope selectors", async () => {
   await withConfiguration(
@@ -30,7 +34,11 @@ Deno.test("configuration rejects an empty scope", async () => {
     { ...configuration, repositories: { scope: {} } },
     template,
     (root) =>
-      assertRejects(() => loadConfigurationDirectory(root), Error, "/repositories/scope"),
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "/repositories/scope",
+      ),
   );
 });
 
