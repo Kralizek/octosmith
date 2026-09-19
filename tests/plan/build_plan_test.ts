@@ -64,15 +64,15 @@ Deno.test("buildPlan reconciles a mixed desired state", () => {
         value: "critical",
       },
       {
+        type: "set-actions-variable",
+        variable: { name: "REGION", value: "north" },
+      },
+      {
         type: "set-team-permission",
         permission: {
           team: "platform",
           permission: { kind: "built-in", name: "maintain" },
         },
-      },
-      {
-        type: "set-actions-variable",
-        variable: { name: "REGION", value: "north" },
       },
       {
         type: "update-file",
