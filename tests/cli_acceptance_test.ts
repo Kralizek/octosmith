@@ -916,7 +916,9 @@ async function configurationDirectory(
       : [
         "version: 1",
         "organization: acme",
-        'repositories: { scope: { names: ["*"] } }',
+        "repositories:",
+        "  scope:",
+        '    names: ["*"]',
         ...(collections
           ? [
             "  settings:",
