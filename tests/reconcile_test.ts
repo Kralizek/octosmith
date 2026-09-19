@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import type {
   CurrentState,
   LoadedConfiguration,
@@ -17,6 +17,7 @@ import { currentRepositorySettings } from "./plan/fixtures.ts";
 
 class FakeRuntime implements ReconciliationRuntime {
   readonly applied: Plan[] = [];
+  readonly discoveredTargets: (string | undefined)[] = [];
 
   constructor(
     readonly repositories: readonly RepositoryMetadata[],
@@ -24,7 +25,8 @@ class FakeRuntime implements ReconciliationRuntime {
     readonly discoveryFailures: readonly RepositoryDiscoveryFailure[] = [],
   ) {}
 
-  discover(_loaded: LoadedConfiguration) {
+  discover(_loaded: LoadedConfiguration, repository?: string) {
+    this.discoveredTargets.push(repository);
     return Promise.resolve({
       repositories: this.repositories,
       failures: this.discoveryFailures,
@@ -70,6 +72,24 @@ class FakeRuntime implements ReconciliationRuntime {
     });
   }
 }
+
+Deno.test("reconcile rejects an empty repository target before discovery", async () => {
+  const runtime = new FakeRuntime([]);
+
+  await assertRejects(
+    () =>
+      reconcile(runtime, {
+        path: "configuration-is-not-loaded",
+        mode: "apply",
+        repository: "",
+      }),
+    Error,
+    "Repository target must not be empty",
+  );
+
+  assertEquals(runtime.discoveredTargets, []);
+  assertEquals(runtime.applied, []);
+});
 
 Deno.test("reconcile plan builds reports without applying", async () => {
   const root = await configurationDirectory();

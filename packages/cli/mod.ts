@@ -96,6 +96,8 @@ export async function main(
   options: CliExecutionOptions = {},
 ): Promise<number> {
   try {
+    // Cliffy 1.2.1 treats "" as an omitted optional positional argument before
+    // invoking custom argument types or value handlers, so inspect raw argv.
     if (hasExplicitEmptyRepositoryTarget(args)) {
       throw new Error("Repository target must not be empty");
     }
