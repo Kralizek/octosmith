@@ -197,10 +197,15 @@ function planActionsSecrets(
     return;
   }
 
-  assertUnique(desired.actions.secrets, "Actions secret");
+  assertUnique(
+    desired.actions.secrets.map((secret) => secret.name),
+    "Actions secret",
+  );
 
   if (collections === "strict") {
-    const desiredNames = new Set(desired.actions.secrets);
+    const desiredNames = new Set(
+      desired.actions.secrets.map((secret) => secret.name),
+    );
 
     for (const secret of current.actions.secrets) {
       if (!desiredNames.has(secret)) {
@@ -278,10 +283,15 @@ function planDependabot(
     return;
   }
 
-  assertUnique(desired.dependabot.secrets, "Dependabot secret");
+  assertUnique(
+    desired.dependabot.secrets.map((secret) => secret.name),
+    "Dependabot secret",
+  );
 
   if (collections === "strict") {
-    const desiredNames = new Set(desired.dependabot.secrets);
+    const desiredNames = new Set(
+      desired.dependabot.secrets.map((secret) => secret.name),
+    );
 
     for (const secret of current.dependabot.secrets) {
       if (!desiredNames.has(secret)) {
@@ -369,7 +379,10 @@ function planEnvironments(
 
   for (const environment of desired.environments) {
     if (environment.secrets !== undefined) {
-      assertUnique(environment.secrets, "environment secret");
+      assertUnique(
+        environment.secrets.map((secret) => secret.name),
+        "environment secret",
+      );
     }
 
     if (environment.variables !== undefined) {
@@ -1070,7 +1083,7 @@ function environmentNeedsUpdate(
 
 function materializeEnvironment(
   desired: DesiredEnvironment,
-): Environment {
+): DesiredEnvironment {
   return {
     name: desired.name,
     secrets: desired.secrets ?? [],
