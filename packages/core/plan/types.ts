@@ -1,6 +1,6 @@
 import type {
   CollectionReconciliationMode,
-  Environment,
+  DesiredSecret,
   SecretName,
   TeamPermission,
   Variable,
@@ -85,7 +85,7 @@ export interface RemoveActionsVariableOperation {
 
 export interface SetActionsSecretOperation {
   readonly type: "set-actions-secret";
-  readonly secret: SecretName;
+  readonly secret: DesiredSecret;
 }
 
 export interface RemoveActionsSecretOperation {
@@ -95,7 +95,7 @@ export interface RemoveActionsSecretOperation {
 
 export interface SetDependabotSecretOperation {
   readonly type: "set-dependabot-secret";
-  readonly secret: SecretName;
+  readonly secret: DesiredSecret;
 }
 
 export interface RemoveDependabotSecretOperation {
@@ -122,7 +122,7 @@ export interface DeleteRulesetOperation {
 
 export interface CreateEnvironmentOperation {
   readonly type: "create-environment";
-  readonly environment: Environment;
+  readonly environment: DesiredEnvironment;
 }
 
 export interface UpdateEnvironmentOperation {
