@@ -25,7 +25,8 @@ export async function readCurrentState(
     desired.customProperties !== undefined
       ? source.getCustomProperties(repository)
       : Promise.resolve({}),
-    desired.actions !== undefined && hasActionsPermissionSettings(desired.actions)
+    desired.actions !== undefined &&
+      hasActionsPermissionSettings(desired.actions)
       ? source.getActionsSettings(repository)
       : defaultActionsPermissionSettings(),
     desired.actions?.oidc !== undefined
