@@ -63,7 +63,7 @@ Deno.test("structured reports omit runtime values and file contents", () => {
             name: "ENDPOINT",
             value: "environment-private-value",
           }],
-          secrets: ["TOKEN"],
+          secrets: [{ name: "TOKEN", source: "SOURCE_TOKEN" }],
         },
       },
       {
