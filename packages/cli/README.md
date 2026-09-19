@@ -12,9 +12,10 @@ either reports or applies the resulting operations.
 Set `GITHUB_TOKEN` to a token with the GitHub permissions required by the
 configuration being reconciled.
 
-Runtime values for declared repository and environment variables and secrets are
-also read from environment variables with the same name. Their values are not
-stored in OctoSmith configuration.
+Runtime values for Actions variables, Actions secrets, Dependabot secrets, and
+environment values can be read from process environment variables. Variables can
+also declare literal values in configuration. Secret values are never stored in
+OctoSmith configuration.
 
 ## Configuration directory
 
@@ -163,24 +164,33 @@ deletion. Files are deleted only when explicitly configured with
 
 ## Secrets and runtime values
 
-Variable values and secret values come from the process environment.
+Variables support three forms:
 
 ```yaml
-kind: repository
-
-match:
-  names: ["service-*"]
-
-repository:
-  variables:
-    - REGION
-
-  secrets:
-    - DEPLOY_TOKEN
+variables:
+  - VARIABLE_NAME
+  - from: EXTERNAL_VARIABLE_NAME
+    to: IMPORTED_VARIABLE_NAME
+  - name: VARIABLE_NAME
+    value: "some value"
 ```
 
-Running the command requires environment variables named `REGION` and
-`DEPLOY_TOKEN` when those values are needed.
+A bare name reads the process environment variable with the same name. `from`
+and `to` read one environment variable and publish it to GitHub under another
+name. The `name` / `value` form configures a literal variable value.
+
+Secrets support the same bare-name and rename forms, but never a literal value:
+
+```yaml
+secrets:
+  - SECRET_NAME
+  - from: EXTERNAL_SECRET_NAME
+    to: IMPORTED_SECRET_NAME
+```
+
+These forms apply consistently to Actions values, Dependabot secrets, and
+environment values. Actions and Dependabot secrets remain separate GitHub secret
+stores even when they share the same runtime source.
 
 Secret values are resolved and snapshotted before any mutation for that
 repository. If a required secret value is missing, no operation for that

@@ -47,10 +47,9 @@ export function buildPlan(
 
   planRepositorySettings(current, desired, operations);
   planCustomProperties(current, desired, operations, collections);
-  planActions(current, desired, operations);
+  planActions(current, desired, operations, collections);
+  planDependabot(current, desired, operations, collections);
   planTeams(current, desired, operations, collections);
-  planRepositorySecrets(current, desired, operations, collections);
-  planRepositoryVariables(current, desired, operations, collections);
   planRulesets(current, desired, operations, collections);
   planEnvironments(current, desired, operations, collections);
   planFiles(current, desired, operations);
@@ -119,6 +118,7 @@ function planActions(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  collections: CollectionReconciliationMode,
 ): void {
   if (!desired.actions) {
     return;
@@ -143,6 +143,9 @@ function planActions(
       });
     }
   }
+
+  planActionsSecrets(current, desired, operations, collections);
+  planActionsVariables(current, desired, operations, collections);
 }
 
 function planTeams(
@@ -184,25 +187,30 @@ function planTeams(
   }
 }
 
-function planRepositorySecrets(
+function planActionsSecrets(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
   collections: CollectionReconciliationMode,
 ): void {
-  if (desired.secrets === undefined) {
+  if (desired.actions?.secrets === undefined) {
     return;
   }
 
-  assertUnique(desired.secrets, "repository secret");
+  assertUnique(
+    desired.actions.secrets.map((secret) => secret.name),
+    "Actions secret",
+  );
 
   if (collections === "strict") {
-    const desiredNames = new Set(desired.secrets);
+    const desiredNames = new Set(
+      desired.actions.secrets.map((secret) => secret.name),
+    );
 
-    for (const secret of current.secrets) {
+    for (const secret of current.actions.secrets) {
       if (!desiredNames.has(secret)) {
         operations.push({
-          type: "remove-repository-secret",
+          type: "remove-actions-secret",
           secret,
         });
       }
@@ -211,36 +219,38 @@ function planRepositorySecrets(
 
   // GitHub exposes secret names but never values, so declared secrets must be
   // written on every reconciliation to guarantee their desired runtime value.
-  for (const secret of desired.secrets) {
+  for (const secret of desired.actions.secrets) {
     operations.push({
-      type: "set-repository-secret",
+      type: "set-actions-secret",
       secret,
     });
   }
 }
 
-function planRepositoryVariables(
+function planActionsVariables(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
   collections: CollectionReconciliationMode,
 ): void {
-  if (desired.variables === undefined) {
+  if (desired.actions?.variables === undefined) {
     return;
   }
 
   assertUnique(
-    desired.variables.map((item) => item.name),
-    "repository variable",
+    desired.actions.variables.map((item) => item.name),
+    "Actions variable",
   );
 
   if (collections === "strict") {
-    const desiredNames = new Set(desired.variables.map((item) => item.name));
+    const desiredNames = new Set(
+      desired.actions.variables.map((item) => item.name),
+    );
 
-    for (const variable of current.variables) {
+    for (const variable of current.actions.variables) {
       if (!desiredNames.has(variable.name)) {
         operations.push({
-          type: "remove-repository-variable",
+          type: "remove-actions-variable",
           name: variable.name,
         });
       }
@@ -248,18 +258,56 @@ function planRepositoryVariables(
   }
 
   const currentByName = new Map(
-    current.variables.map((item) => [item.name, item]),
+    current.actions.variables.map((item) => [item.name, item]),
   );
 
-  for (const variable of desired.variables) {
+  for (const variable of desired.actions.variables) {
     const actual = currentByName.get(variable.name);
 
     if (!actual || actual.value !== variable.value) {
       operations.push({
-        type: "set-repository-variable",
+        type: "set-actions-variable",
         variable,
       });
     }
+  }
+}
+
+function planDependabot(
+  current: CurrentState,
+  desired: DesiredState,
+  operations: Operation[],
+  collections: CollectionReconciliationMode,
+): void {
+  if (desired.dependabot?.secrets === undefined) {
+    return;
+  }
+
+  assertUnique(
+    desired.dependabot.secrets.map((secret) => secret.name),
+    "Dependabot secret",
+  );
+
+  if (collections === "strict") {
+    const desiredNames = new Set(
+      desired.dependabot.secrets.map((secret) => secret.name),
+    );
+
+    for (const secret of current.dependabot.secrets) {
+      if (!desiredNames.has(secret)) {
+        operations.push({
+          type: "remove-dependabot-secret",
+          secret,
+        });
+      }
+    }
+  }
+
+  for (const secret of desired.dependabot.secrets) {
+    operations.push({
+      type: "set-dependabot-secret",
+      secret,
+    });
   }
 }
 
@@ -331,7 +379,10 @@ function planEnvironments(
 
   for (const environment of desired.environments) {
     if (environment.secrets !== undefined) {
-      assertUnique(environment.secrets, "environment secret");
+      assertUnique(
+        environment.secrets.map((secret) => secret.name),
+        "environment secret",
+      );
     }
 
     if (environment.variables !== undefined) {
@@ -1032,7 +1083,7 @@ function environmentNeedsUpdate(
 
 function materializeEnvironment(
   desired: DesiredEnvironment,
-): Environment {
+): DesiredEnvironment {
   return {
     name: desired.name,
     secrets: desired.secrets ?? [],

@@ -528,7 +528,7 @@ class SecretClient implements GitHubClient {
     path: string,
     _query: Readonly<Record<string, GitHubQueryValue>> = {},
   ): Promise<T> {
-    if (path.endsWith("/actions/secrets/public-key")) {
+    if (path.endsWith("/secrets/public-key")) {
       return Promise.resolve({
         key_id: "key-1",
         key: this.publicKey,
@@ -539,7 +539,7 @@ class SecretClient implements GitHubClient {
   }
 }
 
-Deno.test("repository secrets are sealed with GitHub's public key", async () => {
+Deno.test("Actions secrets are sealed with GitHub's public key", async () => {
   await sodium.ready;
   const keyPair = sodium.crypto_box_keypair();
   const publicKey = sodium.to_base64(
@@ -554,12 +554,52 @@ Deno.test("repository secrets are sealed with GitHub's public key", async () => 
   });
 
   await sink.apply("sample", {
-    type: "set-repository-secret",
-    secret: "TOKEN",
+    type: "set-actions-secret",
+    secret: { name: "TOKEN", source: "SOURCE_TOKEN" },
   });
 
   const request = client.requests.find((item) =>
     item.method === "PUT" && item.path.endsWith("/actions/secrets/TOKEN")
+  );
+  const body = request?.body as {
+    encrypted_value: string;
+    key_id: string;
+  };
+  const encrypted = sodium.from_base64(
+    body.encrypted_value,
+    sodium.base64_variants.ORIGINAL,
+  );
+  const decrypted = sodium.crypto_box_seal_open(
+    encrypted,
+    keyPair.publicKey,
+    keyPair.privateKey,
+  );
+
+  assertEquals(body.key_id, "key-1");
+  assertEquals(sodium.to_string(decrypted), "super-secret");
+});
+
+Deno.test("Dependabot secrets are sealed with GitHub's public key", async () => {
+  await sodium.ready;
+  const keyPair = sodium.crypto_box_keypair();
+  const publicKey = sodium.to_base64(
+    keyPair.publicKey,
+    sodium.base64_variants.ORIGINAL,
+  );
+  const client = new SecretClient(publicKey);
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "super-secret",
+  });
+
+  await sink.apply("sample", {
+    type: "set-dependabot-secret",
+    secret: { name: "TOKEN", source: "SOURCE_TOKEN" },
+  });
+
+  const request = client.requests.find((item) =>
+    item.method === "PUT" && item.path.endsWith("/dependabot/secrets/TOKEN")
   );
   const body = request?.body as {
     encrypted_value: string;

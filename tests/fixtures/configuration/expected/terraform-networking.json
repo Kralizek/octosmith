@@ -22,12 +22,6 @@
       }
     }
   ],
-  "variables": [
-    {
-      "name": "INFRASTRUCTURE_REGION",
-      "value": "INFRASTRUCTURE_REGION-value"
-    }
-  ],
   "rulesets": [
     {
       "name": "protect-default-branch",
@@ -57,5 +51,13 @@
       ]
     }
   ],
-  "collections": "explicit"
+  "collections": "explicit",
+  "actions": {
+    "variables": [
+      {
+        "name": "INFRASTRUCTURE_REGION",
+        "value": "INFRASTRUCTURE_REGION-value"
+      }
+    ]
+  }
 }

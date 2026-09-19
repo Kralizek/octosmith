@@ -85,12 +85,15 @@ function operationDetails(operation: Operation): Record<string, unknown> {
       };
     case "remove-team-permission":
       return { team: operation.team };
-    case "set-repository-variable":
+    case "set-actions-variable":
       return { name: operation.variable.name, value: "[redacted]" };
-    case "remove-repository-variable":
+    case "remove-actions-variable":
       return { name: operation.name };
-    case "set-repository-secret":
-    case "remove-repository-secret":
+    case "set-actions-secret":
+    case "set-dependabot-secret":
+      return { name: operation.secret.name };
+    case "remove-actions-secret":
+    case "remove-dependabot-secret":
       return { name: operation.secret };
     case "create-ruleset":
       return { ruleset: operation.ruleset };
@@ -112,7 +115,7 @@ function operationDetails(operation: Operation): Record<string, unknown> {
           })),
         }),
         ...(operation.environment.secrets !== undefined && {
-          secrets: operation.environment.secrets,
+          secrets: operation.environment.secrets.map((secret) => secret.name),
         }),
       };
     case "delete-environment":

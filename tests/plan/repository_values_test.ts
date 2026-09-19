@@ -2,48 +2,55 @@ import { assertEquals, assertThrows } from "@std/assert";
 import { buildPlan } from "../../packages/core/mod.ts";
 import { currentState } from "./fixtures.ts";
 
-Deno.test("repository secrets are always set because values are opaque", () => {
+Deno.test("Actions secrets are always set because values are opaque", () => {
   assertEquals(
-    buildPlan(currentState({ secrets: ["TOKEN"] }), {
+    buildPlan(currentState({ actions: { secrets: ["TOKEN"] } }), {
       repository: "sample",
       template: "code",
-      secrets: ["TOKEN"],
+      actions: { secrets: [{ name: "TOKEN", source: "TOKEN" }] },
     }),
     {
       repository: "sample",
-      operations: [{ type: "set-repository-secret", secret: "TOKEN" }],
+      operations: [{
+        type: "set-actions-secret",
+        secret: { name: "TOKEN", source: "TOKEN" },
+      }],
     },
   );
 });
 
-Deno.test("repository variables only set when missing or changed", () => {
+Deno.test("Actions variables only set when missing or changed", () => {
   assertEquals(
     buildPlan(
       currentState({
-        variables: [
-          { name: "SAME", value: "1" },
-          { name: "CHANGE", value: "old" },
-        ],
+        actions: {
+          variables: [
+            { name: "SAME", value: "1" },
+            { name: "CHANGE", value: "old" },
+          ],
+        },
       }),
       {
         repository: "sample",
         template: "code",
-        variables: [
-          { name: "SAME", value: "1" },
-          { name: "CHANGE", value: "new" },
-          { name: "ADD", value: "x" },
-        ],
+        actions: {
+          variables: [
+            { name: "SAME", value: "1" },
+            { name: "CHANGE", value: "new" },
+            { name: "ADD", value: "x" },
+          ],
+        },
       },
     ),
     {
       repository: "sample",
       operations: [
         {
-          type: "set-repository-variable",
+          type: "set-actions-variable",
           variable: { name: "CHANGE", value: "new" },
         },
         {
-          type: "set-repository-variable",
+          type: "set-actions-variable",
           variable: { name: "ADD", value: "x" },
         },
       ],
@@ -51,57 +58,130 @@ Deno.test("repository variables only set when missing or changed", () => {
   );
 });
 
-Deno.test("strict repository values remove undeclared names", () => {
+Deno.test("strict Actions values remove undeclared names", () => {
   const current = currentState({
-    secrets: ["KEEP", "REMOVE"],
-    variables: [
-      { name: "KEEP", value: "same" },
-      { name: "REMOVE", value: "old" },
-    ],
+    actions: {
+      secrets: ["KEEP", "REMOVE"],
+      variables: [
+        { name: "KEEP", value: "same" },
+        { name: "REMOVE", value: "old" },
+      ],
+    },
   });
   const desired = {
     repository: "sample",
     template: "code",
-    secrets: ["KEEP"],
-    variables: [{ name: "KEEP", value: "same" }],
+    actions: {
+      secrets: [{ name: "KEEP", source: "KEEP" }],
+      variables: [{ name: "KEEP", value: "same" }],
+    },
   } as const;
 
   assertEquals(buildPlan(current, desired), {
     repository: "sample",
-    operations: [{ type: "set-repository-secret", secret: "KEEP" }],
+    operations: [{
+      type: "set-actions-secret",
+      secret: { name: "KEEP", source: "KEEP" },
+    }],
   });
   assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
-      { type: "remove-repository-secret", secret: "REMOVE" },
-      { type: "set-repository-secret", secret: "KEEP" },
-      { type: "remove-repository-variable", name: "REMOVE" },
+      { type: "remove-actions-secret", secret: "REMOVE" },
+      { type: "set-actions-secret", secret: { name: "KEEP", source: "KEEP" } },
+      { type: "remove-actions-variable", name: "REMOVE" },
     ],
   });
 });
 
-Deno.test("repository values reject duplicate desired names", () => {
+Deno.test("Dependabot secrets are independent from Actions secrets", () => {
+  const current = currentState({
+    actions: { secrets: ["SHARED"] },
+    dependabot: { secrets: ["SHARED", "REMOVE"] },
+  });
+  const desired = {
+    repository: "sample",
+    template: "code",
+    actions: { secrets: [{ name: "SHARED", source: "ACTIONS_SHARED" }] },
+    dependabot: {
+      secrets: [{ name: "SHARED", source: "DEPENDABOT_SHARED" }],
+    },
+  } as const;
+
+  assertEquals(buildPlan(current, desired), {
+    repository: "sample",
+    operations: [
+      {
+        type: "set-actions-secret",
+        secret: { name: "SHARED", source: "ACTIONS_SHARED" },
+      },
+      {
+        type: "set-dependabot-secret",
+        secret: { name: "SHARED", source: "DEPENDABOT_SHARED" },
+      },
+    ],
+  });
+
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
+    repository: "sample",
+    operations: [
+      {
+        type: "set-actions-secret",
+        secret: { name: "SHARED", source: "ACTIONS_SHARED" },
+      },
+      { type: "remove-dependabot-secret", secret: "REMOVE" },
+      {
+        type: "set-dependabot-secret",
+        secret: { name: "SHARED", source: "DEPENDABOT_SHARED" },
+      },
+    ],
+  });
+});
+
+Deno.test("Actions and Dependabot values reject duplicate desired names", () => {
   assertThrows(
     () =>
       buildPlan(currentState(), {
         repository: "sample",
         template: "code",
-        secrets: ["A", "A"],
+        actions: {
+          secrets: [
+            { name: "A", source: "FIRST" },
+            { name: "A", source: "SECOND" },
+          ],
+        },
       }),
     Error,
-    "Duplicate repository secret: A",
+    "Duplicate Actions secret: A",
   );
   assertThrows(
     () =>
       buildPlan(currentState(), {
         repository: "sample",
         template: "code",
-        variables: [
-          { name: "A", value: "1" },
-          { name: "A", value: "2" },
-        ],
+        actions: {
+          variables: [
+            { name: "A", value: "1" },
+            { name: "A", value: "2" },
+          ],
+        },
       }),
     Error,
-    "Duplicate repository variable: A",
+    "Duplicate Actions variable: A",
+  );
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        dependabot: {
+          secrets: [
+            { name: "A", source: "FIRST" },
+            { name: "A", source: "SECOND" },
+          ],
+        },
+      }),
+    Error,
+    "Duplicate Dependabot secret: A",
   );
 });

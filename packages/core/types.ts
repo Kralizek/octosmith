@@ -24,6 +24,11 @@ export type MergeMethod = "merge" | "squash" | "rebase";
 
 export type SecretName = string;
 
+export interface DesiredSecret {
+  readonly name: SecretName;
+  readonly source: string;
+}
+
 export interface Variable {
   readonly name: string;
   readonly value: string;

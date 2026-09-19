@@ -22,11 +22,11 @@ repository:
     - name: platform-team
       permission: maintain
 
-  secrets:
-    - REVIEW_BOT_TOKEN
-
-  variables:
-    - NOTIFICATION_CHANNEL_ID
+  actions:
+    secrets:
+      - REVIEW_BOT_TOKEN
+    variables:
+      - NOTIFICATION_CHANNEL_ID
 
   rulesets:
     - name: protect-default-branch

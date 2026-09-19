@@ -1,6 +1,7 @@
 import type {
   ActionsAllowedActions,
   BuiltInRepositoryPermission,
+  CurrentActionsOidcSettings,
   CurrentActionsSettings,
   CurrentFile,
   CurrentRepositorySettings,
@@ -119,7 +120,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
 
   async getActionsSettings(
     repository: string,
-  ): Promise<CurrentActionsSettings> {
+  ): Promise<Omit<CurrentActionsSettings, "oidc">> {
     const base = this.repo(repository) + "/actions";
     const permissions = await this.client.get<{
       readonly enabled: boolean;
@@ -135,16 +136,6 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       }>(base + "/permissions/selected-actions")
       : undefined;
 
-    const oidc = await this.client.request<
-      {
-        readonly use_default: boolean;
-        readonly include_claim_keys?: readonly string[];
-        readonly use_immutable_subject?: boolean;
-      } | undefined
-    >("GET", base + "/oidc/customization/sub", {
-      allowNotFound: true,
-    });
-
     return {
       enabled: permissions.enabled,
       allowedActions: mapAllowedActions(permissions.allowed_actions),
@@ -156,23 +147,40 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
           patternsAllowed: selected.patterns_allowed,
         },
       }),
-      oidc: oidc
-        ? {
-          subjectClaimTemplate: oidc.use_default
-            ? { source: "default" }
-            : oidc.include_claim_keys === undefined
-            ? { source: "organization" }
-            : {
-              source: "custom",
-              claims: oidc.include_claim_keys,
-            },
-          immutableSubject: oidc.use_immutable_subject ?? false,
-        }
-        : {
-          subjectClaimTemplate: { source: "default" },
-          immutableSubject: false,
-        },
     };
+  }
+
+  async getActionsOidcSettings(
+    repository: string,
+  ): Promise<CurrentActionsOidcSettings> {
+    const oidc = await this.client.request<
+      {
+        readonly use_default: boolean;
+        readonly include_claim_keys?: readonly string[];
+        readonly use_immutable_subject?: boolean;
+      } | undefined
+    >(
+      "GET",
+      this.repo(repository) + "/actions/oidc/customization/sub",
+      { allowNotFound: true },
+    );
+
+    return oidc
+      ? {
+        subjectClaimTemplate: oidc.use_default
+          ? { source: "default" }
+          : oidc.include_claim_keys === undefined
+          ? { source: "organization" }
+          : {
+            source: "custom",
+            claims: oidc.include_claim_keys,
+          },
+        immutableSubject: oidc.use_immutable_subject ?? false,
+      }
+      : {
+        subjectClaimTemplate: { source: "default" },
+        immutableSubject: false,
+      };
   }
 
   async getTeams(repository: string): Promise<readonly TeamPermission[]> {
@@ -189,7 +197,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     }));
   }
 
-  async getSecrets(repository: string): Promise<readonly SecretName[]> {
+  async getActionsSecrets(repository: string): Promise<readonly SecretName[]> {
     const secrets = await getAllWrappedPages<
       { readonly name: string }
     >(
@@ -201,7 +209,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     return secrets.map((secret) => secret.name);
   }
 
-  async getVariables(repository: string): Promise<readonly Variable[]> {
+  async getActionsVariables(repository: string): Promise<readonly Variable[]> {
     const variables = await getAllWrappedPages<
       {
         readonly name: string;
@@ -217,6 +225,20 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       name: variable.name,
       value: variable.value,
     }));
+  }
+
+  async getDependabotSecrets(
+    repository: string,
+  ): Promise<readonly SecretName[]> {
+    const secrets = await getAllWrappedPages<
+      { readonly name: string }
+    >(
+      this.client,
+      this.repo(repository) + "/dependabot/secrets",
+      "secrets",
+    );
+
+    return secrets.map((secret) => secret.name);
   }
 
   async getRulesets(repository: string): Promise<readonly CurrentRuleset[]> {

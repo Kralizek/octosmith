@@ -23,8 +23,9 @@ repository:
     - name: platform-team
       permission: maintain
 
-  variables:
-    - INFRASTRUCTURE_REGION
+  actions:
+    variables:
+      - INFRASTRUCTURE_REGION
 
   rulesets:
     - name: protect-default-branch

@@ -42,23 +42,6 @@ Deno.test("configuration rejects an empty scope", async () => {
   );
 });
 
-Deno.test("configuration rejects legacy top-level scope", async () => {
-  await withConfiguration(
-    {
-      version: 1,
-      organization: "acme",
-      scope: { names: ["sample"] },
-    },
-    template,
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "scope",
-      ),
-  );
-});
-
 Deno.test("configuration rejects missing template kind", async () => {
   await withConfiguration(
     configuration,
@@ -98,57 +81,47 @@ Deno.test("configuration rejects repository template without repository body", a
   );
 });
 
-Deno.test("configuration rejects legacy top-level repository resource fields", async () => {
+Deno.test("configuration accepts Actions and Dependabot value blocks", async () => {
   await withConfiguration(
     configuration,
     {
       kind: "repository",
       match: { names: ["*"] },
-      repository: {},
-      rulesets: [],
+      repository: {
+        actions: {
+          secrets: [
+            "DEPLOY_TOKEN",
+            { from: "EXTERNAL_TOKEN", to: "IMPORTED_TOKEN" },
+          ],
+          variables: [
+            "REGION",
+            { from: "EXTERNAL_REGION", to: "IMPORTED_REGION" },
+            { name: "STATIC_REGION", value: "eu-north-1" },
+          ],
+        },
+        dependabot: {
+          secrets: [
+            "NUGET_FEED_TOKEN",
+            { from: "EXTERNAL_NUGET_TOKEN", to: "IMPORTED_NUGET_TOKEN" },
+          ],
+        },
+        environments: [{
+          name: "production",
+          secrets: [
+            "DEPLOY_TOKEN",
+            { from: "EXTERNAL_ENV_TOKEN", to: "IMPORTED_ENV_TOKEN" },
+          ],
+          variables: [
+            "REGION",
+            { from: "EXTERNAL_ENV_REGION", to: "IMPORTED_ENV_REGION" },
+            { name: "STATIC_ENV_REGION", value: "eu-west-1" },
+          ],
+        }],
+      },
     },
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "rulesets",
-      ),
-  );
-});
-
-Deno.test("configuration rejects legacy top-level environments", async () => {
-  await withConfiguration(
-    configuration,
-    {
-      kind: "repository",
-      match: { names: ["*"] },
-      repository: {},
-      environments: [],
+    async (root) => {
+      await loadConfigurationDirectory(root);
     },
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "environments",
-      ),
-  );
-});
-
-Deno.test("configuration rejects legacy top-level files", async () => {
-  await withConfiguration(
-    configuration,
-    {
-      kind: "repository",
-      match: { names: ["*"] },
-      repository: {},
-      files: {},
-    },
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "files",
-      ),
   );
 });
 

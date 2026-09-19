@@ -44,28 +44,43 @@ export function currentRepositorySettings(
   };
 }
 
+type CurrentStateOverrides =
+  & Omit<Partial<CurrentState>, "actions" | "dependabot">
+  & {
+    readonly actions?: Partial<CurrentState["actions"]>;
+    readonly dependabot?: Partial<CurrentState["dependabot"]>;
+  };
+
 export function currentState(
-  overrides: Partial<CurrentState> = {},
+  overrides: CurrentStateOverrides = {},
 ): CurrentState {
+  const actions: CurrentState["actions"] = {
+    enabled: true,
+    allowedActions: "all",
+    shaPinningRequired: false,
+    oidc: {
+      subjectClaimTemplate: { source: "default" },
+      immutableSubject: false,
+    },
+    secrets: [],
+    variables: [],
+    ...overrides.actions,
+  };
+  const dependabot: CurrentState["dependabot"] = {
+    secrets: [],
+    ...overrides.dependabot,
+  };
+
   return {
     repository: "sample",
     settings: currentRepositorySettings(),
     customProperties: {},
-    actions: {
-      enabled: true,
-      allowedActions: "all",
-      shaPinningRequired: false,
-      oidc: {
-        subjectClaimTemplate: { source: "default" },
-        immutableSubject: false,
-      },
-    },
     teams: [],
-    secrets: [],
-    variables: [],
     rulesets: [],
     environments: [],
     files: [],
     ...overrides,
+    actions,
+    dependabot,
   };
 }

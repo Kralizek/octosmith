@@ -1,6 +1,6 @@
 import type {
   CollectionReconciliationMode,
-  Environment,
+  DesiredSecret,
   SecretName,
   TeamPermission,
   Variable,
@@ -26,10 +26,12 @@ export type Operation =
   | UpdateActionsOidcSettingsOperation
   | SetTeamPermissionOperation
   | RemoveTeamPermissionOperation
-  | SetRepositoryVariableOperation
-  | RemoveRepositoryVariableOperation
-  | SetRepositorySecretOperation
-  | RemoveRepositorySecretOperation
+  | SetActionsVariableOperation
+  | RemoveActionsVariableOperation
+  | SetActionsSecretOperation
+  | RemoveActionsSecretOperation
+  | SetDependabotSecretOperation
+  | RemoveDependabotSecretOperation
   | CreateRulesetOperation
   | UpdateRulesetOperation
   | DeleteRulesetOperation
@@ -71,23 +73,33 @@ export interface RemoveTeamPermissionOperation {
   readonly team: string;
 }
 
-export interface SetRepositoryVariableOperation {
-  readonly type: "set-repository-variable";
+export interface SetActionsVariableOperation {
+  readonly type: "set-actions-variable";
   readonly variable: Variable;
 }
 
-export interface RemoveRepositoryVariableOperation {
-  readonly type: "remove-repository-variable";
+export interface RemoveActionsVariableOperation {
+  readonly type: "remove-actions-variable";
   readonly name: string;
 }
 
-export interface SetRepositorySecretOperation {
-  readonly type: "set-repository-secret";
+export interface SetActionsSecretOperation {
+  readonly type: "set-actions-secret";
+  readonly secret: DesiredSecret;
+}
+
+export interface RemoveActionsSecretOperation {
+  readonly type: "remove-actions-secret";
   readonly secret: SecretName;
 }
 
-export interface RemoveRepositorySecretOperation {
-  readonly type: "remove-repository-secret";
+export interface SetDependabotSecretOperation {
+  readonly type: "set-dependabot-secret";
+  readonly secret: DesiredSecret;
+}
+
+export interface RemoveDependabotSecretOperation {
+  readonly type: "remove-dependabot-secret";
   readonly secret: SecretName;
 }
 
@@ -110,7 +122,7 @@ export interface DeleteRulesetOperation {
 
 export interface CreateEnvironmentOperation {
   readonly type: "create-environment";
-  readonly environment: Environment;
+  readonly environment: DesiredEnvironment;
 }
 
 export interface UpdateEnvironmentOperation {

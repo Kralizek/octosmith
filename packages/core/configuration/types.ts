@@ -47,9 +47,8 @@ export interface RepositoryConfiguration {
     Record<string, string | readonly string[] | null>
   >;
   readonly actions?: ActionsConfiguration;
+  readonly dependabot?: DependabotConfiguration;
   readonly teams?: readonly TeamPermissionConfiguration[];
-  readonly secrets?: readonly string[];
-  readonly variables?: readonly string[];
   readonly rulesets?: readonly RulesetConfiguration[];
   readonly environments?: readonly EnvironmentConfiguration[];
   readonly files?: Readonly<Record<string, FileConfiguration>>;
@@ -96,12 +95,36 @@ export interface SecurityAndAnalysisConfiguration {
   readonly secretScanningAiDetection?: SecurityFeatureStatus;
 }
 
+export type SecretConfiguration =
+  | string
+  | {
+    readonly from: string;
+    readonly to: string;
+  };
+
+export type VariableConfiguration =
+  | string
+  | {
+    readonly from: string;
+    readonly to: string;
+  }
+  | {
+    readonly name: string;
+    readonly value: string;
+  };
+
 export interface ActionsConfiguration {
+  readonly secrets?: readonly SecretConfiguration[];
+  readonly variables?: readonly VariableConfiguration[];
   readonly enabled?: boolean;
   readonly allowedActions?: "all" | "local_only" | "selected";
   readonly shaPinningRequired?: boolean;
   readonly selectedActions?: SelectedActionsConfiguration;
   readonly oidc?: ActionsOidcConfiguration;
+}
+
+export interface DependabotConfiguration {
+  readonly secrets?: readonly SecretConfiguration[];
 }
 
 export interface SelectedActionsConfiguration {
@@ -190,8 +213,8 @@ export interface RulesetRuleConfiguration {
 
 export interface EnvironmentConfiguration {
   readonly name: string;
-  readonly secrets?: readonly string[];
-  readonly variables?: readonly string[];
+  readonly secrets?: readonly SecretConfiguration[];
+  readonly variables?: readonly VariableConfiguration[];
 }
 
 export type FileConfiguration =

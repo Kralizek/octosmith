@@ -15,7 +15,7 @@ import type {
   DesiredMergeSettings,
   DesiredRepositorySettings,
 } from "../state/repository.ts";
-import type { DesiredActionsSettings } from "../state/resources.ts";
+import type { DesiredActions } from "../state/resources.ts";
 import type { DesiredRuleset, DesiredRulesetRule } from "../state/rulesets.ts";
 import type {
   DesiredEnvironment,
@@ -72,20 +72,18 @@ export async function resolveDesiredState(
     ...(template.repository?.teams && {
       teams: template.repository.teams.map(normalizeTeamPermission),
     }),
-    ...(template.repository?.secrets && {
-      secrets: template.repository.secrets,
-    }),
-    ...(template.repository?.variables && {
-      variables: template.repository.variables.map((name) => ({
-        name,
-        value: values(name),
-      })),
-    }),
     ...(template.repository?.customProperties && {
       customProperties: template.repository.customProperties,
     }),
-    ...(template.repository?.actions && {
-      actions: normalizeActions(template.repository.actions),
+    ...(template.repository.actions && {
+      actions: normalizeActions(template.repository.actions, values),
+    }),
+    ...(template.repository.dependabot && {
+      dependabot: {
+        ...(template.repository.dependabot.secrets !== undefined && {
+          secrets: template.repository.dependabot.secrets.map(normalizeSecret),
+        }),
+      },
     }),
     ...(template.repository.rulesets && {
       rulesets: template.repository.rulesets.map(normalizeRuleset),
@@ -278,8 +276,17 @@ function normalizeActions(
       ? NonNullable<Actions>
     : never
     : never,
-): DesiredActionsSettings {
+  values: RuntimeValueProvider,
+): DesiredActions {
   return {
+    ...(actions.secrets !== undefined && {
+      secrets: actions.secrets.map(normalizeSecret),
+    }),
+    ...(actions.variables !== undefined && {
+      variables: actions.variables.map((variable) =>
+        normalizeVariable(variable, values)
+      ),
+    }),
     ...(actions.enabled !== undefined && { enabled: actions.enabled }),
     ...(actions.allowedActions !== undefined && {
       allowedActions: actions.allowedActions === "local_only"
@@ -367,23 +374,46 @@ function camelizeRuleParameters(
 }
 
 function normalizeEnvironment(
-  environment: {
-    readonly name: string;
-    readonly secrets?: readonly string[];
-    readonly variables?: readonly string[];
-  },
+  environment: NonNullable<
+    RepositoryTemplate["repository"]["environments"]
+  >[number],
   values: RuntimeValueProvider,
 ): DesiredEnvironment {
   return {
     name: environment.name,
     ...(environment.secrets !== undefined && {
-      secrets: environment.secrets,
+      secrets: environment.secrets.map(normalizeSecret),
     }),
     ...(environment.variables !== undefined && {
-      variables: environment.variables.map((name) => ({
-        name,
-        value: values(name),
-      })),
+      variables: environment.variables.map((variable) =>
+        normalizeVariable(variable, values)
+      ),
     }),
   };
+}
+
+function normalizeSecret(
+  secret: string | { readonly from: string; readonly to: string },
+) {
+  return typeof secret === "string"
+    ? { name: secret, source: secret }
+    : { name: secret.to, source: secret.from };
+}
+
+function normalizeVariable(
+  variable:
+    | string
+    | { readonly from: string; readonly to: string }
+    | { readonly name: string; readonly value: string },
+  values: RuntimeValueProvider,
+) {
+  if (typeof variable === "string") {
+    return { name: variable, value: values(variable) };
+  }
+
+  if ("from" in variable) {
+    return { name: variable.to, value: values(variable.from) };
+  }
+
+  return { name: variable.name, value: variable.value };
 }

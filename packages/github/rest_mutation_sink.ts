@@ -37,11 +37,14 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   ): RepositoryMutationSink {
     const names = new Set(operations.flatMap((operation) => {
       switch (operation.type) {
-        case "set-repository-secret":
-          return [operation.secret];
+        case "set-actions-secret":
+        case "set-dependabot-secret":
+          return [operation.secret.source];
         case "create-environment":
         case "update-environment":
-          return operation.environment.secrets ?? [];
+          return (operation.environment.secrets ?? []).map((secret) =>
+            secret.source
+          );
         default:
           return [];
       }
@@ -113,26 +116,41 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
             encodeURIComponent(repository),
         );
         return;
-      case "set-repository-variable":
-        await this.setRepositoryVariable(repository, operation.variable);
+      case "set-actions-variable":
+        await this.setActionsVariable(repository, operation.variable);
         return;
-      case "remove-repository-variable":
+      case "remove-actions-variable":
         await this.#client.request(
           "DELETE",
           this.repo(repository) + "/actions/variables/" +
             encodeURIComponent(operation.name),
         );
         return;
-      case "set-repository-secret":
+      case "set-actions-secret":
         await this.setSecret(
           this.repo(repository) + "/actions/secrets",
-          operation.secret,
+          operation.secret.name,
+          operation.secret.source,
         );
         return;
-      case "remove-repository-secret":
+      case "remove-actions-secret":
         await this.#client.request(
           "DELETE",
           this.repo(repository) + "/actions/secrets/" +
+            encodeURIComponent(operation.secret),
+        );
+        return;
+      case "set-dependabot-secret":
+        await this.setSecret(
+          this.repo(repository) + "/dependabot/secrets",
+          operation.secret.name,
+          operation.secret.source,
+        );
+        return;
+      case "remove-dependabot-secret":
+        await this.#client.request(
+          "DELETE",
+          this.repo(repository) + "/dependabot/secrets/" +
             encodeURIComponent(operation.secret),
         );
         return;
@@ -325,7 +343,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     });
   }
 
-  async setRepositoryVariable(
+  async setActionsVariable(
     repository: string,
     variable: Variable,
   ): Promise<void> {
@@ -421,7 +439,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 
   async syncEnvironmentSecrets(
     base: string,
-    secrets: readonly string[],
+    secrets: readonly import("@octosmith/core").DesiredSecret[],
     collections: "explicit" | "strict",
   ): Promise<void> {
     const currentSecrets = await getAllWrappedPages<{
@@ -431,7 +449,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       base + "/secrets",
       "secrets",
     );
-    const desired = new Set(secrets);
+    const desired = new Set(secrets.map((secret) => secret.name));
 
     const removeUndeclared = collections === "strict" || secrets.length === 0;
 
@@ -445,17 +463,17 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     for (const secret of secrets) {
-      await this.setSecret(base + "/secrets", secret);
+      await this.setSecret(base + "/secrets", secret.name, secret.source);
     }
   }
 
-  async setSecret(base: string, name: string): Promise<void> {
+  async setSecret(base: string, name: string, source: string): Promise<void> {
     const publicKey = await this.#client.get<{
       readonly key_id: string;
       readonly key: string;
     }>(base + "/public-key");
     const encrypted = await encryptSecret(
-      this.#secretValue(name),
+      this.#secretValue(source),
       publicKey.key,
     );
 

@@ -436,7 +436,7 @@ Deno.test("partial apply skips later operations and continues with the next repo
     const rendered = output.join("\n");
     assertStringIncludes(rendered, "sample [code] — partially-applied");
     assertStringIncludes(rendered, "update-repository-settings — applied");
-    assertStringIncludes(rendered, "set-repository-variable — failed");
+    assertStringIncludes(rendered, "set-actions-variable — failed");
     assertStringIncludes(rendered, "create-file — skipped");
     assertStringIncludes(rendered, "z-next [code] — applied");
     assertStringIncludes(
@@ -531,7 +531,10 @@ Deno.test("CLI preflights repository secrets before strict cleanup and continues
     {
       code: {
         match: { names: ["sample"] },
-        repository: { settings: { has_issues: false }, secrets: ["NEW"] },
+        repository: {
+          settings: { has_issues: false },
+          actions: { secrets: ["NEW"] },
+        },
       },
       healthy: {
         match: { names: ["z-next"] },
@@ -633,7 +636,10 @@ Deno.test("CLI plan identifies strict deletion targets and changed settings", as
     {
       code: {
         match: { names: ["sample"] },
-        repository: { settings: { has_issues: false }, secrets: ["NEW"] },
+        repository: {
+          settings: { has_issues: false },
+          actions: { secrets: ["NEW"] },
+        },
         environments: [],
       },
     },
@@ -939,8 +945,9 @@ async function configurationDirectory(
       "repository:",
       "  settings:",
       "    has_issues: false",
-      "  variables:",
-      "    - DESIRED",
+      "  actions:",
+      "    variables:",
+      "      - DESIRED",
       "",
     ].join("\n"),
   );
@@ -1081,8 +1088,9 @@ async function secretConfigurationDirectory(): Promise<string> {
       "  names:",
       "    - sample",
       "repository:",
-      "  secrets:",
-      "    - TOKEN",
+      "  actions:",
+      "    secrets:",
+      "      - TOKEN",
       "",
     ].join("\n"),
   );
@@ -1114,8 +1122,9 @@ async function partialConfigurationDirectory(): Promise<string> {
       "repository:",
       "  settings:",
       "    has_issues: false",
-      "  variables:",
-      "    - DESIRED",
+      "  actions:",
+      "    variables:",
+      "      - DESIRED",
       "  files:",
       "    managed.txt:",
       "      ensure: exact",

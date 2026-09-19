@@ -1,3 +1,5 @@
+import type { DesiredSecret, SecretName, Variable } from "../types.ts";
+
 export type CustomPropertyValue =
   | string
   | readonly string[]
@@ -53,6 +55,24 @@ export interface DesiredActionsSettings {
   readonly shaPinningRequired?: boolean;
   readonly selectedActions?: DesiredSelectedActions;
   readonly oidc?: DesiredActionsOidcSettings;
+}
+
+export interface CurrentActions extends CurrentActionsSettings {
+  readonly secrets: readonly SecretName[];
+  readonly variables: readonly Variable[];
+}
+
+export interface DesiredActions extends DesiredActionsSettings {
+  readonly secrets?: readonly DesiredSecret[];
+  readonly variables?: readonly Variable[];
+}
+
+export interface CurrentDependabot {
+  readonly secrets: readonly SecretName[];
+}
+
+export interface DesiredDependabot {
+  readonly secrets?: readonly DesiredSecret[];
 }
 
 export interface CopilotEnabledTools {

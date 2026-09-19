@@ -11,10 +11,12 @@ export async function readCurrentState(
   const [
     settings,
     customProperties,
-    actions,
+    actionsSettings,
+    actionsOidc,
+    actionsSecrets,
+    actionsVariables,
+    dependabotSecrets,
     teams,
-    secrets,
-    variables,
     rulesets,
     environments,
     files,
@@ -23,17 +25,24 @@ export async function readCurrentState(
     desired.customProperties !== undefined
       ? source.getCustomProperties(repository)
       : Promise.resolve({}),
-    desired.actions !== undefined
+    desired.actions !== undefined &&
+      hasActionsPermissionSettings(desired.actions)
       ? source.getActionsSettings(repository)
-      : defaultActions(),
+      : defaultActionsPermissionSettings(),
+    desired.actions?.oidc !== undefined
+      ? source.getActionsOidcSettings(repository)
+      : defaultActionsOidcSettings(),
+    desired.actions?.secrets !== undefined
+      ? source.getActionsSecrets(repository)
+      : Promise.resolve([]),
+    desired.actions?.variables !== undefined
+      ? source.getActionsVariables(repository)
+      : Promise.resolve([]),
+    desired.dependabot?.secrets !== undefined
+      ? source.getDependabotSecrets(repository)
+      : Promise.resolve([]),
     desired.teams !== undefined
       ? source.getTeams(repository)
-      : Promise.resolve([]),
-    desired.secrets !== undefined
-      ? source.getSecrets(repository)
-      : Promise.resolve([]),
-    desired.variables !== undefined
-      ? source.getVariables(repository)
       : Promise.resolve([]),
     desired.rulesets !== undefined
       ? source.getRulesets(repository)
@@ -52,26 +61,40 @@ export async function readCurrentState(
       : strict
       ? customProperties
       : pickKeys(customProperties, Object.keys(desired.customProperties)),
-    actions,
+    actions: {
+      ...actionsSettings,
+      oidc: actionsOidc,
+      secrets: desired.actions?.secrets === undefined
+        ? []
+        : strict
+        ? actionsSecrets
+        : actionsSecrets.filter((name) =>
+          desired.actions?.secrets?.some((secret) => secret.name === name)
+        ),
+      variables: desired.actions?.variables === undefined
+        ? []
+        : strict
+        ? actionsVariables
+        : filterNamed(
+          actionsVariables,
+          desired.actions.variables.map((item) => item.name),
+          "name",
+        ),
+    },
+    dependabot: {
+      secrets: desired.dependabot?.secrets === undefined
+        ? []
+        : strict
+        ? dependabotSecrets
+        : dependabotSecrets.filter((name) =>
+          desired.dependabot?.secrets?.some((secret) => secret.name === name)
+        ),
+    },
     teams: desired.teams === undefined
       ? []
       : strict
       ? teams
       : filterNamed(teams, desired.teams.map((item) => item.team), "team"),
-    secrets: desired.secrets === undefined
-      ? []
-      : strict
-      ? secrets
-      : secrets.filter((name) => desired.secrets?.includes(name)),
-    variables: desired.variables === undefined
-      ? []
-      : strict
-      ? variables
-      : filterNamed(
-        variables,
-        desired.variables.map((item) => item.name),
-        "name",
-      ),
     rulesets: desired.rulesets === undefined
       ? []
       : strict
@@ -109,7 +132,9 @@ function filterSparseEnvironments(
         ? []
         : owned.secrets.length === 0
         ? environment.secrets
-        : environment.secrets.filter((name) => owned.secrets?.includes(name)),
+        : environment.secrets.filter((name) =>
+          owned.secrets?.some((secret) => secret.name === name)
+        ),
       variables: owned.variables === undefined
         ? []
         : owned.variables.length === 0
@@ -163,14 +188,29 @@ function filterNamed<T extends object>(
   );
 }
 
-function defaultActions(): CurrentState["actions"] {
+function hasActionsPermissionSettings(
+  actions: NonNullable<DesiredState["actions"]>,
+): boolean {
+  return actions.enabled !== undefined ||
+    actions.allowedActions !== undefined ||
+    actions.shaPinningRequired !== undefined ||
+    actions.selectedActions !== undefined;
+}
+
+function defaultActionsPermissionSettings(): Omit<
+  CurrentState["actions"],
+  "oidc" | "secrets" | "variables"
+> {
   return {
     enabled: false,
     allowedActions: "all",
     shaPinningRequired: false,
-    oidc: {
-      subjectClaimTemplate: { source: "default" },
-      immutableSubject: false,
-    },
+  };
+}
+
+function defaultActionsOidcSettings(): CurrentState["actions"]["oidc"] {
+  return {
+    subjectClaimTemplate: { source: "default" },
+    immutableSubject: false,
   };
 }

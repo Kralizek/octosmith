@@ -28,10 +28,14 @@ class FakeStateSource implements RepositoryStateSource {
       enabled: true,
       allowedActions: "all" as const,
       shaPinningRequired: false,
-      oidc: {
-        subjectClaimTemplate: { source: "default" as const },
-        immutableSubject: false,
-      },
+    });
+  }
+
+  getActionsOidcSettings(repository: string) {
+    this.calls.push("actions-oidc:" + repository);
+    return Promise.resolve({
+      subjectClaimTemplate: { source: "organization" as const },
+      immutableSubject: true,
     });
   }
 
@@ -49,17 +53,22 @@ class FakeStateSource implements RepositoryStateSource {
     ]);
   }
 
-  getSecrets(repository: string) {
-    this.calls.push("secrets:" + repository);
+  getActionsSecrets(repository: string) {
+    this.calls.push("actions-secrets:" + repository);
     return Promise.resolve(["OWNED", "EXTRA"]);
   }
 
-  getVariables(repository: string) {
-    this.calls.push("variables:" + repository);
+  getActionsVariables(repository: string) {
+    this.calls.push("actions-variables:" + repository);
     return Promise.resolve([
       { name: "OWNED", value: "1" },
       { name: "EXTRA", value: "2" },
     ]);
+  }
+
+  getDependabotSecrets(repository: string) {
+    this.calls.push("dependabot-secrets:" + repository);
+    return Promise.resolve(["OWNED_DEPENDABOT", "EXTRA_DEPENDABOT"]);
   }
 
   getRulesets(repository: string) {
@@ -117,24 +126,47 @@ Deno.test("current-state reader fetches only desired resource families", async (
     repository: "sample",
     template: "code",
     settings: { hasIssues: true },
-    variables: [{ name: "OWNED", value: "1" }],
+    actions: { variables: [{ name: "OWNED", value: "1" }] },
     files: [
       { path: "exists.txt", ensure: "exact", content: "desired" },
       { path: "missing.txt", ensure: "exists", content: "seed" },
     ],
   });
 
-  assertEquals(state.variables, [{ name: "OWNED", value: "1" }]);
+  assertEquals(state.actions.variables, [{ name: "OWNED", value: "1" }]);
   assertEquals(state.files, [{
     path: "exists.txt",
     content: "current",
     sha: "sha",
   }]);
   assertEquals(source.calls.sort(), [
+    "actions-variables:sample",
     "file:sample:exists.txt",
     "file:sample:missing.txt",
     "settings:sample",
-    "variables:sample",
+  ]);
+});
+
+Deno.test("OIDC-only ownership reads only the OIDC endpoint family", async () => {
+  const source = new FakeStateSource();
+
+  const state = await readCurrentState(source, {
+    repository: "sample",
+    template: "code",
+    actions: {
+      oidc: {
+        subjectClaimTemplate: { source: "organization" },
+      },
+    },
+  });
+
+  assertEquals(state.actions.oidc, {
+    subjectClaimTemplate: { source: "organization" },
+    immutableSubject: true,
+  });
+  assertEquals(source.calls.sort(), [
+    "actions-oidc:sample",
+    "settings:sample",
   ]);
 });
 
@@ -144,8 +176,8 @@ Deno.test("explicit current-state reading keeps only named owned members", async
 
   assertEquals(state.customProperties, { keep: "yes" });
   assertEquals(state.teams.map((item) => item.team), ["owned"]);
-  assertEquals(state.secrets, ["OWNED"]);
-  assertEquals(state.variables.map((item) => item.name), ["OWNED"]);
+  assertEquals(state.actions.secrets, ["OWNED"]);
+  assertEquals(state.actions.variables.map((item) => item.name), ["OWNED"]);
   assertEquals(state.rulesets.map((item) => item.name), ["owned"]);
   assertEquals(state.environments, [{
     name: "owned",
@@ -188,8 +220,15 @@ Deno.test("strict current-state reading preserves complete named collections", a
     extra: "preserve-only-in-strict",
   });
   assertEquals(state.teams.map((item) => item.team), ["owned", "extra"]);
-  assertEquals(state.secrets, ["OWNED", "EXTRA"]);
-  assertEquals(state.variables.map((item) => item.name), ["OWNED", "EXTRA"]);
+  assertEquals(state.actions.secrets, ["OWNED", "EXTRA"]);
+  assertEquals(
+    state.actions.variables.map((item) => item.name),
+    ["OWNED", "EXTRA"],
+  );
+  assertEquals(
+    state.dependabot.secrets,
+    ["OWNED_DEPENDABOT", "EXTRA_DEPENDABOT"],
+  );
   assertEquals(state.rulesets.map((item) => item.name), ["owned", "extra"]);
   assertEquals(
     state.environments.map((item) => item.name),
@@ -216,17 +255,22 @@ function fullDesired(): DesiredState {
     repository: "sample",
     template: "code",
     customProperties: { keep: "yes" },
-    actions: { enabled: true },
+    actions: {
+      enabled: true,
+      secrets: [{ name: "OWNED", source: "OWNED_SOURCE" }],
+      variables: [{ name: "OWNED", value: "1" }],
+    },
+    dependabot: {
+      secrets: [{ name: "OWNED_DEPENDABOT", source: "DEPENDABOT_SOURCE" }],
+    },
     teams: [{
       team: "owned",
       permission: { kind: "built-in", name: "pull" },
     }],
-    secrets: ["OWNED"],
-    variables: [{ name: "OWNED", value: "1" }],
     rulesets: [{ name: "owned" }],
     environments: [{
       name: "owned",
-      secrets: ["OWNED_SECRET"],
+      secrets: [{ name: "OWNED_SECRET", source: "ENV_SECRET_SOURCE" }],
       variables: [{ name: "OWNED_VARIABLE", value: "1" }],
     }],
   };

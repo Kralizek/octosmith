@@ -112,12 +112,6 @@
             "$ref": "#/$defs/teamPermission"
           }
         },
-        "secrets": {
-          "$ref": "#/$defs/ownedStringList"
-        },
-        "variables": {
-          "$ref": "#/$defs/ownedStringList"
-        },
         "custom_properties": {
           "type": "object",
           "additionalProperties": {
@@ -139,6 +133,9 @@
         },
         "actions": {
           "$ref": "#/$defs/actionsSettings"
+        },
+        "dependabot": {
+          "$ref": "#/$defs/dependabot"
         },
         "rulesets": {
           "type": "array",
@@ -487,10 +484,10 @@
           "minLength": 1
         },
         "secrets": {
-          "$ref": "#/$defs/ownedStringList"
+          "$ref": "#/$defs/secretList"
         },
         "variables": {
-          "$ref": "#/$defs/ownedStringList"
+          "$ref": "#/$defs/variableList"
         }
       }
     },
@@ -548,6 +545,12 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "secrets": {
+          "$ref": "#/$defs/secretList"
+        },
+        "variables": {
+          "$ref": "#/$defs/variableList"
+        },
         "enabled": {
           "type": "boolean"
         },
@@ -646,6 +649,96 @@
           }
         }
       ]
+    },
+    "dependabot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "secrets": {
+          "$ref": "#/$defs/secretList"
+        }
+      }
+    },
+    "secretBinding": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "to"
+          ],
+          "properties": {
+            "from": {
+              "type": "string",
+              "minLength": 1
+            },
+            "to": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "variableBinding": {
+      "oneOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "to"
+          ],
+          "properties": {
+            "from": {
+              "type": "string",
+              "minLength": 1
+            },
+            "to": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "value"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    },
+    "secretList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/secretBinding"
+      }
+    },
+    "variableList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variableBinding"
+      }
     }
   }
 }
