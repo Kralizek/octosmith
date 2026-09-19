@@ -539,7 +539,7 @@ async function safetyConfigurationDirectory(
       version: 1,
       organization: "acme",
       scope,
-      ...(collections && { reconciliation: { collections } }),
+      ...(collections && { settings: { collection_management: collections } }),
     }),
   );
   for (const [name, template] of Object.entries(templates)) {
@@ -738,7 +738,7 @@ async function configurationDirectory(
         "organization: acme",
         'scope: { names: ["*"] }',
         ...(collections
-          ? ["reconciliation:", "  collections: " + collections]
+          ? ["settings:", "  collection_management: " + collections]
           : []),
         "",
       ].join("\n"),
