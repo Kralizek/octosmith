@@ -371,7 +371,7 @@ Deno.test("rulesets and nested rules are sparse by default and authoritative in 
     }],
   });
 
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
       { type: "delete-ruleset", id: 2, name: "remove" },
