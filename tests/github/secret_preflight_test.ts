@@ -6,7 +6,7 @@ import {
   GitHubRepositoryMutationSink,
 } from "@octosmith/github";
 
-Deno.test("missing repository secret prevents all mutations including strict deletions", async () => {
+Deno.test("missing Actions secret prevents all mutations including strict deletions", async () => {
   const requests: string[] = [];
   const sink = missingSecretSink(requests);
   await assertRejects(
@@ -22,6 +22,27 @@ Deno.test("missing repository secret prevents all mutations including strict del
           { type: "set-actions-secret", secret: "NEW" },
         ],
       }, { continueOnError: true }),
+    Error,
+    "Missing environment value: NEW",
+  );
+  assertEquals(requests, []);
+});
+
+Deno.test("missing Dependabot secret prevents all mutations", async () => {
+  const requests: string[] = [];
+  await assertRejects(
+    () =>
+      applyPlan(missingSecretSink(requests), {
+        repository: "sample",
+        operations: [
+          {
+            type: "update-repository-settings",
+            settings: { hasIssues: false },
+          },
+          { type: "remove-dependabot-secret", secret: "OLD" },
+          { type: "set-dependabot-secret", secret: "NEW" },
+        ],
+      }),
     Error,
     "Missing environment value: NEW",
   );
@@ -115,6 +136,7 @@ Deno.test("secret values are snapshotted once per name before mutations", async 
     repository: "sample",
     operations: [
       { type: "set-actions-secret", secret: "SHARED" },
+      { type: "set-dependabot-secret", secret: "SHARED" },
       {
         type: "update-environment",
         collections: "explicit",
@@ -125,8 +147,9 @@ Deno.test("secret values are snapshotted once per name before mutations", async 
   assertEquals(result.operations.map((operation) => operation.status), [
     "applied",
     "applied",
+    "applied",
   ]);
-  assertEquals(written, ["snapshot-1", "snapshot-1"]);
+  assertEquals(written, ["snapshot-1", "snapshot-1", "snapshot-1"]);
   assertEquals(providerCalls, 1);
 });
 
