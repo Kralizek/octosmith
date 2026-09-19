@@ -2,7 +2,7 @@ import { assertEquals, assertThrows } from "@std/assert";
 import { buildPlan } from "../../packages/core/mod.ts";
 import { currentState } from "./fixtures.ts";
 
-Deno.test("teams add and update permissions without removing undeclared teams in sparse mode", () => {
+Deno.test("teams add and update permissions without removing undeclared teams in explicit mode", () => {
   const current = currentState({
     teams: [
       { team: "keep", permission: { kind: "built-in", name: "pull" } },
