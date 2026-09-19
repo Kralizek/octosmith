@@ -98,6 +98,50 @@ Deno.test("configuration rejects repository template without repository body", a
   );
 });
 
+Deno.test("configuration rejects legacy repository Actions values", async () => {
+  for (const repository of [
+    { secrets: ["TOKEN"] },
+    { variables: ["REGION"] },
+  ]) {
+    await withConfiguration(
+      configuration,
+      {
+        kind: "repository",
+        match: { names: ["*"] },
+        repository,
+      },
+      (root) =>
+        assertRejects(
+          () => loadConfigurationDirectory(root),
+          Error,
+          "/repository",
+        ),
+    );
+  }
+});
+
+Deno.test("configuration accepts Actions and Dependabot value blocks", async () => {
+  await withConfiguration(
+    configuration,
+    {
+      kind: "repository",
+      match: { names: ["*"] },
+      repository: {
+        actions: {
+          secrets: ["DEPLOY_TOKEN"],
+          variables: ["REGION"],
+        },
+        dependabot: {
+          secrets: ["NUGET_FEED_TOKEN"],
+        },
+      },
+    },
+    async (root) => {
+      await loadConfigurationDirectory(root);
+    },
+  );
+});
+
 Deno.test("configuration rejects legacy top-level repository resource fields", async () => {
   await withConfiguration(
     configuration,
