@@ -12,6 +12,7 @@ export async function readCurrentState(
     settings,
     customProperties,
     actionsSettings,
+    actionsOidc,
     actionsSecrets,
     actionsVariables,
     dependabotSecrets,
@@ -24,9 +25,12 @@ export async function readCurrentState(
     desired.customProperties !== undefined
       ? source.getCustomProperties(repository)
       : Promise.resolve({}),
-    desired.actions !== undefined && hasActionsSettings(desired.actions)
+    desired.actions !== undefined && hasActionsPermissionSettings(desired.actions)
       ? source.getActionsSettings(repository)
-      : defaultActionsSettings(),
+      : defaultActionsPermissionSettings(),
+    desired.actions?.oidc !== undefined
+      ? source.getActionsOidcSettings(repository)
+      : defaultActionsOidcSettings(),
     desired.actions?.secrets !== undefined
       ? source.getActionsSecrets(repository)
       : Promise.resolve([]),
@@ -58,6 +62,7 @@ export async function readCurrentState(
       : pickKeys(customProperties, Object.keys(desired.customProperties)),
     actions: {
       ...actionsSettings,
+      oidc: actionsOidc,
       secrets: desired.actions?.secrets === undefined
         ? []
         : strict
@@ -182,27 +187,29 @@ function filterNamed<T extends object>(
   );
 }
 
-function hasActionsSettings(
+function hasActionsPermissionSettings(
   actions: NonNullable<DesiredState["actions"]>,
 ): boolean {
   return actions.enabled !== undefined ||
     actions.allowedActions !== undefined ||
     actions.shaPinningRequired !== undefined ||
-    actions.selectedActions !== undefined ||
-    actions.oidc !== undefined;
+    actions.selectedActions !== undefined;
 }
 
-function defaultActionsSettings(): Omit<
+function defaultActionsPermissionSettings(): Omit<
   CurrentState["actions"],
-  "secrets" | "variables"
+  "oidc" | "secrets" | "variables"
 > {
   return {
     enabled: false,
     allowedActions: "all",
     shaPinningRequired: false,
-    oidc: {
-      subjectClaimTemplate: { source: "default" },
-      immutableSubject: false,
-    },
+  };
+}
+
+function defaultActionsOidcSettings(): CurrentState["actions"]["oidc"] {
+  return {
+    subjectClaimTemplate: { source: "default" },
+    immutableSubject: false,
   };
 }
