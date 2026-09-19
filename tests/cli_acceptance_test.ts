@@ -168,7 +168,10 @@ Deno.test("CLI rejects an explicitly empty repository target without discovery",
     );
 
     assertEquals(requests, []);
-    assertStringIncludes(errors.join("\n"), "Repository target must not be empty");
+    assertStringIncludes(
+      errors.join("\n"),
+      "Repository target must not be empty",
+    );
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
