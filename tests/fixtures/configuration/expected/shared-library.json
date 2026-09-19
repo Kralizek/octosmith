@@ -58,5 +58,5 @@
       ]
     }
   ],
-  "collections": "sparse"
+  "collections": "explicit"
 }
