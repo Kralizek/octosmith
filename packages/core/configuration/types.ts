@@ -16,8 +16,12 @@ import type {
 export interface Configuration {
   readonly version: 1;
   readonly organization: string;
-  readonly scope: RepositorySelector;
+  readonly repositories: RepositoriesConfiguration;
   readonly settings?: SettingsConfiguration;
+}
+
+export interface RepositoriesConfiguration {
+  readonly scope: RepositorySelector;
 }
 
 export interface SettingsConfiguration {
@@ -32,11 +36,9 @@ export interface RepositorySelector {
 }
 
 export interface RepositoryTemplate {
+  readonly kind: "repository";
   readonly match: RepositorySelector;
-  readonly repository?: RepositoryConfiguration;
-  readonly rulesets?: readonly RulesetConfiguration[];
-  readonly environments?: readonly EnvironmentConfiguration[];
-  readonly files?: Readonly<Record<string, FileConfiguration>>;
+  readonly repository: RepositoryConfiguration;
 }
 
 export interface RepositoryConfiguration {
@@ -48,6 +50,9 @@ export interface RepositoryConfiguration {
   readonly teams?: readonly TeamPermissionConfiguration[];
   readonly secrets?: readonly string[];
   readonly variables?: readonly string[];
+  readonly rulesets?: readonly RulesetConfiguration[];
+  readonly environments?: readonly EnvironmentConfiguration[];
+  readonly files?: Readonly<Record<string, FileConfiguration>>;
 }
 
 export interface RepositorySettingsConfiguration {
