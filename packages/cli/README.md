@@ -16,14 +16,15 @@ octosmith plan my-repo --path ./configuration
 octosmith apply my-repo --path ./configuration
 ```
 
-Collection management is configured in `octosmith.yml`. It defaults to explicit
-ownership; use `settings: { collection_management: strict }` to make supported
-named collections authoritative.
+Collection management is configured under `repositories.settings` in
+`octosmith.yml`. It defaults to explicit ownership; set
+`collection_management: strict` there to make supported named collections
+authoritative.
 
 Configuration and all templates are schema-validated before repository
 discovery. Unknown keys, empty selectors, and unsupported configuration versions
 are rejected. To explicitly select every repository, use
-`scope: { names: ["*"] }`.
+`repositories: { scope: { names: ["*"] } }`.
 
 Review `plan` before applying: reports include resource names, file paths, and
 changed settings. Runtime variable values and file contents are omitted, and
