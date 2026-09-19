@@ -388,10 +388,12 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
       { scope: {} },
       {
         code: {
+          kind: "repository",
           match: {
             teams: ["platform"],
             properties: { kind: "service" },
           },
+          repository: {},
         },
       },
     ),
