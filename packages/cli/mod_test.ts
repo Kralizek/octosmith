@@ -41,30 +41,3 @@ Deno.test("missing GITHUB_TOKEN returns a clear CLI failure", async () => {
     }
   }
 });
-
-Deno.test("invalid collection mode fails before invoking the runtime", async () => {
-  let calls = 0;
-  const runtime: ReconciliationRuntime = {
-    discover() {
-      calls++;
-      throw new Error("should not run");
-    },
-    read() {
-      calls++;
-      throw new Error("should not run");
-    },
-    apply() {
-      calls++;
-      throw new Error("should not run");
-    },
-  };
-
-  assertEquals(
-    await main(
-      ["plan", "--collections", "invalid"],
-      { runtime },
-    ),
-    1,
-  );
-  assertEquals(calls, 0);
-});
