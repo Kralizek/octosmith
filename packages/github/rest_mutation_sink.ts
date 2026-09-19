@@ -166,7 +166,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           repository,
           operation.environment,
           true,
-          "sparse",
+          "explicit",
         );
         return;
       case "update-environment":
@@ -352,7 +352,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     environment: DesiredEnvironment,
     create: boolean,
-    collections: "sparse" | "strict",
+    collections: "explicit" | "strict",
   ): Promise<void> {
     const name = encodeURIComponent(environment.name);
     const base = this.repo(repository) + "/environments/" + name;
@@ -381,7 +381,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   async syncEnvironmentVariables(
     base: string,
     variables: readonly Variable[],
-    collections: "sparse" | "strict",
+    collections: "explicit" | "strict",
   ): Promise<void> {
     const currentVariables = await getAllWrappedPages<{
       readonly name: string;
@@ -422,7 +422,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   async syncEnvironmentSecrets(
     base: string,
     secrets: readonly string[],
-    collections: "sparse" | "strict",
+    collections: "explicit" | "strict",
   ): Promise<void> {
     const currentSecrets = await getAllWrappedPages<{
       readonly name: string;
