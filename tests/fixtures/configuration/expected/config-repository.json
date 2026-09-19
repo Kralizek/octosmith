@@ -26,5 +26,5 @@
       }
     }
   ],
-  "collections": "sparse"
+  "collections": "explicit"
 }
