@@ -96,6 +96,10 @@ export async function main(
   options: CliExecutionOptions = {},
 ): Promise<number> {
   try {
+    if (hasExplicitEmptyRepositoryTarget(args)) {
+      throw new Error("Repository target must not be empty");
+    }
+
     await createCli(options).parse(args);
     return 0;
   } catch (error) {
@@ -107,6 +111,35 @@ export async function main(
     console.error(`[ERROR] ${message}`);
     return 1;
   }
+}
+
+function hasExplicitEmptyRepositoryTarget(args: readonly string[]): boolean {
+  const [command, ...rest] = args;
+
+  if (command !== "plan" && command !== "apply") {
+    return false;
+  }
+
+  for (let index = 0; index < rest.length; index++) {
+    const argument = rest[index];
+
+    if (argument === "-p" || argument === "--path") {
+      index++;
+      continue;
+    }
+
+    if (argument.startsWith("--path=") || argument.startsWith("-p=")) {
+      continue;
+    }
+
+    if (argument.startsWith("-")) {
+      continue;
+    }
+
+    return argument.length === 0;
+  }
+
+  return false;
 }
 
 export * from "./reconcile.ts";
