@@ -372,16 +372,20 @@ Deno.test("CLI validates all templates before plan discovery", async () => {
 });
 
 Deno.test("CLI preflights repository secrets before strict cleanup and continues afterward", async () => {
-  const root = await safetyConfigurationDirectory({
-    code: {
-      match: { names: ["sample"] },
-      repository: { settings: { has_issues: false }, secrets: ["NEW"] },
+  const root = await safetyConfigurationDirectory(
+    {
+      code: {
+        match: { names: ["sample"] },
+        repository: { settings: { has_issues: false }, secrets: ["NEW"] },
+      },
+      healthy: {
+        match: { names: ["z-next"] },
+        repository: { settings: { has_issues: false } },
+      },
     },
-    healthy: {
-      match: { names: ["z-next"] },
-      repository: { settings: { has_issues: false } },
-    },
-  }, { names: ["*"] }, "strict");
+    { names: ["*"] },
+    "strict",
+  );
   const requests: CapturedRequest[] = [];
   const events: string[] = [];
   const output: string[] = [];
@@ -425,13 +429,21 @@ Deno.test("CLI preflights repository secrets before strict cleanup and continues
 });
 
 Deno.test("CLI preflights environment secrets before any strict mutation", async () => {
-  const root = await safetyConfigurationDirectory({
-    code: {
-      match: { names: ["sample"] },
-      repository: { settings: { has_issues: false } },
-      environments: [{ name: "production", secrets: ["NEW"], variables: [] }],
+  const root = await safetyConfigurationDirectory(
+    {
+      code: {
+        match: { names: ["sample"] },
+        repository: { settings: { has_issues: false } },
+        environments: [{
+          name: "production",
+          secrets: ["NEW"],
+          variables: [],
+        }],
+      },
     },
-  }, { names: ["sample"] }, "strict");
+    { names: ["sample"] },
+    "strict",
+  );
   const requests: CapturedRequest[] = [];
   const output: string[] = [];
   try {
@@ -462,13 +474,17 @@ Deno.test("CLI preflights environment secrets before any strict mutation", async
 });
 
 Deno.test("CLI plan identifies strict deletion targets and changed settings", async () => {
-  const root = await safetyConfigurationDirectory({
-    code: {
-      match: { names: ["sample"] },
-      repository: { settings: { has_issues: false }, secrets: ["NEW"] },
-      environments: [],
+  const root = await safetyConfigurationDirectory(
+    {
+      code: {
+        match: { names: ["sample"] },
+        repository: { settings: { has_issues: false }, secrets: ["NEW"] },
+        environments: [],
+      },
     },
-  }, { names: ["sample"] }, "strict");
+    { names: ["sample"] },
+    "strict",
+  );
   const requests: CapturedRequest[] = [];
   const output: string[] = [];
   let secretCalls = 0;
@@ -721,7 +737,9 @@ async function configurationDirectory(
         "version: 1",
         "organization: acme",
         'scope: { names: ["*"] }',
-        ...(collections ? ["reconciliation:", "  collections: " + collections] : []),
+        ...(collections
+          ? ["reconciliation:", "  collections: " + collections]
+          : []),
         "",
       ].join("\n"),
   );
