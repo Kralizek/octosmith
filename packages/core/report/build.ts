@@ -90,8 +90,9 @@ function operationDetails(operation: Operation): Record<string, unknown> {
     case "remove-actions-variable":
       return { name: operation.name };
     case "set-actions-secret":
-    case "remove-actions-secret":
     case "set-dependabot-secret":
+      return { name: operation.secret.name };
+    case "remove-actions-secret":
     case "remove-dependabot-secret":
       return { name: operation.secret };
     case "create-ruleset":
@@ -114,7 +115,7 @@ function operationDetails(operation: Operation): Record<string, unknown> {
           })),
         }),
         ...(operation.environment.secrets !== undefined && {
-          secrets: operation.environment.secrets,
+          secrets: operation.environment.secrets.map((secret) => secret.name),
         }),
       };
     case "delete-environment":
