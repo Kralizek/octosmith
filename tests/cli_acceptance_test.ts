@@ -902,16 +902,17 @@ async function configurationDirectory(
       ? [
         "version: 1",
         "organization: acme",
-        "scope:",
-        "  names:",
-        "    - sample",
-        "    - missing",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "      - missing",
         "",
       ].join("\n")
       : [
         "version: 1",
         "organization: acme",
-        'scope: { names: ["*"] }',
+        'repositories: { scope: { names: ["*"] } }',
         ...(collections
           ? ["settings:", "  collection_management: " + collections]
           : []),
@@ -922,6 +923,7 @@ async function configurationDirectory(
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
@@ -1058,13 +1060,14 @@ async function secretConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'scope: { names: ["*"] }',
+      'repositories: { scope: { names: ["*"] } }',
       "",
     ].join("\n"),
   );
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
@@ -1086,7 +1089,7 @@ async function partialConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'scope: { names: ["*"] }',
+      'repositories: { scope: { names: ["*"] } }',
       "",
     ].join("\n"),
   );
@@ -1094,6 +1097,7 @@ async function partialConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
@@ -1103,10 +1107,10 @@ async function partialConfigurationDirectory(): Promise<string> {
       "    has_issues: false",
       "  variables:",
       "    - DESIRED",
-      "files:",
-      "  managed.txt:",
-      "    ensure: exact",
-      "    source: files/managed.txt",
+      "  files:",
+      "    managed.txt:",
+      "      ensure: exact",
+      "      source: files/managed.txt",
       "",
     ].join("\n"),
   );
