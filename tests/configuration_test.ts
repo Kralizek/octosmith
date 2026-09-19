@@ -19,8 +19,10 @@ Deno.test("loads example configuration and templates", async () => {
   assertEquals(loaded.configuration, {
     version: 1,
     organization: "example-org",
-    scope: {
-      teams: ["platform-team"],
+    repositories: {
+      scope: {
+        teams: ["platform-team"],
+      },
     },
   });
 
@@ -37,7 +39,7 @@ Deno.test("loads example configuration and templates", async () => {
     true,
   );
   assertEquals(
-    loaded.templates.code.rulesets?.[0].conditions?.refName?.include,
+    loaded.templates.code.repository.rulesets?.[0].conditions?.refName?.include,
     ["~DEFAULT_BRANCH"],
   );
 });
@@ -129,7 +131,7 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
 
     const loaded = await loadConfigurationDirectory(root);
 
-    assertEquals(loaded.configuration.scope.properties, {
+    assertEquals(loaded.configuration.repositories.scope.properties, {
       repository_type: "code",
     });
     assertEquals(loaded.templates.code.match.properties, {
@@ -138,7 +140,7 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     assertEquals(loaded.templates.code.repository?.customProperties, {
       deployment_region: "eu-north-1",
     });
-    assertEquals(Object.keys(loaded.templates.code.files ?? {}), [
+    assertEquals(Object.keys(loaded.templates.code.repository.files ?? {}), [
       ".github/workflows/release_candidate.yml",
     ]);
   } finally {
