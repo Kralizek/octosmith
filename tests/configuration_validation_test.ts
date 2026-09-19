@@ -42,23 +42,6 @@ Deno.test("configuration rejects an empty scope", async () => {
   );
 });
 
-Deno.test("configuration rejects legacy top-level scope", async () => {
-  await withConfiguration(
-    {
-      version: 1,
-      organization: "acme",
-      scope: { names: ["sample"] },
-    },
-    template,
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "scope",
-      ),
-  );
-});
-
 Deno.test("configuration rejects missing template kind", async () => {
   await withConfiguration(
     configuration,
@@ -98,30 +81,6 @@ Deno.test("configuration rejects repository template without repository body", a
   );
 });
 
-Deno.test("configuration rejects legacy repository Actions values", async () => {
-  for (
-    const repository of [
-      { secrets: ["TOKEN"] },
-      { variables: ["REGION"] },
-    ]
-  ) {
-    await withConfiguration(
-      configuration,
-      {
-        kind: "repository",
-        match: { names: ["*"] },
-        repository,
-      },
-      (root) =>
-        assertRejects(
-          () => loadConfigurationDirectory(root),
-          Error,
-          "/repository",
-        ),
-    );
-  }
-});
-
 Deno.test("configuration accepts Actions and Dependabot value blocks", async () => {
   await withConfiguration(
     configuration,
@@ -141,60 +100,6 @@ Deno.test("configuration accepts Actions and Dependabot value blocks", async () 
     async (root) => {
       await loadConfigurationDirectory(root);
     },
-  );
-});
-
-Deno.test("configuration rejects legacy top-level repository resource fields", async () => {
-  await withConfiguration(
-    configuration,
-    {
-      kind: "repository",
-      match: { names: ["*"] },
-      repository: {},
-      rulesets: [],
-    },
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "rulesets",
-      ),
-  );
-});
-
-Deno.test("configuration rejects legacy top-level environments", async () => {
-  await withConfiguration(
-    configuration,
-    {
-      kind: "repository",
-      match: { names: ["*"] },
-      repository: {},
-      environments: [],
-    },
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "environments",
-      ),
-  );
-});
-
-Deno.test("configuration rejects legacy top-level files", async () => {
-  await withConfiguration(
-    configuration,
-    {
-      kind: "repository",
-      match: { names: ["*"] },
-      repository: {},
-      files: {},
-    },
-    (root) =>
-      assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        "files",
-      ),
   );
 });
 
