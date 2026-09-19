@@ -120,8 +120,8 @@ never mutated.
 
 ## Repository collection management
 
-`repositories.settings.collection_management` controls how declared
-collections are interpreted.
+`repositories.settings.collection_management` controls how declared collections
+are interpreted.
 
 ### `explicit` — default
 
