@@ -36,14 +36,16 @@ function createCli(options: CliExecutionOptions = {}): Command {
             ? "Show repository configuration changes."
             : "Apply repository configuration changes.",
         )
+        .arguments("[repository:string]")
         .option("-p, --path <path:string>", "Configuration directory.", {
           default: ".",
         })
-        .action(async (commandOptions) => {
+        .action(async (commandOptions, repository?: string) => {
           const runtime = options.runtime ?? createDefaultRuntime();
           const report = await reconcile(runtime, {
             path: commandOptions.path,
             mode,
+            ...(repository && { repository }),
           });
 
           write(renderReport(report));
