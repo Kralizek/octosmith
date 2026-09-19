@@ -103,6 +103,11 @@ export async function reconcile(
 ): Promise<Report> {
   const now = options.now ?? (() => new Date());
   const startedAt = now();
+
+  if (options.repository !== undefined && options.repository.length === 0) {
+    throw new Error("Repository target must not be empty");
+  }
+
   const loaded = await loadConfigurationDirectory(options.path);
   const discovery = await runtime.discover(loaded, options.repository);
   const results: import("@octosmith/core").RepositoryReport[] = discovery
