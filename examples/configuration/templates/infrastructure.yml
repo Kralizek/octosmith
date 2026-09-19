@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=../../../schemas/template.schema.json
 
+kind: repository
+
 match:
   names:
     - "*-infra"
@@ -24,19 +26,19 @@ repository:
   variables:
     - INFRASTRUCTURE_REGION
 
-rulesets:
-  - name: protect-default-branch
-    target: branch
-    enforcement: active
-    conditions:
-      ref_name:
-        include:
-          - ~DEFAULT_BRANCH
-    rules:
-      - type: deletion
-      - type: non_fast_forward
-      - type: pull_request
-        parameters:
-          required_review_thread_resolution: true
-          allowed_merge_methods:
-            - squash
+  rulesets:
+    - name: protect-default-branch
+      target: branch
+      enforcement: active
+      conditions:
+        ref_name:
+          include:
+            - ~DEFAULT_BRANCH
+      rules:
+        - type: deletion
+        - type: non_fast_forward
+        - type: pull_request
+          parameters:
+            required_review_thread_resolution: true
+            allowed_merge_methods:
+              - squash

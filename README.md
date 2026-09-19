@@ -1,7 +1,7 @@
 # OctoSmith
 
-A toolkit for defining, validating, and reconciling GitHub repository
-configuration as code.
+A toolkit for defining, validating, and reconciling GitHub configuration as
+code.
 
 ## Packages
 
@@ -10,5 +10,6 @@ configuration as code.
 
 ## Examples
 
-See [`examples/configuration`](examples/configuration) for a sample policy
-directory covering scope, repository-family templates, and managed files.
+See [`examples/configuration`](examples/configuration) for a sample
+configuration directory covering repository scope, typed repository templates,
+and managed files.

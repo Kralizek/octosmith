@@ -19,8 +19,10 @@ Deno.test("loads example configuration and templates", async () => {
   assertEquals(loaded.configuration, {
     version: 1,
     organization: "example-org",
-    scope: {
-      teams: ["platform-team"],
+    repositories: {
+      scope: {
+        teams: ["platform-team"],
+      },
     },
   });
 
@@ -37,7 +39,7 @@ Deno.test("loads example configuration and templates", async () => {
     true,
   );
   assertEquals(
-    loaded.templates.code.rulesets?.[0].conditions?.refName?.include,
+    loaded.templates.code.repository.rulesets?.[0].conditions?.refName?.include,
     ["~DEFAULT_BRANCH"],
   );
 });
@@ -98,9 +100,10 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
       [
         "version: 1",
         "organization: example-org",
-        "scope:",
-        "  properties:",
-        "    repository_type: code",
+        "repositories:",
+        "  scope:",
+        "    properties:",
+        "      repository_type: code",
         "",
       ].join("\n"),
     );
@@ -108,16 +111,17 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "code.yml"),
       [
+        "kind: repository",
         "match:",
         "  properties:",
         "    repository_type: code",
         "repository:",
         "  custom_properties:",
         "    deployment_region: eu-north-1",
-        "files:",
-        "  .github/workflows/release_candidate.yml:",
-        "    ensure: exact",
-        "    source: files/workflow.yml",
+        "  files:",
+        "    .github/workflows/release_candidate.yml:",
+        "      ensure: exact",
+        "      source: files/workflow.yml",
         "",
       ].join("\n"),
     );
@@ -129,7 +133,7 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
 
     const loaded = await loadConfigurationDirectory(root);
 
-    assertEquals(loaded.configuration.scope.properties, {
+    assertEquals(loaded.configuration.repositories.scope.properties, {
       repository_type: "code",
     });
     assertEquals(loaded.templates.code.match.properties, {
@@ -138,7 +142,7 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     assertEquals(loaded.templates.code.repository?.customProperties, {
       deployment_region: "eu-north-1",
     });
-    assertEquals(Object.keys(loaded.templates.code.files ?? {}), [
+    assertEquals(Object.keys(loaded.templates.code.repository.files ?? {}), [
       ".github/workflows/release_candidate.yml",
     ]);
   } finally {
@@ -183,9 +187,10 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
       [
         "version: 1",
         "organization: example-org",
-        "scope:",
-        "  names:",
-        "    - sample",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
         "",
       ].join("\n"),
     );
@@ -193,6 +198,7 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "kind: repository",
         "match:",
         "  names:",
         "    - sample",
@@ -207,12 +213,12 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
         "        claims:",
         "          - repo",
         "      immutable_subject: true",
-        "rulesets:",
-        "  - name: protect",
-        "    bypass_actors:",
-        "      - actor_type: team",
-        "        actor_id: 42",
-        "        bypass_mode: pull-request",
+        "  rulesets:",
+        "    - name: protect",
+        "      bypass_actors:",
+        "        - actor_type: team",
+        "          actor_id: 42",
+        "          bypass_mode: pull-request",
         "",
       ].join("\n"),
     );
@@ -261,9 +267,10 @@ Deno.test("preserves omitted environment members in desired state", async () => 
       [
         "version: 1",
         "organization: example-org",
-        "scope:",
-        "  names:",
-        "    - sample",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
         "",
       ].join("\n"),
     );
@@ -271,11 +278,13 @@ Deno.test("preserves omitted environment members in desired state", async () => 
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "kind: repository",
         "match:",
         "  names:",
         "    - sample",
-        "environments:",
-        "  - name: production",
+        "repository:",
+        "  environments:",
+        "    - name: production",
         "",
       ].join("\n"),
     );
@@ -344,31 +353,34 @@ for (
         [
           "version: 1",
           "organization: example-org",
-          "scope:",
-          "  names:",
-          "    - sample",
+          "repositories:",
+          "  scope:",
+          "    names:",
+          "      - sample",
           "",
         ].join("\n"),
       );
       await Deno.writeTextFile(
         join(root, "templates", "sample.yml"),
         [
+          "kind: repository",
           "match:",
           "  names:",
           "    - sample",
-          "rulesets:",
-          "  - name: policy",
-          "    target: " +
+          "repository:",
+          "  rulesets:",
+          "    - name: policy",
+          "      target: " +
           (testCase.rule[0].includes("max_file") ? "push" : "branch"),
-          "    enforcement: active",
+          "      enforcement: active",
           ...(testCase.rule[0].includes("max_file") ? [] : [
-            "    conditions:",
-            "      ref_name:",
-            "        include:",
-            "          - ~DEFAULT_BRANCH",
+            "      conditions:",
+            "        ref_name:",
+            "          include:",
+            "            - ~DEFAULT_BRANCH",
           ]),
-          "    rules:",
-          ...testCase.rule,
+          "      rules:",
+          ...testCase.rule.map((line) => "      " + line),
           "",
         ].join("\n"),
       );

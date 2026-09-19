@@ -1,5 +1,7 @@
 # yaml-language-server: $schema=../../../schemas/template.schema.json
 
+kind: repository
+
 match:
   properties:
     repository-type: issues
