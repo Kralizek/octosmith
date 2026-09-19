@@ -1,4 +1,9 @@
-import type { Environment, RepositoryPermission, Variable } from "../types.ts";
+import type {
+  CollectionReconciliationMode,
+  Environment,
+  RepositoryPermission,
+  Variable,
+} from "../types.ts";
 import type {
   CurrentActionsSettings,
   CustomPropertyValue,
@@ -24,12 +29,11 @@ import type {
   DesiredEnvironment,
   DesiredState,
 } from "../state/types.ts";
-import type { BuildPlanOptions, Operation, Plan } from "./types.ts";
+import type { Operation, Plan } from "./types.ts";
 
 export function buildPlan(
   current: CurrentState,
   desired: DesiredState,
-  options: BuildPlanOptions = {},
 ): Plan {
   if (current.repository !== desired.repository) {
     throw new Error(
@@ -39,15 +43,16 @@ export function buildPlan(
   }
 
   const operations: Operation[] = [];
+  const collections = desired.collections ?? "sparse";
 
   planRepositorySettings(current, desired, operations);
-  planCustomProperties(current, desired, operations, options);
+  planCustomProperties(current, desired, operations, collections);
   planActions(current, desired, operations);
-  planTeams(current, desired, operations, options);
-  planRepositorySecrets(current, desired, operations, options);
-  planRepositoryVariables(current, desired, operations, options);
-  planRulesets(current, desired, operations, options);
-  planEnvironments(current, desired, operations, options);
+  planTeams(current, desired, operations, collections);
+  planRepositorySecrets(current, desired, operations, collections);
+  planRepositoryVariables(current, desired, operations, collections);
+  planRulesets(current, desired, operations, collections);
+  planEnvironments(current, desired, operations, collections);
   planFiles(current, desired, operations);
 
   return {
@@ -79,13 +84,13 @@ function planCustomProperties(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): void {
   if (desired.customProperties === undefined) {
     return;
   }
 
-  if (options.collections === "strict") {
+  if (collections === "strict") {
     const desiredNames = new Set(Object.keys(desired.customProperties));
 
     for (const [name, value] of Object.entries(current.customProperties)) {
@@ -144,7 +149,7 @@ function planTeams(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): void {
   if (desired.teams === undefined) {
     return;
@@ -154,7 +159,7 @@ function planTeams(
 
   const desiredTeams = new Set(desired.teams.map((item) => item.team));
 
-  if (options.collections === "strict") {
+  if (collections === "strict") {
     for (const permission of current.teams) {
       if (!desiredTeams.has(permission.team)) {
         operations.push({
@@ -183,7 +188,7 @@ function planRepositorySecrets(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): void {
   if (desired.secrets === undefined) {
     return;
@@ -191,7 +196,7 @@ function planRepositorySecrets(
 
   assertUnique(desired.secrets, "repository secret");
 
-  if (options.collections === "strict") {
+  if (collections === "strict") {
     const desiredNames = new Set(desired.secrets);
 
     for (const secret of current.secrets) {
@@ -218,7 +223,7 @@ function planRepositoryVariables(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): void {
   if (desired.variables === undefined) {
     return;
@@ -229,7 +234,7 @@ function planRepositoryVariables(
     "repository variable",
   );
 
-  if (options.collections === "strict") {
+  if (collections === "strict") {
     const desiredNames = new Set(desired.variables.map((item) => item.name));
 
     for (const variable of current.variables) {
@@ -262,7 +267,7 @@ function planRulesets(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): void {
   if (desired.rulesets === undefined) {
     return;
@@ -272,7 +277,7 @@ function planRulesets(
 
   const desiredNames = new Set(desired.rulesets.map((item) => item.name));
 
-  if (options.collections === "strict") {
+  if (collections === "strict") {
     for (const ruleset of current.rulesets) {
       if (!desiredNames.has(ruleset.name)) {
         operations.push({
@@ -300,7 +305,7 @@ function planRulesets(
       continue;
     }
 
-    const changes = diffRuleset(actual, ruleset, options);
+    const changes = diffRuleset(actual, ruleset, collections);
 
     if (changes) {
       operations.push({
@@ -316,7 +321,7 @@ function planEnvironments(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): void {
   if (desired.environments === undefined) {
     return;
@@ -339,7 +344,7 @@ function planEnvironments(
 
   const desiredNames = new Set(desired.environments.map((item) => item.name));
 
-  if (options.collections === "strict") {
+  if (collections === "strict") {
     for (const environment of current.environments) {
       if (!desiredNames.has(environment.name)) {
         operations.push({
@@ -366,11 +371,11 @@ function planEnvironments(
       continue;
     }
 
-    if (environmentNeedsUpdate(actual, environment, options)) {
+    if (environmentNeedsUpdate(actual, environment, collections)) {
       operations.push({
         type: "update-environment",
         environment,
-        collections: options.collections ?? "sparse",
+        collections,
       });
     }
   }
@@ -627,7 +632,7 @@ function diffActionsOidc(
 function diffRuleset(
   current: CurrentRuleset,
   desired: DesiredRuleset,
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): DesiredRuleset | undefined {
   const changes: Record<string, unknown> = {
     name: desired.name,
@@ -686,7 +691,7 @@ function diffRuleset(
     const merged = mergeRules(
       current.rules,
       desired.rules,
-      options,
+      collections,
       effectiveTarget,
     );
 
@@ -768,18 +773,18 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
 function mergeRules(
   current: readonly (CurrentRefRule | CurrentPushRule)[],
   desired: readonly DesiredRulesetRule[],
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
   target: "branch" | "tag" | "push",
 ): readonly DesiredRulesetRule[] {
   if (desired.length === 0) {
-    return options.collections === "strict"
+    return collections === "strict"
       ? []
       : current.map((rule) => materializeRule(rule, target));
   }
 
   assertUnique(desired.map((rule) => rule.type), "ruleset rule type");
 
-  const result = options.collections === "strict"
+  const result = collections === "strict"
     ? []
     : current.map((rule) => structuredClone(rule)) as unknown[];
   const indexByType = new Map(
@@ -794,7 +799,7 @@ function mergeRules(
       continue;
     }
 
-    if (options.collections === "strict") {
+    if (collections === "strict") {
       result.push(mergeOwned(current[index], rule));
     } else {
       result[index] = mergeOwned(result[index], rule);
@@ -992,7 +997,7 @@ function assertCompleteObjects(
 function environmentNeedsUpdate(
   current: Environment,
   desired: DesiredEnvironment,
-  options: BuildPlanOptions,
+  collections: CollectionReconciliationMode,
 ): boolean {
   if (desired.secrets !== undefined) {
     if (desired.secrets.length > 0) {
@@ -1012,7 +1017,7 @@ function environmentNeedsUpdate(
     return current.variables.length > 0;
   }
 
-  if (options.collections === "strict") {
+  if (collections === "strict") {
     return !equalVariables(current.variables, desired.variables);
   }
 
