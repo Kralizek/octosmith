@@ -50,6 +50,15 @@ class PagingClient implements GitHubClient {
       } as T);
     }
 
+    if (path === "/repos/acme/sample/dependabot/secrets") {
+      const count = page === 1 ? 100 : 1;
+      return Promise.resolve({
+        secrets: Array.from({ length: count }, (_, index) => ({
+          name: "SECRET_" + ((page - 1) * 100 + index),
+        })),
+      } as T);
+    }
+
     throw new Error("Unexpected request: " + path);
   }
 }
@@ -58,18 +67,23 @@ Deno.test("state source paginates array and wrapped collections", async () => {
   const client = new PagingClient();
   const source = new GitHubRepositoryStateSource(client, "acme");
 
-  const [teams, variables] = await Promise.all([
+  const [teams, variables, dependabotSecrets] = await Promise.all([
     source.getTeams("sample"),
-    source.getVariables("sample"),
+    source.getActionsVariables("sample"),
+    source.getDependabotSecrets("sample"),
   ]);
 
   assertEquals(teams.length, 101);
   assertEquals(teams[100].team, "team-100");
   assertEquals(variables.length, 101);
   assertEquals(variables[100], { name: "VAR_100", value: "100" });
+  assertEquals(dependabotSecrets.length, 101);
+  assertEquals(dependabotSecrets[100], "SECRET_100");
   assertEquals(client.requests.sort(), [
     "/repos/acme/sample/actions/variables?page=1",
     "/repos/acme/sample/actions/variables?page=2",
+    "/repos/acme/sample/dependabot/secrets?page=1",
+    "/repos/acme/sample/dependabot/secrets?page=2",
     "/repos/acme/sample/teams?page=1",
     "/repos/acme/sample/teams?page=2",
   ]);
