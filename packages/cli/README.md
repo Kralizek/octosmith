@@ -12,8 +12,9 @@ octosmith plan --path ./configuration
 octosmith apply --path ./configuration
 ```
 
-Collection reconciliation defaults to sparse ownership. Use
-`--collections strict` to make supported named collections authoritative.
+Collection reconciliation is configured in `octosmith.yml`. It defaults to
+sparse ownership; use `reconciliation: { collections: strict }` to make
+supported named collections authoritative.
 
 Configuration and all templates are schema-validated before repository
 discovery. Unknown keys, empty selectors, and unsupported configuration versions
