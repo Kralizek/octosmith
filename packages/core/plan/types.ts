@@ -19,7 +19,6 @@ export interface Plan {
   readonly operations: readonly Operation[];
 }
 
-
 export type Operation =
   | UpdateRepositorySettingsOperation
   | SetCustomPropertyOperation
