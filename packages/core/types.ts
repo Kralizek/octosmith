@@ -2,7 +2,7 @@
 
 export type PropertyValue = string | boolean | readonly string[];
 
-export type CollectionReconciliationMode = "sparse" | "strict";
+export type CollectionReconciliationMode = "explicit" | "strict";
 
 export type BuiltInRepositoryPermission =
   | "pull"
