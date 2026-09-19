@@ -7,11 +7,14 @@ Deno.test("Actions secrets are always set because values are opaque", () => {
     buildPlan(currentState({ actions: { secrets: ["TOKEN"] } }), {
       repository: "sample",
       template: "code",
-      actions: { secrets: ["TOKEN"] },
+      actions: { secrets: [{ name: "TOKEN", source: "TOKEN" }] },
     }),
     {
       repository: "sample",
-      operations: [{ type: "set-actions-secret", secret: "TOKEN" }],
+      operations: [{
+        type: "set-actions-secret",
+        secret: { name: "TOKEN", source: "TOKEN" },
+      }],
     },
   );
 });
@@ -69,20 +72,20 @@ Deno.test("strict Actions values remove undeclared names", () => {
     repository: "sample",
     template: "code",
     actions: {
-      secrets: ["KEEP"],
+      secrets: [{ name: "KEEP", source: "KEEP" }],
       variables: [{ name: "KEEP", value: "same" }],
     },
   } as const;
 
   assertEquals(buildPlan(current, desired), {
     repository: "sample",
-    operations: [{ type: "set-actions-secret", secret: "KEEP" }],
+    operations: [{ type: "set-actions-secret", secret: { name: "KEEP", source: "KEEP" } }],
   });
   assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
       { type: "remove-actions-secret", secret: "REMOVE" },
-      { type: "set-actions-secret", secret: "KEEP" },
+      { type: "set-actions-secret", secret: { name: "KEEP", source: "KEEP" } },
       { type: "remove-actions-variable", name: "REMOVE" },
     ],
   });
@@ -96,24 +99,26 @@ Deno.test("Dependabot secrets are independent from Actions secrets", () => {
   const desired = {
     repository: "sample",
     template: "code",
-    actions: { secrets: ["SHARED"] },
-    dependabot: { secrets: ["SHARED"] },
+    actions: { secrets: [{ name: "SHARED", source: "ACTIONS_SHARED" }] },
+    dependabot: {
+      secrets: [{ name: "SHARED", source: "DEPENDABOT_SHARED" }],
+    },
   } as const;
 
   assertEquals(buildPlan(current, desired), {
     repository: "sample",
     operations: [
-      { type: "set-actions-secret", secret: "SHARED" },
-      { type: "set-dependabot-secret", secret: "SHARED" },
+      { type: "set-actions-secret", secret: { name: "SHARED", source: "ACTIONS_SHARED" } },
+      { type: "set-dependabot-secret", secret: { name: "SHARED", source: "DEPENDABOT_SHARED" } },
     ],
   });
 
   assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
-      { type: "set-actions-secret", secret: "SHARED" },
+      { type: "set-actions-secret", secret: { name: "SHARED", source: "ACTIONS_SHARED" } },
       { type: "remove-dependabot-secret", secret: "REMOVE" },
-      { type: "set-dependabot-secret", secret: "SHARED" },
+      { type: "set-dependabot-secret", secret: { name: "SHARED", source: "DEPENDABOT_SHARED" } },
     ],
   });
 });
@@ -124,7 +129,12 @@ Deno.test("Actions and Dependabot values reject duplicate desired names", () => 
       buildPlan(currentState(), {
         repository: "sample",
         template: "code",
-        actions: { secrets: ["A", "A"] },
+        actions: {
+          secrets: [
+            { name: "A", source: "FIRST" },
+            { name: "A", source: "SECOND" },
+          ],
+        },
       }),
     Error,
     "Duplicate Actions secret: A",
@@ -149,7 +159,12 @@ Deno.test("Actions and Dependabot values reject duplicate desired names", () => 
       buildPlan(currentState(), {
         repository: "sample",
         template: "code",
-        dependabot: { secrets: ["A", "A"] },
+        dependabot: {
+          secrets: [
+            { name: "A", source: "FIRST" },
+            { name: "A", source: "SECOND" },
+          ],
+        },
       }),
     Error,
     "Duplicate Dependabot secret: A",
