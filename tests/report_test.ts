@@ -52,7 +52,7 @@ Deno.test("structured reports omit runtime values and file contents", () => {
     repository: "sample",
     operations: [
       {
-        type: "set-repository-variable",
+        type: "set-actions-variable",
         variable: { name: "REGION", value: "repository-private-value" },
       },
       {
