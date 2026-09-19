@@ -97,6 +97,91 @@ Deno.test("CLI reconciles through the real GitHub HTTP stack", async () => {
   }
 });
 
+Deno.test("CLI targets one in-scope repository without enumerating the organization", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+
+  try {
+    Deno.env.set("DESIRED", "same");
+
+    const requests: CapturedRequest[] = [];
+    const output: string[] = [];
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "sample", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    assertEquals(
+      requests.some((request) =>
+        request.url.pathname === "/api/v3/orgs/acme/repos"
+      ),
+      false,
+    );
+    assertEquals(mutations(requests), []);
+    const rendered = output.join("\n");
+    assertStringIncludes(rendered, "sample [code] — planned");
+    assertStringIncludes(
+      rendered,
+      "Summary: 0 unchanged, 1 planned, 0 applied, 0 partially-applied, 0 failed",
+    );
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI reports an out-of-scope targeted repository without mutation", async () => {
+  const root = await configurationDirectory(true);
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+  try {
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "outside", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    assertEquals(mutations(requests), []);
+    assertEquals(
+      requests.map((request) => request.url.pathname),
+      ["/api/v3/repos/acme/outside"],
+    );
+    const rendered = output.join("\n");
+    assertStringIncludes(rendered, "outside — failed");
+    assertStringIncludes(
+      rendered,
+      "Repository outside is outside the configured scope",
+    );
+    assertStringIncludes(
+      rendered,
+      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 1 failed",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("CLI isolates exact-name discovery failures", async () => {
   const root = await configurationDirectory(true);
   const previous = Deno.env.get("DESIRED");
@@ -638,6 +723,13 @@ function fakeGitHub(
       url.pathname === "/api/v3/repos/acme/missing"
     ) {
       return json({ message: "Not Found" }, 404);
+    }
+
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/repos/acme/outside"
+    ) {
+      return json(repository("outside", state.hasIssues));
     }
 
     if (
