@@ -6,10 +6,12 @@ import type {
   Variable,
 } from "../types.ts";
 import type {
-  CurrentActionsSettings,
+  CurrentActions,
   CurrentCopilotSettings,
+  CurrentDependabot,
   CustomPropertyValue,
-  DesiredActionsSettings,
+  DesiredActions,
+  DesiredDependabot,
 } from "./resources.ts";
 import type {
   CurrentRepositorySettings,
@@ -21,11 +23,10 @@ export interface CurrentState {
   readonly repository: string;
   readonly settings: CurrentRepositorySettings;
   readonly customProperties: Readonly<Record<string, CustomPropertyValue>>;
-  readonly actions: CurrentActionsSettings;
+  readonly actions: CurrentActions;
+  readonly dependabot: CurrentDependabot;
   readonly copilot?: CurrentCopilotSettings;
   readonly teams: readonly TeamPermission[];
-  readonly secrets: readonly SecretName[];
-  readonly variables: readonly Variable[];
   readonly rulesets: readonly CurrentRuleset[];
   readonly environments: readonly Environment[];
   readonly files: readonly CurrentFile[];
@@ -37,10 +38,9 @@ export interface DesiredState {
   readonly collections?: CollectionReconciliationMode;
   readonly settings?: DesiredRepositorySettings;
   readonly customProperties?: Readonly<Record<string, CustomPropertyValue>>;
-  readonly actions?: DesiredActionsSettings;
+  readonly actions?: DesiredActions;
+  readonly dependabot?: DesiredDependabot;
   readonly teams?: readonly TeamPermission[];
-  readonly secrets?: readonly SecretName[];
-  readonly variables?: readonly Variable[];
   readonly rulesets?: readonly DesiredRuleset[];
   readonly environments?: readonly DesiredEnvironment[];
   readonly files?: readonly DesiredFile[];
