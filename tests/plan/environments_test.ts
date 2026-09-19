@@ -97,7 +97,7 @@ Deno.test("strict environments remove undeclared names while sparse preserves th
     repository: "sample",
     operations: [],
   });
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [{ type: "delete-environment", name: "remove" }],
   });
@@ -127,7 +127,7 @@ Deno.test("sparse environment variables preserve undeclared siblings", () => {
     repository: "sample",
     operations: [],
   });
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [{
       type: "update-environment",
