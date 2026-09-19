@@ -433,8 +433,12 @@ Deno.test("strict empty rulesets and rules clear owned collections", () => {
   assertEquals(
     buildPlan(
       current,
-      { repository: "sample", template: "code", rulesets: [] },
-      { collections: "strict" },
+      {
+        repository: "sample",
+        template: "code",
+        collections: "strict",
+        rulesets: [],
+      },
     ),
     {
       repository: "sample",
@@ -448,9 +452,9 @@ Deno.test("strict empty rulesets and rules clear owned collections", () => {
       {
         repository: "sample",
         template: "code",
+        collections: "strict",
         rulesets: [{ name: "protect", rules: [] }],
       },
-      { collections: "strict" },
     ),
     {
       repository: "sample",
