@@ -55,7 +55,10 @@
     {
       "name": "automation",
       "secrets": [
-        "PACKAGE_FEED_SECRET"
+        {
+          "name": "PACKAGE_FEED_SECRET",
+          "source": "PACKAGE_FEED_SECRET"
+        }
       ],
       "variables": [
         {
@@ -79,7 +82,10 @@
   "collections": "explicit",
   "actions": {
     "secrets": [
-      "REVIEW_BOT_TOKEN"
+      {
+        "name": "REVIEW_BOT_TOKEN",
+        "source": "REVIEW_BOT_TOKEN"
+      }
     ],
     "variables": [
       {
