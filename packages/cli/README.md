@@ -13,9 +13,9 @@ Set `GITHUB_TOKEN` to a token with the GitHub permissions required by the
 configuration being reconciled.
 
 Runtime values for Actions variables, Actions secrets, Dependabot secrets, and
-environment values can be read from process environment variables. Variables
-can also declare literal values in configuration. Secret values are never stored
-in OctoSmith configuration.
+environment values can be read from process environment variables. Variables can
+also declare literal values in configuration. Secret values are never stored in
+OctoSmith configuration.
 
 ## Configuration directory
 
