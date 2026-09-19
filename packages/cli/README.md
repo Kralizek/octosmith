@@ -12,9 +12,10 @@ either reports or applies the resulting operations.
 Set `GITHUB_TOKEN` to a token with the GitHub permissions required by the
 configuration being reconciled.
 
-Runtime values for declared repository and environment variables and secrets are
-also read from environment variables with the same name. Their values are not
-stored in OctoSmith configuration.
+Runtime values for declared Actions variables, Actions secrets, Dependabot
+secrets, and environment variables or secrets are read from environment
+variables with the same name. Their values are not stored in OctoSmith
+configuration.
 
 ## Configuration directory
 
@@ -172,15 +173,21 @@ match:
   names: ["service-*"]
 
 repository:
-  variables:
-    - REGION
+  actions:
+    variables:
+      - REGION
+    secrets:
+      - DEPLOY_TOKEN
 
-  secrets:
-    - DEPLOY_TOKEN
+  dependabot:
+    secrets:
+      - NUGET_FEED_TOKEN
 ```
 
-Running the command requires environment variables named `REGION` and
-`DEPLOY_TOKEN` when those values are needed.
+Running the command requires environment variables named `REGION`,
+`DEPLOY_TOKEN`, and `NUGET_FEED_TOKEN` when those values are needed. Actions
+and Dependabot secrets are separate GitHub secret stores even when they use the
+same runtime value name.
 
 Secret values are resolved and snapshotted before any mutation for that
 repository. If a required secret value is missing, no operation for that
