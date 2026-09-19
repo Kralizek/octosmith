@@ -28,10 +28,14 @@ class FakeStateSource implements RepositoryStateSource {
       enabled: true,
       allowedActions: "all" as const,
       shaPinningRequired: false,
-      oidc: {
-        subjectClaimTemplate: { source: "default" as const },
-        immutableSubject: false,
-      },
+    });
+  }
+
+  getActionsOidcSettings(repository: string) {
+    this.calls.push("actions-oidc:" + repository);
+    return Promise.resolve({
+      subjectClaimTemplate: { source: "organization" as const },
+      immutableSubject: true,
     });
   }
 
@@ -139,6 +143,29 @@ Deno.test("current-state reader fetches only desired resource families", async (
     "actions-variables:sample",
     "file:sample:exists.txt",
     "file:sample:missing.txt",
+    "settings:sample",
+  ]);
+});
+
+Deno.test("OIDC-only ownership reads only the OIDC endpoint family", async () => {
+  const source = new FakeStateSource();
+
+  const state = await readCurrentState(source, {
+    repository: "sample",
+    template: "code",
+    actions: {
+      oidc: {
+        subjectClaimTemplate: { source: "organization" },
+      },
+    },
+  });
+
+  assertEquals(state.actions.oidc, {
+    subjectClaimTemplate: { source: "organization" },
+    immutableSubject: true,
+  });
+  assertEquals(source.calls.sort(), [
+    "actions-oidc:sample",
     "settings:sample",
   ]);
 });
