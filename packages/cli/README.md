@@ -12,8 +12,9 @@ octosmith plan --path ./configuration
 octosmith apply --path ./configuration
 ```
 
-Collection reconciliation defaults to sparse ownership. Use
-`--collections strict` to make supported named collections authoritative.
+Collection management is configured in `octosmith.yml`. It defaults to explicit
+ownership; use `settings: { collection_management: strict }` to make supported
+named collections authoritative.
 
 Configuration and all templates are schema-validated before repository
 discovery. Unknown keys, empty selectors, and unsupported configuration versions
@@ -24,7 +25,7 @@ Review `plan` before applying: reports include resource names, file paths, and
 changed settings. Runtime variable values and file contents are omitted, and
 secret values are never included. Strict mode can delete undeclared members of
 owned collections; explicit empty environment variable or secret lists also
-clear those members in sparse mode.
+clear those members in explicit mode.
 
 Repository/environment variables and secrets declared by name in the
 configuration are read from same-named environment variables at runtime. Values

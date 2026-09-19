@@ -39,26 +39,11 @@ function createCli(options: CliExecutionOptions = {}): Command {
         .option("-p, --path <path:string>", "Configuration directory.", {
           default: ".",
         })
-        .option(
-          "--collections <mode:string>",
-          "Collection reconciliation mode: sparse or strict.",
-          { default: "sparse" },
-        )
         .action(async (commandOptions) => {
-          if (
-            commandOptions.collections !== "sparse" &&
-            commandOptions.collections !== "strict"
-          ) {
-            throw new Error(
-              "Invalid collection mode: " + commandOptions.collections,
-            );
-          }
-
           const runtime = options.runtime ?? createDefaultRuntime();
           const report = await reconcile(runtime, {
             path: commandOptions.path,
             mode,
-            collections: commandOptions.collections,
           });
 
           write(renderReport(report));

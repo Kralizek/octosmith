@@ -29,7 +29,7 @@ Deno.test("environments create and update variables", () => {
       operations: [
         {
           type: "update-environment",
-          collections: "sparse",
+          collections: "explicit",
           environment: {
             name: "production",
             secrets: [],
@@ -69,7 +69,7 @@ Deno.test("environment secrets force update because values are opaque", () => {
       repository: "sample",
       operations: [{
         type: "update-environment",
-        collections: "sparse",
+        collections: "explicit",
         environment: {
           name: "production",
           secrets: ["TOKEN"],
@@ -80,7 +80,7 @@ Deno.test("environment secrets force update because values are opaque", () => {
   );
 });
 
-Deno.test("strict environments remove undeclared names while sparse preserves them", () => {
+Deno.test("strict environments remove undeclared names while explicit preserves them", () => {
   const current = currentState({
     environments: [
       { name: "keep", secrets: [], variables: [] },
@@ -97,13 +97,13 @@ Deno.test("strict environments remove undeclared names while sparse preserves th
     repository: "sample",
     operations: [],
   });
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [{ type: "delete-environment", name: "remove" }],
   });
 });
 
-Deno.test("sparse environment variables preserve undeclared siblings", () => {
+Deno.test("explicit environment variables preserve undeclared siblings", () => {
   const current = currentState({
     environments: [{
       name: "production",
@@ -127,7 +127,7 @@ Deno.test("sparse environment variables preserve undeclared siblings", () => {
     repository: "sample",
     operations: [],
   });
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [{
       type: "update-environment",
@@ -196,7 +196,7 @@ Deno.test("explicit empty environment secrets clear them", () => {
       repository: "sample",
       operations: [{
         type: "update-environment",
-        collections: "sparse",
+        collections: "explicit",
         environment: {
           name: "production",
           secrets: [],

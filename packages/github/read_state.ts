@@ -1,17 +1,12 @@
-import type {
-  BuildPlanOptions,
-  CurrentState,
-  DesiredState,
-} from "@octosmith/core";
+import type { CurrentState, DesiredState } from "@octosmith/core";
 import type { RepositoryStateSource } from "./state_source.ts";
 
 export async function readCurrentState(
   source: RepositoryStateSource,
   desired: DesiredState,
-  options: BuildPlanOptions = {},
 ): Promise<CurrentState> {
   const repository = desired.repository;
-  const strict = options.collections === "strict";
+  const strict = desired.collections === "strict";
 
   const [
     settings,

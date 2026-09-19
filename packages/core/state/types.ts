@@ -1,4 +1,5 @@
 import type {
+  CollectionReconciliationMode,
   Environment,
   SecretName,
   TeamPermission,
@@ -33,6 +34,7 @@ export interface CurrentState {
 export interface DesiredState {
   readonly repository: string;
   readonly template: string;
+  readonly collections?: CollectionReconciliationMode;
   readonly settings?: DesiredRepositorySettings;
   readonly customProperties?: Readonly<Record<string, CustomPropertyValue>>;
   readonly actions?: DesiredActionsSettings;

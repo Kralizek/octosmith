@@ -2,7 +2,7 @@ import { assertEquals, assertThrows } from "@std/assert";
 import { buildPlan } from "../../packages/core/mod.ts";
 import { currentState } from "./fixtures.ts";
 
-Deno.test("teams add and update permissions without removing undeclared teams in sparse mode", () => {
+Deno.test("teams add and update permissions without removing undeclared teams in explicit mode", () => {
   const current = currentState({
     teams: [
       { team: "keep", permission: { kind: "built-in", name: "pull" } },
@@ -38,7 +38,7 @@ Deno.test("teams add and update permissions without removing undeclared teams in
     ],
   });
 
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
       { type: "remove-team-permission", team: "unmanaged" },
@@ -74,7 +74,7 @@ Deno.test("teams empty collection is non-destructive unless strict", () => {
     repository: "sample",
     operations: [],
   });
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [{ type: "remove-team-permission", team: "a" }],
   });

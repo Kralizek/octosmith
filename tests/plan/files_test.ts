@@ -94,9 +94,9 @@ Deno.test("strict collections never infer file deletion", () => {
       {
         repository: "sample",
         template: "code",
+        collections: "strict",
         files: [],
       },
-      { collections: "strict" },
     ),
     { repository: "sample", operations: [] },
   );

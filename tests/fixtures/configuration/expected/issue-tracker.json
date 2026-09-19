@@ -18,5 +18,6 @@
         "name": "maintain"
       }
     }
-  ]
+  ],
+  "collections": "explicit"
 }

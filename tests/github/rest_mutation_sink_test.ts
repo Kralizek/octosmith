@@ -67,7 +67,7 @@ Deno.test("environment sync preserves sparse siblings and paginates strict clean
 
   await sparseSink.apply("sample", {
     type: "update-environment",
-    collections: "sparse",
+    collections: "explicit",
     environment: {
       name: "production",
       variables: [{ name: "KEEP", value: "new" }],

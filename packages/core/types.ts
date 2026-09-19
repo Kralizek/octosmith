@@ -2,6 +2,8 @@
 
 export type PropertyValue = string | boolean | readonly string[];
 
+export type CollectionReconciliationMode = "explicit" | "strict";
+
 export type BuiltInRepositoryPermission =
   | "pull"
   | "triage"

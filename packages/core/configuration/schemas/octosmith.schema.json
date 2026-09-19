@@ -19,6 +19,9 @@
     },
     "scope": {
       "$ref": "#/$defs/selector"
+    },
+    "settings": {
+      "$ref": "#/$defs/settings"
     }
   },
   "$defs": {
@@ -95,6 +98,19 @@
           }
         }
       ]
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "collection_management": {
+          "type": "string",
+          "enum": [
+            "explicit",
+            "strict"
+          ]
+        }
+      }
     }
   }
 }

@@ -117,7 +117,7 @@ Deno.test("secret values are snapshotted once per name before mutations", async 
       { type: "set-repository-secret", secret: "SHARED" },
       {
         type: "update-environment",
-        collections: "sparse",
+        collections: "explicit",
         environment: { name: "production", secrets: ["SHARED"] },
       },
     ],

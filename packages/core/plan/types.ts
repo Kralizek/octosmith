@@ -1,4 +1,5 @@
 import type {
+  CollectionReconciliationMode,
   Environment,
   SecretName,
   TeamPermission,
@@ -16,12 +17,6 @@ import type { DesiredEnvironment, DesiredFile } from "../state/types.ts";
 export interface Plan {
   readonly repository: string;
   readonly operations: readonly Operation[];
-}
-
-export type CollectionReconciliationMode = "sparse" | "strict";
-
-export interface BuildPlanOptions {
-  readonly collections?: CollectionReconciliationMode;
 }
 
 export type Operation =

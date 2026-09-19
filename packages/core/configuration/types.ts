@@ -1,4 +1,5 @@
 import type {
+  CollectionReconciliationMode,
   MergeCommitMessage,
   MergeCommitTitle,
   PropertyValue,
@@ -16,6 +17,11 @@ export interface Configuration {
   readonly version: 1;
   readonly organization: string;
   readonly scope: RepositorySelector;
+  readonly settings?: SettingsConfiguration;
+}
+
+export interface SettingsConfiguration {
+  readonly collectionManagement?: CollectionReconciliationMode;
 }
 
 export interface RepositorySelector {

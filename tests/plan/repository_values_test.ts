@@ -70,7 +70,7 @@ Deno.test("strict repository values remove undeclared names", () => {
     repository: "sample",
     operations: [{ type: "set-repository-secret", secret: "KEEP" }],
   });
-  assertEquals(buildPlan(current, desired, { collections: "strict" }), {
+  assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
       { type: "remove-repository-secret", secret: "REMOVE" },
