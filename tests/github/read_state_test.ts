@@ -139,7 +139,6 @@ Deno.test("current-state reader fetches only desired resource families", async (
     "file:sample:exists.txt",
     "file:sample:missing.txt",
     "settings:sample",
-    "actions:sample",
     "actions-variables:sample",
   ]);
 });
