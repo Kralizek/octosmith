@@ -178,11 +178,10 @@ Deno.test("sparse current-state reading preserves members for explicit clears", 
 
 Deno.test("strict current-state reading preserves complete named collections", async () => {
   const source = new FakeStateSource();
-  const state = await readCurrentState(
-    source,
-    fullDesired(),
-    { collections: "strict" },
-  );
+  const state = await readCurrentState(source, {
+    ...fullDesired(),
+    collections: "strict",
+  });
 
   assertEquals(state.customProperties, {
     keep: "yes",
