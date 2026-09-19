@@ -1,5 +1,5 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import { main, type ReconciliationRuntime, usage, VERSION } from "./mod.ts";
+import { main, usage, VERSION } from "./mod.ts";
 
 Deno.test("usage identifies OctoSmith", () => {
   assertStringIncludes(usage(), "octosmith");
