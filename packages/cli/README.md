@@ -2,52 +2,211 @@
 
 Command-line interface for OctoSmith.
 
-## Usage
+OctoSmith reconciles GitHub repositories against declarative configuration. It
+loads a configuration directory, discovers repositories in scope, resolves each
+repository to exactly one template, compares desired and current state, and
+either reports or applies the resulting operations.
 
-Set `GITHUB_TOKEN` to a token with the repository and organization permissions
-required by the policy being reconciled, then run:
+## Requirements
+
+Set `GITHUB_TOKEN` to a token with the GitHub permissions required by the
+configuration being reconciled.
+
+Runtime values for declared repository and environment variables and secrets are
+also read from environment variables with the same name. Their values are not
+stored in OctoSmith configuration.
+
+## Configuration directory
+
+A configuration directory contains `octosmith.yml`, repository templates, and
+optionally source files managed by those templates.
+
+```text
+configuration/
+├── octosmith.yml
+├── templates/
+│   └── dotnet-library.yml
+└── files/
+    └── ...
+```
+
+The root configuration selects the GitHub organization and repository scope and
+defines repository-management behavior:
+
+```yaml
+version: 1
+organization: acme
+
+repositories:
+  scope:
+    names:
+      - "*"
+
+  settings:
+    collection_management: explicit
+```
+
+Repository templates explicitly declare their kind. `match` selects
+repositories; `repository` contains the desired state for repositories that
+match:
+
+```yaml
+kind: repository
+
+match:
+  names:
+    - "library-*"
+
+repository:
+  settings:
+    has_issues: true
+
+  teams:
+    - name: maintainers
+      permission: maintain
+
+  rulesets: []
+  environments: []
+  files: {}
+```
+
+Configuration and all templates are schema-validated before repository
+discovery. Unknown keys, unsupported configuration versions, missing template
+kinds, unsupported kinds, and empty selectors are rejected.
+
+## Commands
+
+### Plan
 
 ```sh
 octosmith plan --path ./configuration
-octosmith apply --path ./configuration
+```
 
-# Narrow execution to one repository in the configured scope
+`plan` reads GitHub state and reports the operations required to reach the
+configured desired state. It does not mutate GitHub.
+
+Review the plan before applying, especially when strict collection management is
+enabled.
+
+### Apply
+
+```sh
+octosmith apply --path ./configuration
+```
+
+`apply` reads fresh GitHub state, builds a new plan, and applies that plan. It
+does not execute a previously displayed plan.
+
+Apply is not transactional. If an operation fails, earlier operations for that
+repository can already have been applied. Remaining operations for the failed
+repository are skipped, while reconciliation can continue with other
+repositories.
+
+## Target one repository
+
+Both commands accept an optional repository name:
+
+```sh
 octosmith plan my-repo --path ./configuration
 octosmith apply my-repo --path ./configuration
 ```
 
-Collection management is configured under `repositories.settings` in
-`octosmith.yml`. It defaults to explicit ownership; set
-`collection_management: strict` there to make supported named collections
-authoritative.
+The argument narrows the configured repository scope; it never overrides it.
+OctoSmith fetches the repository directly, verifies that it belongs to
+`repositories.scope`, and then runs the normal reconciliation flow.
 
-Configuration and all templates are schema-validated before repository
-discovery. Unknown keys, empty selectors, and unsupported configuration versions
-are rejected. To explicitly select every repository, use
-`repositories: { scope: { names: ["*"] } }`.
+A targeted repository outside the configured scope is reported as failed and is
+never mutated.
 
-Review `plan` before applying: reports include resource names, file paths, and
-changed settings. Runtime variable values and file contents are omitted, and
-secret values are never included. Strict mode can delete undeclared members of
-owned collections; explicit empty environment variable or secret lists also
-clear those members in explicit mode.
+## Repository collection management
 
-Repository/environment variables and secrets declared by name in the
-configuration are read from same-named environment variables at runtime. Values
-are never stored in the OctoSmith configuration.
+`repositories.settings.collection_management` controls how declared
+collections are interpreted.
 
-Before applying a repository plan, all required secret values are resolved and
-snapshotted. A missing value prevents every mutation for that repository,
-including deletions; other repositories can still be processed. Plan mode does
-not require secret values. Secrets are written on each apply because GitHub
-cannot expose their current values for comparison.
+### `explicit` — default
 
-A repository argument narrows execution but never bypasses the configured scope.
-Targeted and full-scope executions return the same report shape; a targeted run
-contains one repository result. A repository outside the configured scope is
-reported as failed and is never mutated.
+Only explicitly declared members are managed. Undeclared members are preserved.
 
-Apply is not transactional. A later API failure can leave earlier operations
-applied; remaining operations for that repository are skipped. Failures result
-in exit code 1. Each apply reads fresh state and builds a new plan; it does not
-execute a previously displayed plan.
+```yaml
+repositories:
+  scope:
+    names: ["*"]
+  settings:
+    collection_management: explicit
+```
+
+This is the safe default.
+
+An explicitly empty collection can still mean "manage this collection as empty"
+where the resource semantics define that behavior. For example, empty
+environment variable or secret lists clear those members.
+
+### `strict`
+
+Managed named collections are authoritative. Undeclared members can therefore be
+removed.
+
+```yaml
+repositories:
+  scope:
+    names: ["*"]
+  settings:
+    collection_management: strict
+```
+
+Use strict mode only when the configuration is intended to own the complete
+collection.
+
+Managed files are an exception: strict collection management never infers file
+deletion. Files are deleted only when explicitly configured with
+`ensure: absent`.
+
+## Secrets and runtime values
+
+Variable values and secret values come from the process environment.
+
+```yaml
+kind: repository
+
+match:
+  names: ["service-*"]
+
+repository:
+  variables:
+    - REGION
+
+  secrets:
+    - DEPLOY_TOKEN
+```
+
+Running the command requires environment variables named `REGION` and
+`DEPLOY_TOKEN` when those values are needed.
+
+Secret values are resolved and snapshotted before any mutation for that
+repository. If a required secret value is missing, no operation for that
+repository is applied, including destructive operations.
+
+Plan mode does not require secret values.
+
+GitHub does not expose current secret values, so declared secrets are written on
+each apply.
+
+## Reporting and sensitive data
+
+Reports identify affected repositories, resources, settings, and file paths, but
+they do not expose:
+
+- secret values
+- runtime variable values
+- managed file contents
+
+Repository failures are isolated in the report so other repositories can still
+be processed where possible.
+
+## Exit codes
+
+OctoSmith returns exit code `0` when the command completes without failed or
+partially applied repositories.
+
+It returns exit code `1` for validation failures, reconciliation failures, and
+partially applied repositories.
