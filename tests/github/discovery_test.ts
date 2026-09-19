@@ -118,11 +118,12 @@ Deno.test("targeted discovery rejects an empty repository target", async () => {
   const client = new FakeGitHubClient({});
 
   await assertRejects(
-    () => discoverRepositories(
-      client,
-      configuration({ scope: { names: ["*"] } }),
-      "",
-    ),
+    () =>
+      discoverRepositories(
+        client,
+        configuration({ scope: { names: ["*"] } }),
+        "",
+      ),
     Error,
     "Repository target must not be empty",
   );
