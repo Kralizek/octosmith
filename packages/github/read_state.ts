@@ -62,7 +62,9 @@ export async function readCurrentState(
         ? []
         : strict
         ? actionsSecrets
-        : actionsSecrets.filter((name) => desired.actions?.secrets?.includes(name)),
+        : actionsSecrets.filter((name) =>
+          desired.actions?.secrets?.includes(name)
+        ),
       variables: desired.actions?.variables === undefined
         ? []
         : strict
@@ -188,7 +190,10 @@ function hasActionsSettings(
     actions.oidc !== undefined;
 }
 
-function defaultActionsSettings(): Omit<CurrentState["actions"], "secrets" | "variables"> {
+function defaultActionsSettings(): Omit<
+  CurrentState["actions"],
+  "secrets" | "variables"
+> {
   return {
     enabled: false,
     allowedActions: "all",
