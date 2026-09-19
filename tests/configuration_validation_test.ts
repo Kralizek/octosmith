@@ -99,10 +99,12 @@ Deno.test("configuration rejects repository template without repository body", a
 });
 
 Deno.test("configuration rejects legacy repository Actions values", async () => {
-  for (const repository of [
-    { secrets: ["TOKEN"] },
-    { variables: ["REGION"] },
-  ]) {
+  for (
+    const repository of [
+      { secrets: ["TOKEN"] },
+      { variables: ["REGION"] },
+    ]
+  ) {
     await withConfiguration(
       configuration,
       {
