@@ -876,6 +876,121 @@ function repository(
   };
 }
 
+Deno.test("CLI emits structured JSON reports", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "changed-value");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--format", "json", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const report = JSON.parse(output.join("\n"));
+    assertEquals(report.organization, "acme");
+    assertEquals(Array.isArray(report.repositories), true);
+    assertEquals(typeof report.startedAt, "string");
+    assertEquals(typeof report.completedAt, "string");
+    assertEquals(Number.isNaN(Date.parse(report.startedAt)), false);
+    assertEquals(Number.isNaN(Date.parse(report.completedAt)), false);
+    assertEquals(output.join("\n").includes("changed-value"), false);
+    assertEquals(mutations(requests), []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI JSON apply preserves the structured report shape", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub([]),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "sample", "--format=json", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const report = JSON.parse(output.join("\n"));
+    assertEquals(Object.keys(report).sort(), [
+      "completedAt",
+      "organization",
+      "repositories",
+      "startedAt",
+    ]);
+    assertEquals(report.repositories.length, 1);
+    assertEquals(report.repositories[0].repository, "sample");
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI rejects invalid output format before reconciliation", async () => {
+  const root = await configurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "--format", "yaml", "--path", root],
+        { runtime },
+      ),
+      1,
+    );
+
+    assertEquals(requests, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Unsupported output format: yaml. Expected text or json",
+    );
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 async function configurationDirectory(
   exactNames = false,
   collections?: "strict",
