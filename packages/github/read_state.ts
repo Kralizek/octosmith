@@ -63,7 +63,7 @@ export async function readCurrentState(
         : strict
         ? actionsSecrets
         : actionsSecrets.filter((name) =>
-          desired.actions?.secrets?.includes(name)
+          desired.actions?.secrets?.some((secret) => secret.name === name)
         ),
       variables: desired.actions?.variables === undefined
         ? []
@@ -81,7 +81,7 @@ export async function readCurrentState(
         : strict
         ? dependabotSecrets
         : dependabotSecrets.filter((name) =>
-          desired.dependabot?.secrets?.includes(name)
+          desired.dependabot?.secrets?.some((secret) => secret.name === name)
         ),
     },
     teams: desired.teams === undefined
@@ -126,7 +126,9 @@ function filterSparseEnvironments(
         ? []
         : owned.secrets.length === 0
         ? environment.secrets
-        : environment.secrets.filter((name) => owned.secrets?.includes(name)),
+        : environment.secrets.filter((name) =>
+          owned.secrets?.some((secret) => secret.name === name)
+        ),
       variables: owned.variables === undefined
         ? []
         : owned.variables.length === 0
