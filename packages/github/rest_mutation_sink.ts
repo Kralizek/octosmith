@@ -37,7 +37,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   ): RepositoryMutationSink {
     const names = new Set(operations.flatMap((operation) => {
       switch (operation.type) {
-        case "set-repository-secret":
+        case "set-actions-secret":
+        case "set-dependabot-secret":
           return [operation.secret];
         case "create-environment":
         case "update-environment":
@@ -113,26 +114,39 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
             encodeURIComponent(repository),
         );
         return;
-      case "set-repository-variable":
-        await this.setRepositoryVariable(repository, operation.variable);
+      case "set-actions-variable":
+        await this.setActionsVariable(repository, operation.variable);
         return;
-      case "remove-repository-variable":
+      case "remove-actions-variable":
         await this.#client.request(
           "DELETE",
           this.repo(repository) + "/actions/variables/" +
             encodeURIComponent(operation.name),
         );
         return;
-      case "set-repository-secret":
+      case "set-actions-secret":
         await this.setSecret(
           this.repo(repository) + "/actions/secrets",
           operation.secret,
         );
         return;
-      case "remove-repository-secret":
+      case "remove-actions-secret":
         await this.#client.request(
           "DELETE",
           this.repo(repository) + "/actions/secrets/" +
+            encodeURIComponent(operation.secret),
+        );
+        return;
+      case "set-dependabot-secret":
+        await this.setSecret(
+          this.repo(repository) + "/dependabot/secrets",
+          operation.secret,
+        );
+        return;
+      case "remove-dependabot-secret":
+        await this.#client.request(
+          "DELETE",
+          this.repo(repository) + "/dependabot/secrets/" +
             encodeURIComponent(operation.secret),
         );
         return;
@@ -325,7 +339,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     });
   }
 
-  async setRepositoryVariable(
+  async setActionsVariable(
     repository: string,
     variable: Variable,
   ): Promise<void> {
