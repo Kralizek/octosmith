@@ -79,7 +79,10 @@ Deno.test("strict Actions values remove undeclared names", () => {
 
   assertEquals(buildPlan(current, desired), {
     repository: "sample",
-    operations: [{ type: "set-actions-secret", secret: { name: "KEEP", source: "KEEP" } }],
+    operations: [{
+      type: "set-actions-secret",
+      secret: { name: "KEEP", source: "KEEP" },
+    }],
   });
   assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
@@ -108,17 +111,29 @@ Deno.test("Dependabot secrets are independent from Actions secrets", () => {
   assertEquals(buildPlan(current, desired), {
     repository: "sample",
     operations: [
-      { type: "set-actions-secret", secret: { name: "SHARED", source: "ACTIONS_SHARED" } },
-      { type: "set-dependabot-secret", secret: { name: "SHARED", source: "DEPENDABOT_SHARED" } },
+      {
+        type: "set-actions-secret",
+        secret: { name: "SHARED", source: "ACTIONS_SHARED" },
+      },
+      {
+        type: "set-dependabot-secret",
+        secret: { name: "SHARED", source: "DEPENDABOT_SHARED" },
+      },
     ],
   });
 
   assertEquals(buildPlan(current, { ...desired, collections: "strict" }), {
     repository: "sample",
     operations: [
-      { type: "set-actions-secret", secret: { name: "SHARED", source: "ACTIONS_SHARED" } },
+      {
+        type: "set-actions-secret",
+        secret: { name: "SHARED", source: "ACTIONS_SHARED" },
+      },
       { type: "remove-dependabot-secret", secret: "REMOVE" },
-      { type: "set-dependabot-secret", secret: { name: "SHARED", source: "DEPENDABOT_SHARED" } },
+      {
+        type: "set-dependabot-secret",
+        secret: { name: "SHARED", source: "DEPENDABOT_SHARED" },
+      },
     ],
   });
 });
