@@ -1,4 +1,5 @@
 import type {
+  CurrentActionsOidcSettings,
   CurrentActionsSettings,
   CurrentFile,
   CurrentRepositorySettings,
@@ -17,7 +18,13 @@ export interface RepositoryStateSource {
     repository: string,
   ): Promise<Readonly<Record<string, CustomPropertyValue>>>;
 
-  getActionsSettings(repository: string): Promise<CurrentActionsSettings>;
+  getActionsSettings(
+    repository: string,
+  ): Promise<Omit<CurrentActionsSettings, "oidc">>;
+
+  getActionsOidcSettings(
+    repository: string,
+  ): Promise<CurrentActionsOidcSettings>;
 
   getTeams(repository: string): Promise<readonly TeamPermission[]>;
 
