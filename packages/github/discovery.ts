@@ -126,6 +126,7 @@ async function discoverTargetRepository(
     const teams = referencedTeams.size > 0
       ? await getAllPages<{ readonly slug: string }>(client, path + "/teams")
       : [];
+    // GitHub returns all repository property values in one unpaginated response.
     const propertyValues = referencedProperties.size > 0
       ? await client.get<
         readonly {
