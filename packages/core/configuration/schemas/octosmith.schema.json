@@ -106,7 +106,7 @@
         "collection_management": {
           "type": "string",
           "enum": [
-            "sparse",
+            "explicit",
             "strict"
           ]
         }
