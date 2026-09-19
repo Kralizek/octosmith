@@ -4,6 +4,7 @@ version: 1
 
 organization: example-org
 
-scope:
-  teams:
-    - platform-team
+repositories:
+  scope:
+    teams:
+      - platform-team
