@@ -1,8 +1,5 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
-import {
-  parseOutputFormat,
-  renderOutput,
-} from "./output.ts";
+import { parseOutputFormat, renderOutput } from "./output.ts";
 
 Deno.test("parseOutputFormat accepts supported formats", () => {
   assertEquals(parseOutputFormat("text"), "text");
