@@ -185,9 +185,9 @@ repository:
 ```
 
 Running the command requires environment variables named `REGION`,
-`DEPLOY_TOKEN`, and `NUGET_FEED_TOKEN` when those values are needed. Actions
-and Dependabot secrets are separate GitHub secret stores even when they use the
-same runtime value name.
+`DEPLOY_TOKEN`, and `NUGET_FEED_TOKEN` when those values are needed. Actions and
+Dependabot secrets are separate GitHub secret stores even when they use the same
+runtime value name.
 
 Secret values are resolved and snapshotted before any mutation for that
 repository. If a required secret value is missing, no operation for that
