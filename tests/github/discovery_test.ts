@@ -47,6 +47,89 @@ class FakeGitHubClient implements GitHubClient {
   }
 }
 
+Deno.test("targeted discovery fetches only the requested repository and selector metadata", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+    "/repos/acme/api/teams?page=1&per_page=100": [[{ slug: "platform" }]],
+    "/repos/acme/api/properties/values": [[
+      { property_name: "kind", value: "service" },
+    ]],
+  });
+
+  const result = await discoverRepositories(
+    client,
+    configuration({
+      scope: {
+        teams: ["platform"],
+        properties: { kind: "service" },
+      },
+    }),
+    "api",
+  );
+
+  assertEquals(result, {
+    repositories: [{
+      name: "api",
+      visibility: "private",
+      teams: ["platform"],
+      properties: { kind: "service" },
+    }],
+    failures: [],
+  });
+  assertEquals(client.requests.map(requestKeyFromRequest), [
+    "/repos/acme/api",
+    "/repos/acme/api/teams?page=1&per_page=100",
+    "/repos/acme/api/properties/values",
+  ]);
+});
+
+Deno.test("targeted discovery isolates selector metadata failures", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+  });
+
+  const result = await discoverRepositories(
+    client,
+    configuration({ scope: { teams: ["platform"] } }),
+    "api",
+  );
+
+  assertEquals(result.repositories, []);
+  assertEquals(result.failures.length, 1);
+  assertEquals(result.failures[0].repository, "api");
+  assertEquals(
+    result.failures[0].error instanceof Error
+      ? result.failures[0].error.message
+      : String(result.failures[0].error),
+    "Unexpected request: /repos/acme/api/teams?page=1&per_page=100",
+  );
+});
+
+Deno.test("targeted discovery reports repositories outside configured scope", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+  });
+
+  const result = await discoverRepositories(
+    client,
+    configuration({ scope: { visibility: "public" } }),
+    "api",
+  );
+
+  assertEquals(result.repositories, []);
+  assertEquals(result.failures.length, 1);
+  assertEquals(result.failures[0].repository, "api");
+  assertEquals(
+    result.failures[0].error instanceof Error
+      ? result.failures[0].error.message
+      : String(result.failures[0].error),
+    "Repository api is outside the configured scope",
+  );
+  assertEquals(client.requests.map((request) => request.path), [
+    "/repos/acme/api",
+  ]);
+});
+
 Deno.test("discovery fetches exact repository names directly", async () => {
   const client = new FakeGitHubClient({
     "/repos/acme/api": [{ name: "api", visibility: "private" }],
