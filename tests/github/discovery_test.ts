@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import type { LoadedConfiguration, RepositoryTemplate } from "@octosmith/core";
 import {
   discoverRepositories,
@@ -51,7 +51,7 @@ Deno.test("targeted discovery fetches only the requested repository and selector
   const client = new FakeGitHubClient({
     "/repos/acme/api": [{ name: "api", visibility: "private" }],
     "/repos/acme/api/teams?page=1&per_page=100": [[{ slug: "platform" }]],
-    "/repos/acme/api/properties/values?page=1&per_page=100": [[
+    "/repos/acme/api/properties/values": [[
       { property_name: "kind", value: "service" },
     ]],
   });
@@ -79,21 +79,20 @@ Deno.test("targeted discovery fetches only the requested repository and selector
   assertEquals(client.requests.map(requestKeyFromRequest), [
     "/repos/acme/api",
     "/repos/acme/api/teams?page=1&per_page=100",
-    "/repos/acme/api/properties/values?page=1&per_page=100",
+    "/repos/acme/api/properties/values",
   ]);
 });
 
-Deno.test("targeted discovery paginates repository property values", async () => {
-  const firstPage = Array.from({ length: 100 }, (_, index) => ({
+Deno.test("targeted discovery reads repository property values once", async () => {
+  const propertyValues = Array.from({ length: 99 }, (_, index) => ({
     property_name: "unrelated-" + index,
     value: "value",
   }));
+  propertyValues.push({ property_name: "kind", value: "service" });
+
   const client = new FakeGitHubClient({
     "/repos/acme/api": [{ name: "api", visibility: "private" }],
-    "/repos/acme/api/properties/values?page=1&per_page=100": [firstPage],
-    "/repos/acme/api/properties/values?page=2&per_page=100": [[
-      { property_name: "kind", value: "service" },
-    ]],
+    "/repos/acme/api/properties/values": [propertyValues],
   });
 
   const result = await discoverRepositories(
@@ -111,9 +110,24 @@ Deno.test("targeted discovery paginates repository property values", async () =>
   assertEquals(result.failures, []);
   assertEquals(client.requests.map(requestKeyFromRequest), [
     "/repos/acme/api",
-    "/repos/acme/api/properties/values?page=1&per_page=100",
-    "/repos/acme/api/properties/values?page=2&per_page=100",
+    "/repos/acme/api/properties/values",
   ]);
+});
+
+Deno.test("targeted discovery rejects an empty repository target", async () => {
+  const client = new FakeGitHubClient({});
+
+  await assertRejects(
+    () => discoverRepositories(
+      client,
+      configuration({ scope: { names: ["*"] } }),
+      "",
+    ),
+    Error,
+    "Repository target must not be empty",
+  );
+
+  assertEquals(client.requests, []);
 });
 
 Deno.test("targeted discovery isolates selector metadata failures", async () => {
