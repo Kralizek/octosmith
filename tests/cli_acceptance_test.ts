@@ -9,6 +9,7 @@ interface CapturedRequest {
 
 Deno.test("CLI reconciles through the real GitHub HTTP stack", async () => {
   const root = await configurationDirectory();
+  const strictRoot = await configurationDirectory(false, "strict");
   const previous = Deno.env.get("DESIRED");
 
   try {
@@ -60,7 +61,7 @@ Deno.test("CLI reconciles through the real GitHub HTTP stack", async () => {
 
     assertEquals(
       await main(
-        ["apply", "--path", root, "--collections", "strict"],
+        ["apply", "--path", strictRoot],
         { runtime, write: (value) => output.push(value) },
       ),
       0,
@@ -92,6 +93,7 @@ Deno.test("CLI reconciles through the real GitHub HTTP stack", async () => {
     }
 
     await Deno.remove(root, { recursive: true });
+    await Deno.remove(strictRoot, { recursive: true });
   }
 });
 
@@ -379,7 +381,7 @@ Deno.test("CLI preflights repository secrets before strict cleanup and continues
       match: { names: ["z-next"] },
       repository: { settings: { has_issues: false } },
     },
-  });
+  }, { names: ["*"] }, "strict");
   const requests: CapturedRequest[] = [];
   const events: string[] = [];
   const output: string[] = [];
@@ -394,7 +396,7 @@ Deno.test("CLI preflights repository secrets before strict cleanup and continues
       },
     });
     assertEquals(
-      await main(["apply", "--path", root, "--collections", "strict"], {
+      await main(["apply", "--path", root], {
         runtime,
         write: (value) => output.push(value),
       }),
@@ -429,7 +431,7 @@ Deno.test("CLI preflights environment secrets before any strict mutation", async
       repository: { settings: { has_issues: false } },
       environments: [{ name: "production", secrets: ["NEW"], variables: [] }],
     },
-  }, { names: ["sample"] });
+  }, { names: ["sample"] }, "strict");
   const requests: CapturedRequest[] = [];
   const output: string[] = [];
   try {
@@ -442,7 +444,7 @@ Deno.test("CLI preflights environment secrets before any strict mutation", async
       },
     });
     assertEquals(
-      await main(["apply", "--path", root, "--collections", "strict"], {
+      await main(["apply", "--path", root], {
         runtime,
         write: (value) => output.push(value),
       }),
@@ -466,7 +468,7 @@ Deno.test("CLI plan identifies strict deletion targets and changed settings", as
       repository: { settings: { has_issues: false }, secrets: ["NEW"] },
       environments: [],
     },
-  }, { names: ["sample"] });
+  }, { names: ["sample"] }, "strict");
   const requests: CapturedRequest[] = [];
   const output: string[] = [];
   let secretCalls = 0;
@@ -481,7 +483,7 @@ Deno.test("CLI plan identifies strict deletion targets and changed settings", as
       },
     });
     assertEquals(
-      await main(["plan", "--path", root, "--collections", "strict"], {
+      await main(["plan", "--path", root], {
         runtime,
         write: (value) => output.push(value),
       }),
@@ -511,12 +513,18 @@ Deno.test("CLI plan identifies strict deletion targets and changed settings", as
 async function safetyConfigurationDirectory(
   templates: Readonly<Record<string, unknown>>,
   scope: unknown = { names: ["*"] },
+  collections?: "strict",
 ): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
   await Deno.writeTextFile(
     root + "/octosmith.yml",
-    JSON.stringify({ version: 1, organization: "acme", scope }),
+    JSON.stringify({
+      version: 1,
+      organization: "acme",
+      scope,
+      ...(collections && { reconciliation: { collections } }),
+    }),
   );
   for (const [name, template] of Object.entries(templates)) {
     await Deno.writeTextFile(
@@ -692,6 +700,7 @@ function repository(
 
 async function configurationDirectory(
   exactNames = false,
+  collections?: "strict",
 ): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
@@ -712,6 +721,7 @@ async function configurationDirectory(
         "version: 1",
         "organization: acme",
         'scope: { names: ["*"] }',
+        ...(collections ? ["reconciliation:", "  collections: " + collections] : []),
         "",
       ].join("\n"),
   );
