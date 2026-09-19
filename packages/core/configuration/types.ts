@@ -1,7 +1,7 @@
 import type {
+  CollectionReconciliationMode,
   MergeCommitMessage,
   MergeCommitTitle,
-  CollectionReconciliationMode,
   PropertyValue,
   RepositoryVisibility,
   RulesetBypassActorType,
