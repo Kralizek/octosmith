@@ -537,7 +537,8 @@ async function discoverRepositoryList(
 
 function configuration(
   root: {
-    readonly scope: LoadedConfiguration["configuration"]["repositories"]["scope"];
+    readonly scope:
+      LoadedConfiguration["configuration"]["repositories"]["scope"];
   },
   templates: Readonly<Record<string, RepositoryTemplate>> = {},
 ): LoadedConfiguration {
