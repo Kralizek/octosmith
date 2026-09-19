@@ -206,7 +206,7 @@ async function configurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'scope: { names: ["*"] }',
+      'repositories: { scope: { names: ["*"] } }',
       "",
     ].join("\n"),
   );
@@ -214,6 +214,7 @@ async function configurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
@@ -238,7 +239,7 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'scope: { names: ["sample"] }',
+      'repositories: { scope: { names: ["sample"] } }',
       "",
     ].join("\n"),
   );
@@ -246,16 +247,17 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
       "repository:",
       "  variables:",
       "    - REGION",
-      "files:",
-      "  managed.txt:",
-      "    ensure: exact",
-      "    source: files/managed.txt",
+      "  files:",
+      "    managed.txt:",
+      "      ensure: exact",
+      "      source: files/managed.txt",
       "",
     ].join("\n"),
   );

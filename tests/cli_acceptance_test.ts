@@ -693,14 +693,31 @@ async function safetyConfigurationDirectory(
     JSON.stringify({
       version: 1,
       organization: "acme",
-      scope,
-      ...(collections && { settings: { collection_management: collections } }),
+      repositories: {
+        scope,
+        ...(collections && {
+          settings: { collection_management: collections },
+        }),
+      },
     }),
   );
   for (const [name, template] of Object.entries(templates)) {
+    const value = template as Record<string, unknown>;
+    const repository = {
+      ...((value.repository as Record<string, unknown> | undefined) ?? {}),
+      ...(value.rulesets !== undefined && { rulesets: value.rulesets }),
+      ...(value.environments !== undefined && {
+        environments: value.environments,
+      }),
+      ...(value.files !== undefined && { files: value.files }),
+    };
     await Deno.writeTextFile(
       root + "/templates/" + name + ".yml",
-      JSON.stringify(template),
+      JSON.stringify({
+        kind: "repository",
+        match: value.match,
+        repository,
+      }),
     );
   }
   return root;
@@ -889,18 +906,24 @@ async function configurationDirectory(
       ? [
         "version: 1",
         "organization: acme",
-        "scope:",
-        "  names:",
-        "    - sample",
-        "    - missing",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "      - missing",
         "",
       ].join("\n")
       : [
         "version: 1",
         "organization: acme",
-        'scope: { names: ["*"] }',
+        "repositories:",
+        "  scope:",
+        '    names: ["*"]',
         ...(collections
-          ? ["settings:", "  collection_management: " + collections]
+          ? [
+            "  settings:",
+            "    collection_management: " + collections,
+          ]
           : []),
         "",
       ].join("\n"),
@@ -909,6 +932,7 @@ async function configurationDirectory(
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
@@ -1045,13 +1069,14 @@ async function secretConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'scope: { names: ["*"] }',
+      'repositories: { scope: { names: ["*"] } }',
       "",
     ].join("\n"),
   );
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
@@ -1073,7 +1098,7 @@ async function partialConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'scope: { names: ["*"] }',
+      'repositories: { scope: { names: ["*"] } }',
       "",
     ].join("\n"),
   );
@@ -1081,6 +1106,7 @@ async function partialConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "kind: repository",
       "match:",
       "  names:",
       "    - sample",
@@ -1090,10 +1116,10 @@ async function partialConfigurationDirectory(): Promise<string> {
       "    has_issues: false",
       "  variables:",
       "    - DESIRED",
-      "files:",
-      "  managed.txt:",
-      "    ensure: exact",
-      "    source: files/managed.txt",
+      "  files:",
+      "    managed.txt:",
+      "      ensure: exact",
+      "      source: files/managed.txt",
       "",
     ].join("\n"),
   );

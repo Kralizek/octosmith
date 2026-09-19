@@ -388,10 +388,12 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
       { scope: {} },
       {
         code: {
+          kind: "repository",
           match: {
             teams: ["platform"],
             properties: { kind: "service" },
           },
+          repository: {},
         },
       },
     ),
@@ -536,7 +538,10 @@ async function discoverRepositoryList(
 }
 
 function configuration(
-  root: { readonly scope: LoadedConfiguration["configuration"]["scope"] },
+  root: {
+    readonly scope:
+      LoadedConfiguration["configuration"]["repositories"]["scope"];
+  },
   templates: Readonly<Record<string, RepositoryTemplate>> = {},
 ): LoadedConfiguration {
   return {
@@ -544,7 +549,7 @@ function configuration(
     configuration: {
       version: 1,
       organization: "acme",
-      scope: root.scope,
+      repositories: { scope: root.scope },
     },
     templates,
   };

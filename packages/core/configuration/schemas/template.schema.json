@@ -1,36 +1,23 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/packages/core/configuration/schemas/template.schema.json",
-  "title": "OctoSmith repository template",
+  "title": "OctoSmith template",
   "type": "object",
   "additionalProperties": false,
   "required": [
-    "match"
+    "kind",
+    "match",
+    "repository"
   ],
   "properties": {
+    "kind": {
+      "const": "repository"
+    },
     "match": {
       "$ref": "#/$defs/selector"
     },
     "repository": {
       "$ref": "#/$defs/repository"
-    },
-    "rulesets": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/ruleset"
-      }
-    },
-    "environments": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/environment"
-      }
-    },
-    "files": {
-      "type": "object",
-      "additionalProperties": {
-        "$ref": "#/$defs/file"
-      }
     }
   },
   "$defs": {
@@ -152,8 +139,27 @@
         },
         "actions": {
           "$ref": "#/$defs/actionsSettings"
+        },
+        "rulesets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ruleset"
+          }
+        },
+        "environments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/environment"
+          }
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/file"
+          }
         }
-      }
+      },
+      "required": []
     },
     "repositorySettings": {
       "type": "object",

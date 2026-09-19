@@ -49,7 +49,7 @@ export async function discoverRepositories(
 
   const organization = loaded.configuration.organization;
   const selectors = [
-    loaded.configuration.scope,
+    loaded.configuration.repositories.scope,
     ...Object.values(loaded.templates).map((template) => template.match),
   ];
   const referencedTeams = collectReferencedTeams(selectors);
@@ -69,7 +69,7 @@ export async function discoverRepositories(
   const discovery = await discoverCandidates(
     client,
     organization,
-    loaded.configuration.scope,
+    loaded.configuration.repositories.scope,
     teamRepositories,
   );
 
@@ -103,7 +103,7 @@ export async function discoverRepositories(
   return {
     repositories: repositories
       .filter((repository) =>
-        matchesSelector(loaded.configuration.scope, repository)
+        matchesSelector(loaded.configuration.repositories.scope, repository)
       )
       .sort((left, right) => left.name.localeCompare(right.name)),
     failures: discovery.failures,
@@ -151,7 +151,7 @@ async function discoverTargetRepository(
       ),
     };
 
-    if (!matchesSelector(loaded.configuration.scope, metadata)) {
+    if (!matchesSelector(loaded.configuration.repositories.scope, metadata)) {
       return {
         repositories: [],
         failures: [{
