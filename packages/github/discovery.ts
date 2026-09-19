@@ -127,10 +127,12 @@ async function discoverTargetRepository(
       ? await getAllPages<{ readonly slug: string }>(client, path + "/teams")
       : [];
     const propertyValues = referencedProperties.size > 0
-      ? await client.get<readonly {
-        readonly property_name: string;
-        readonly value: PropertyValue;
-      }[]>(path + "/properties/values")
+      ? await client.get<
+        readonly {
+          readonly property_name: string;
+          readonly value: PropertyValue;
+        }[]
+      >(path + "/properties/values")
       : [];
 
     const metadata: RepositoryMetadata = {
