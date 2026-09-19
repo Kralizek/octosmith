@@ -693,8 +693,12 @@ async function safetyConfigurationDirectory(
     JSON.stringify({
       version: 1,
       organization: "acme",
-      repositories: { scope },
-      ...(collections && { settings: { collection_management: collections } }),
+      repositories: {
+        scope,
+        ...(collections && {
+          settings: { collection_management: collections },
+        }),
+      },
     }),
   );
   for (const [name, template] of Object.entries(templates)) {
@@ -914,7 +918,10 @@ async function configurationDirectory(
         "organization: acme",
         'repositories: { scope: { names: ["*"] } }',
         ...(collections
-          ? ["settings:", "  collection_management: " + collections]
+          ? [
+            "  settings:",
+            "    collection_management: " + collections,
+          ]
           : []),
         "",
       ].join("\n"),
