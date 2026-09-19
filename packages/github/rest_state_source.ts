@@ -189,7 +189,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     }));
   }
 
-  async getSecrets(repository: string): Promise<readonly SecretName[]> {
+  async getActionsSecrets(repository: string): Promise<readonly SecretName[]> {
     const secrets = await getAllWrappedPages<
       { readonly name: string }
     >(
@@ -201,7 +201,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     return secrets.map((secret) => secret.name);
   }
 
-  async getVariables(repository: string): Promise<readonly Variable[]> {
+  async getActionsVariables(repository: string): Promise<readonly Variable[]> {
     const variables = await getAllWrappedPages<
       {
         readonly name: string;
@@ -217,6 +217,20 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       name: variable.name,
       value: variable.value,
     }));
+  }
+
+  async getDependabotSecrets(
+    repository: string,
+  ): Promise<readonly SecretName[]> {
+    const secrets = await getAllWrappedPages<
+      { readonly name: string }
+    >(
+      this.client,
+      this.repo(repository) + "/dependabot/secrets",
+      "secrets",
+    );
+
+    return secrets.map((secret) => secret.name);
   }
 
   async getRulesets(repository: string): Promise<readonly CurrentRuleset[]> {
