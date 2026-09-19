@@ -122,6 +122,8 @@ export async function main(
 
 function hasExplicitEmptyRepositoryTarget(args: readonly string[]): boolean {
   const [command, ...rest] = args;
+  const optionsWithValues = new Set(["-p", "--path", "--format"]);
+  const optionsWithInlineValues = ["-p=", "--path=", "--format="];
 
   if (command !== "plan" && command !== "apply") {
     return false;
@@ -130,12 +132,12 @@ function hasExplicitEmptyRepositoryTarget(args: readonly string[]): boolean {
   for (let index = 0; index < rest.length; index++) {
     const argument = rest[index];
 
-    if (argument === "-p" || argument === "--path") {
+    if (optionsWithValues.has(argument)) {
       index++;
       continue;
     }
 
-    if (argument.startsWith("--path=") || argument.startsWith("-p=")) {
+    if (optionsWithInlineValues.some((prefix) => argument.startsWith(prefix))) {
       continue;
     }
 
