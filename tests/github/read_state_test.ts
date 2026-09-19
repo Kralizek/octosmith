@@ -230,10 +230,12 @@ function fullDesired(): DesiredState {
     customProperties: { keep: "yes" },
     actions: {
       enabled: true,
-      secrets: ["OWNED"],
+      secrets: [{ name: "OWNED", source: "OWNED_SOURCE" }],
       variables: [{ name: "OWNED", value: "1" }],
     },
-    dependabot: { secrets: ["OWNED_DEPENDABOT"] },
+    dependabot: {
+      secrets: [{ name: "OWNED_DEPENDABOT", source: "DEPENDABOT_SOURCE" }],
+    },
     teams: [{
       team: "owned",
       permission: { kind: "built-in", name: "pull" },
@@ -241,7 +243,7 @@ function fullDesired(): DesiredState {
     rulesets: [{ name: "owned" }],
     environments: [{
       name: "owned",
-      secrets: ["OWNED_SECRET"],
+      secrets: [{ name: "OWNED_SECRET", source: "ENV_SECRET_SOURCE" }],
       variables: [{ name: "OWNED_VARIABLE", value: "1" }],
     }],
   };
