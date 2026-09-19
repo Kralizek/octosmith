@@ -10,6 +10,6 @@ code.
 
 ## Examples
 
-See [`examples/configuration`](examples/configuration) for a sample configuration
-directory covering repository scope, typed repository templates, and managed
-files.
+See [`examples/configuration`](examples/configuration) for a sample
+configuration directory covering repository scope, typed repository templates,
+and managed files.
