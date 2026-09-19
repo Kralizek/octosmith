@@ -22,15 +22,6 @@
       }
     }
   ],
-  "secrets": [
-    "REVIEW_BOT_TOKEN"
-  ],
-  "variables": [
-    {
-      "name": "NOTIFICATION_CHANNEL_ID",
-      "value": "NOTIFICATION_CHANNEL_ID-value"
-    }
-  ],
   "rulesets": [
     {
       "name": "protect-default-branch",
@@ -85,5 +76,16 @@
       "content": "name: Request review\n\non:\n  issue_comment:\n    types:\n      - created\n\npermissions:\n  contents: read\n\njobs:\n  request-review:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Request review\n        run: echo \"Requesting review\"\n"
     }
   ],
-  "collections": "explicit"
+  "collections": "explicit",
+  "actions": {
+    "secrets": [
+      "REVIEW_BOT_TOKEN"
+    ],
+    "variables": [
+      {
+        "name": "NOTIFICATION_CHANNEL_ID",
+        "value": "NOTIFICATION_CHANNEL_ID-value"
+      }
+    ]
+  }
 }
