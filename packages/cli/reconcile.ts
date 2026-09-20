@@ -163,7 +163,6 @@ export async function reconcile(
       );
     }
   }
-
 }
 
 function environmentValue(name: string): string {
