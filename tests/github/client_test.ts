@@ -102,6 +102,47 @@ Deno.test("GitHub client accepts a bodyless 204", async () => {
   );
 });
 
+Deno.test("GitHub client traces API-relative endpoints and statuses", async () => {
+  const traces: {
+    method: string;
+    path: string;
+    status: number;
+  }[] = [];
+
+  const responses = [
+    new Response(JSON.stringify({ name: "api" }), { status: 200 }),
+    new Response("missing", { status: 404, statusText: "Not Found" }),
+    new Response("forbidden", { status: 403, statusText: "Forbidden" }),
+  ];
+
+  const client = new FetchGitHubClient({
+    token: "token",
+    baseUrl: "https://github.example.com/api/v3",
+    fetch: () => Promise.resolve(responses.shift()!.clone()),
+    trace: (entry) => traces.push(entry),
+  });
+
+  await client.get("/repos/acme/api", { page: 2 });
+  assertEquals(
+    await client.request("GET", "/repos/acme/missing", {
+      query: { token_like_query: "do-not-log" },
+      allowNotFound: true,
+    }),
+    undefined,
+  );
+  await assertRejects(
+    () => client.get("/repos/acme/private"),
+    Error,
+    "403 Forbidden",
+  );
+
+  assertEquals(traces, [
+    { method: "GET", path: "/repos/acme/api", status: 200 },
+    { method: "GET", path: "/repos/acme/missing", status: 404 },
+    { method: "GET", path: "/repos/acme/private", status: 403 },
+  ]);
+});
+
 function responseClient(response: Response): FetchGitHubClient {
   return new FetchGitHubClient({
     token: "token",
