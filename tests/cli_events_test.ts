@@ -22,7 +22,7 @@ Deno.test("repository plan report maps to Hooksmith event document", () => {
   );
 
   assertEquals(event, {
-    type: "repository.planned",
+    type: "resource.planned",
     timestamp: "2026-09-20T11:00:00.000Z",
     source: {
       kind: "github.organization",
@@ -63,7 +63,7 @@ Deno.test("failed repository report retains error in Hooksmith event data", () =
     new Date("2026-09-20T11:00:00.000Z"),
   );
 
-  assertEquals(event.type, "repository.applied");
+  assertEquals(event.type, "resource.applied");
   assertEquals(event.metadata, {
     producer: "octosmith",
     status: "failed",
