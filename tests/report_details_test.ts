@@ -5,7 +5,6 @@ import {
   renderReport,
   reportPlannedRepository,
 } from "@octosmith/core";
-import { currentState } from "./plan/fixtures.ts";
 
 Deno.test("evaluation details are safe and resource-oriented", () => {
   const desired: DesiredState = {
