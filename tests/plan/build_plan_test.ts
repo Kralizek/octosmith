@@ -27,7 +27,7 @@ Deno.test("buildPlan returns an empty plan when no desired resources are owned",
   );
 });
 
-Deno.test("buildPlan applies a mixed desired state", () => {
+Deno.test("buildPlan plans a mixed desired state", () => {
   const current = currentState({
     customProperties: { tier: "normal" },
     teams: [{
