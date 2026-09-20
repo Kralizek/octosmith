@@ -15,7 +15,10 @@ export interface CliExecutionOptions {
   readonly write?: (value: string) => void;
 }
 
-function createCli(options: CliExecutionOptions = {}): Command {
+function createCli(
+  options: CliExecutionOptions = {},
+  args?: readonly string[],
+): Command {
   const write = options.write ?? console.log;
 
   const root = new Command()
@@ -45,6 +48,7 @@ function createCli(options: CliExecutionOptions = {}): Command {
           default: "text",
         })
         .action(async (commandOptions, repository?: string) => {
+          assertRepositoryPosition(args, mode, repository);
           const format = parseOutputFormat(commandOptions.format);
           const runtime = options.runtime ?? createDefaultRuntime();
           const report = await reconcile(runtime, {
@@ -101,13 +105,8 @@ export async function main(
   options: CliExecutionOptions = {},
 ): Promise<number> {
   try {
-    // Cliffy 1.2.1 treats "" as an omitted optional positional argument before
-    // invoking custom argument types or value handlers, so inspect raw argv.
-    if (hasExplicitEmptyRepositoryTarget(args)) {
-      throw new Error("Repository target must not be empty");
-    }
-
-    await createCli(options).parse(args);
+    validateRawRepositoryArgument(args);
+    await createCli(options, args).parse(args);
     return 0;
   } catch (error) {
     if (error instanceof ReconciliationFailedError) {
@@ -120,35 +119,32 @@ export async function main(
   }
 }
 
-function hasExplicitEmptyRepositoryTarget(args: readonly string[]): boolean {
+function validateRawRepositoryArgument(args: readonly string[]): void {
   const [command, ...rest] = args;
-  const optionsWithValues = new Set(["-p", "--path", "--format"]);
-  const optionsWithInlineValues = ["-p=", "--path=", "--format="];
 
   if (command !== "plan" && command !== "apply") {
-    return false;
+    return;
   }
 
-  for (let index = 0; index < rest.length; index++) {
-    const argument = rest[index];
+  if (rest.includes("")) {
+    throw new Error("Repository target must not be empty");
+  }
+}
 
-    if (optionsWithValues.has(argument)) {
-      index++;
-      continue;
-    }
-
-    if (optionsWithInlineValues.some((prefix) => argument.startsWith(prefix))) {
-      continue;
-    }
-
-    if (argument.startsWith("-")) {
-      continue;
-    }
-
-    return argument.length === 0;
+function assertRepositoryPosition(
+  args: readonly string[] | undefined,
+  command: "plan" | "apply",
+  repository: string | undefined,
+): void {
+  if (repository === undefined || args === undefined) {
+    return;
   }
 
-  return false;
+  if (args[0] !== command || args[1] !== repository) {
+    throw new Error(
+      "Repository target must appear immediately after the command",
+    );
+  }
 }
 
 export * from "./output.ts";
