@@ -1,10 +1,10 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import type { LoadedConfiguration, RepositoryTemplate } from "@octosmith/core";
+import type { LoadedConfiguration, RepositoryTemplate } from "@octosmith/octosmith";
 import {
   discoverRepositories,
   type GitHubClient,
   type GitHubQueryValue,
-} from "@octosmith/github";
+} from "@octosmith/octosmith";
 
 interface Request {
   readonly path: string;
@@ -22,7 +22,7 @@ class FakeGitHubClient implements GitHubClient {
   request<T>(
     method: string,
     path: string,
-    options: import("@octosmith/github").GitHubRequestOptions = {},
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
   ): Promise<T> {
     if (method !== "GET") {
       throw new Error("Unexpected method: " + method);
