@@ -1,0 +1,45 @@
+name: OctoSmith
+description: Plan or apply declarative GitHub configuration with OctoSmith
+
+inputs:
+  mode:
+    description: OctoSmith command to run (plan or apply)
+    required: true
+  path:
+    description: Configuration directory
+    required: false
+    default: "."
+  github-token:
+    description: GitHub token used by OctoSmith
+    required: true
+  repository:
+    description: Optional repository target
+    required: false
+    default: ""
+  format:
+    description: Output format (text or json)
+    required: false
+    default: text
+  verbose:
+    description: Include unchanged items and GitHub API response traces
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Deno
+      uses: denoland/setup-deno@v2
+      with:
+        deno-version: v2.x
+
+    - name: Run OctoSmith
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        INPUT_MODE: ${{ inputs.mode }}
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_REPOSITORY: ${{ inputs.repository }}
+        INPUT_FORMAT: ${{ inputs.format }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+      run: deno run -A "$GITHUB_ACTION_PATH/action/mod.ts"
