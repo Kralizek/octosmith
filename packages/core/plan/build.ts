@@ -29,11 +29,7 @@ import type {
   DesiredEnvironment,
   DesiredState,
 } from "../state/types.ts";
-import type {
-  Operation,
-  Plan,
-  ReconciliationEvaluation,
-} from "./types.ts";
+import type { Operation, Plan, ReconciliationEvaluation } from "./types.ts";
 
 export function buildPlan(
   current: CurrentState,
@@ -613,13 +609,11 @@ export function buildReconciliationEvaluations(
 
   for (const environment of desired.environments ?? []) {
     if (
-      !has((operation) =>
-        (
-          (operation.type === "create-environment" ||
-            operation.type === "update-environment") &&
-          operation.environment.name === environment.name
-        )
-      )
+      !has((operation) => (
+        (operation.type === "create-environment" ||
+          operation.type === "update-environment") &&
+        operation.environment.name === environment.name
+      ))
     ) {
       evaluations.push({
         type: "environment",
@@ -632,9 +626,9 @@ export function buildReconciliationEvaluations(
     if (
       !has((operation) =>
         (
-          operation.type === "create-file" ||
-          operation.type === "update-file"
-        ) && operation.file.path === file.path ||
+            operation.type === "create-file" ||
+            operation.type === "update-file"
+          ) && operation.file.path === file.path ||
         operation.type === "delete-file" && operation.path === file.path
       )
     ) {
