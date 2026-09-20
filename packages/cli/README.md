@@ -124,8 +124,8 @@ items are flat objects with `type`, `status`, `details`, and optional `error`.
 Targeted and full-scope executions use the same report shape.
 
 Text output uses one line per reconciliation item. Status icons have stable
-meanings: `→` planned, `✓` reconciled, `-` already desired, `✗` failed, and
-`·` skipped. Repository rows are always shown; unchanged items are hidden by
+meanings: `→` planned, `✓` reconciled, `-` already desired, `✗` failed, and `·`
+skipped. Repository rows are always shown; unchanged items are hidden by
 default. Pass `--verbose` to include unchanged items in text output. JSON always
 contains the complete item set.
 
