@@ -1121,7 +1121,7 @@ Deno.test("CLI verbose traces GitHub calls on stderr before JSON stdout", async 
     assertEquals(stderr[0], "[organization]");
     assertStringIncludes(stderr[1], "GET /orgs/acme/repos — 200");
 
-    const repositoryGroup = stderr.indexOf("[sample]");
+    const repositoryGroup = stderr.indexOf("[repository: sample]");
     assertEquals(repositoryGroup > 1, true);
     assertEquals(stderr[repositoryGroup - 1], "");
     assertStringIncludes(
