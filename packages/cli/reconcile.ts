@@ -103,6 +103,9 @@ export interface ReconcileOptions {
   readonly repository?: string;
   readonly values?: RuntimeValueProvider;
   readonly now?: () => Date;
+  readonly onRepositoryCompleted?: (
+    report: import("@octosmith/core").RepositoryReport,
+  ) => void | Promise<void>;
 }
 
 export async function reconcile(
@@ -118,11 +121,21 @@ export async function reconcile(
 
   const loaded = await loadConfigurationDirectory(options.path);
   const discovery = await runtime.discover(loaded, options.repository);
-  const results: import("@octosmith/core").RepositoryReport[] = discovery
-    .failures.map((failure) =>
-      reportFailedRepository(failure.repository, failure.error)
-    );
+  const results: import("@octosmith/core").RepositoryReport[] = [];
   const values = options.values ?? environmentValue;
+
+  const addResult = async (
+    result: import("@octosmith/core").RepositoryReport,
+  ) => {
+    results.push(result);
+    await options.onRepositoryCompleted?.(result);
+  };
+
+  for (const failure of discovery.failures) {
+    await addResult(
+      reportFailedRepository(failure.repository, failure.error),
+    );
+  }
 
   for (const repository of discovery.repositories) {
     let template: string | undefined;
@@ -138,14 +151,14 @@ export async function reconcile(
       );
 
       if (options.mode === "plan") {
-        results.push(
+        await addResult(
           reportPlannedRepository(desired.template, plan, evaluations),
         );
         continue;
       }
 
       const applied = await runtime.apply(plan);
-      results.push(
+      await addResult(
         reportAppliedRepository(
           desired.template,
           desired.repository,
@@ -154,7 +167,9 @@ export async function reconcile(
         ),
       );
     } catch (error) {
-      results.push(reportFailedRepository(repository.name, error, template));
+      await addResult(
+        reportFailedRepository(repository.name, error, template),
+      );
     }
   }
 
