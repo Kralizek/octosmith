@@ -1,7 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
-  loadConfigurationDirectory,
   type CurrentState,
+  loadConfigurationDirectory,
   type LoadedConfiguration,
   type Plan,
   type RepositoryMetadata,
