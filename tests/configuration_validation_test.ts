@@ -1,6 +1,6 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
-import { loadConfigurationDirectory } from "../packages/core/mod.ts";
+import { loadConfigurationDirectory } from "../packages/octosmith/mod.ts";
 
 const configuration = {
   version: 1,
