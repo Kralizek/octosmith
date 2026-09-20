@@ -1,5 +1,8 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import type { LoadedConfiguration, RepositoryTemplate } from "@octosmith/octosmith";
+import type {
+  LoadedConfiguration,
+  RepositoryTemplate,
+} from "@octosmith/octosmith";
 import {
   discoverRepositories,
   type GitHubClient,
