@@ -45,6 +45,7 @@ export interface GitHubRuntimeOptions {
   readonly baseUrl?: string;
   readonly fetch?: typeof globalThis.fetch;
   readonly trace?: (entry: GitHubResponseTrace) => void;
+  readonly traceGroup?: (name: string) => void;
 }
 
 export function createGitHubRuntime(
@@ -62,6 +63,7 @@ export function createGitHubRuntime(
 
   return {
     async discover(loaded, repository) {
+      options.traceGroup?.("organization");
       source = new GitHubRepositoryStateSource(
         client,
         loaded.configuration.organization,
@@ -76,6 +78,8 @@ export function createGitHubRuntime(
     },
 
     async read(desired) {
+      options.traceGroup?.(desired.repository);
+
       if (!source) {
         throw new Error("GitHub runtime has not discovered repositories yet");
       }
