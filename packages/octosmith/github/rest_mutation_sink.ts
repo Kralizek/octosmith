@@ -8,7 +8,7 @@ import type {
   Operation,
   RulesetDefinition,
   Variable,
-} from "@octosmith/core";
+} from "../mod.ts";
 import type { GitHubClient } from "./client.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 
@@ -439,7 +439,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 
   async syncEnvironmentSecrets(
     base: string,
-    secrets: readonly import("@octosmith/core").DesiredSecret[],
+    secrets: readonly import("../mod.ts").DesiredSecret[],
     collections: "explicit" | "strict",
   ): Promise<void> {
     const currentSecrets = await getAllWrappedPages<{
@@ -698,7 +698,7 @@ function materializeRulesetUpdate(
 }
 
 function mapBypassActors(
-  actors: readonly import("@octosmith/core").RulesetBypassActor[],
+  actors: readonly import("../mod.ts").RulesetBypassActor[],
 ): readonly Record<string, unknown>[] {
   return actors.map((actor) => ({
     ...(actor.actorId !== undefined && { actor_id: actor.actorId }),
@@ -708,7 +708,7 @@ function mapBypassActors(
 }
 
 function mapRule(
-  rule: import("@octosmith/core").DesiredRulesetRule,
+  rule: import("../mod.ts").DesiredRulesetRule,
 ): Record<string, unknown> {
   const { type, ...parameters } = rule as unknown as Record<string, unknown>;
   const mapped = snakeKeys(parameters) as Record<string, unknown>;
