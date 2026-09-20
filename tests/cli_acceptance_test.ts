@@ -1197,8 +1197,8 @@ Deno.test("CLI streams one Hooksmith event per repository and preserves stdout r
 
     const events = lines.map((line) => JSON.parse(line));
     assertEquals(events.map((event) => event.type), [
-      "repository.planned",
-      "repository.planned",
+      "resource.planned",
+      "resource.planned",
     ]);
     assertEquals(events.map((event) => event.source), [
       { kind: "github.organization", id: "acme" },
