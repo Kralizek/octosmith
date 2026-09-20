@@ -126,7 +126,6 @@ export async function reconcile(
       const current = await runtime.read(desired);
       const plan = buildPlan(current, desired);
       const evaluations = buildReconciliationEvaluations(
-        current,
         desired,
         plan.operations,
       );
