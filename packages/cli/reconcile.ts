@@ -2,10 +2,8 @@ import {
   buildPlan,
   buildReconciliationEvaluations,
   type DesiredState,
-  loadConfigurationDirectory,
   type LoadedConfiguration,
   type Plan,
-  type Report,
   reportAppliedRepository,
   reportFailedRepository,
   reportPlannedRepository,
@@ -98,41 +96,30 @@ export function createGitHubRuntime(
 }
 
 export interface ReconcileOptions {
-  readonly path: string;
   readonly mode: ReconcileMode;
   readonly repository?: string;
   readonly values?: RuntimeValueProvider;
-  readonly now?: () => Date;
-  readonly onRepositoryCompleted?: (
-    organization: string,
+  readonly onRepositoryCompleted: (
     report: import("@octosmith/core").RepositoryReport,
   ) => void | Promise<void>;
 }
 
 export async function reconcile(
   runtime: ReconciliationRuntime,
+  loaded: LoadedConfiguration,
   options: ReconcileOptions,
-): Promise<Report> {
-  const now = options.now ?? (() => new Date());
-  const startedAt = now();
-
+): Promise<void> {
   if (options.repository !== undefined && options.repository.length === 0) {
     throw new Error("Repository target must not be empty");
   }
 
-  const loaded = await loadConfigurationDirectory(options.path);
   const discovery = await runtime.discover(loaded, options.repository);
-  const results: import("@octosmith/core").RepositoryReport[] = [];
   const values = options.values ?? environmentValue;
 
   const addResult = async (
     result: import("@octosmith/core").RepositoryReport,
   ) => {
-    results.push(result);
-    await options.onRepositoryCompleted?.(
-      loaded.configuration.organization,
-      result,
-    );
+    await options.onRepositoryCompleted(result);
   };
 
   for (const failure of discovery.failures) {
@@ -177,12 +164,6 @@ export async function reconcile(
     }
   }
 
-  return {
-    organization: loaded.configuration.organization,
-    startedAt,
-    completedAt: now(),
-    repositories: results,
-  };
 }
 
 function environmentValue(name: string): string {
