@@ -130,6 +130,7 @@ export async function reconcile(
 
   for (const repository of discovery.repositories) {
     let template: string | undefined;
+    let result: import("@octosmith/core").RepositoryReport;
 
     try {
       const desired = await resolveDesiredState(loaded, repository, values);
@@ -142,26 +143,25 @@ export async function reconcile(
       );
 
       if (options.mode === "plan") {
-        await addResult(
-          reportPlannedRepository(desired.template, plan, evaluations),
+        result = reportPlannedRepository(
+          desired.template,
+          plan,
+          evaluations,
         );
-        continue;
-      }
-
-      const applied = await runtime.apply(plan);
-      await addResult(
-        reportAppliedRepository(
+      } else {
+        const applied = await runtime.apply(plan);
+        result = reportAppliedRepository(
           desired.template,
           desired.repository,
           evaluations,
           applied.operations,
-        ),
-      );
+        );
+      }
     } catch (error) {
-      await addResult(
-        reportFailedRepository(repository.name, error, template),
-      );
+      result = reportFailedRepository(repository.name, error, template);
     }
+
+    await addResult(result);
   }
 }
 
