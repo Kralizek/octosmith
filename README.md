@@ -5,7 +5,8 @@ as code.
 
 ## Packages
 
-- `@octosmith/octosmith` — OctoSmith domain models, planning, reporting, and GitHub integration.
+- `@octosmith/octosmith` — OctoSmith domain models, planning, reporting, and
+  GitHub integration.
 - `@octosmith/cli` — command-line interface.
 
 ## Examples
