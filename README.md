@@ -5,7 +5,7 @@ code.
 
 ## Packages
 
-- `@octosmith/core` — core models and reconciliation primitives.
+- `@octosmith/core` — core models and apply primitives.
 - `@octosmith/cli` — command-line interface.
 
 ## Examples
