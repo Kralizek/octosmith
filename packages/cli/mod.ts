@@ -1,7 +1,12 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
 
 import { Command } from "@cliffy/command";
-import { renderReport, type Report } from "@octosmith/core";
+import {
+  loadConfigurationDirectory,
+  renderReport,
+  type Report,
+  type RepositoryReport,
+} from "@octosmith/core";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ReconciliationRuntime } from "./reconcile.ts";
@@ -60,27 +65,43 @@ function createCli(
           const format = parseOutputFormat(commandOptions.format);
           const runtime = options.runtime ??
             createDefaultRuntime(commandOptions.verbose ?? false, writeError);
+          const loaded = await loadConfigurationDirectory(
+            commandOptions.path,
+          );
           const eventOutput = commandOptions.eventsOutput
             ? await openEventOutput(commandOptions.eventsOutput)
             : undefined;
-
-          let report: Report;
+          const startedAt = new Date();
+          const repositories: RepositoryReport[] = [];
 
           try {
-            report = await reconcile(runtime, {
-              path: commandOptions.path,
+            await reconcile(runtime, loaded, {
               mode,
               ...(repository !== undefined && { repository }),
-              ...(eventOutput && {
-                onRepositoryCompleted: async (organization, repositoryReport) =>
+              onRepositoryCompleted: async (repositoryReport) => {
+                repositories.push(repositoryReport);
+
+                if (eventOutput) {
                   await eventOutput.write(
-                    toRepositoryEvent(organization, mode, repositoryReport),
-                  ),
-              }),
+                    toRepositoryEvent(
+                      loaded.configuration.organization,
+                      mode,
+                      repositoryReport,
+                    ),
+                  );
+                }
+              },
             });
           } finally {
             eventOutput?.close();
           }
+
+          const report: Report = {
+            organization: loaded.configuration.organization,
+            startedAt,
+            completedAt: new Date(),
+            repositories,
+          };
 
           write(
             renderOutput(
