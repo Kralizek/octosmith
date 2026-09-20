@@ -85,9 +85,14 @@ export class FetchGitHubClient implements GitHubClient {
       }),
     });
 
+    const basePath = new URL(baseUrl).pathname.replace(/\/$/, "");
+    const tracePath = url.pathname.startsWith(basePath)
+      ? url.pathname.slice(basePath.length) || "/"
+      : url.pathname;
+
     this.#trace?.({
       method,
-      path: path.startsWith("/") ? path : "/" + path,
+      path: tracePath.startsWith("/") ? tracePath : "/" + tracePath,
       status: response.status,
     });
 
