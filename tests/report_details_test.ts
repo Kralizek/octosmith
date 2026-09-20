@@ -22,7 +22,6 @@ Deno.test("evaluation details are safe and resource-oriented", () => {
       content: "file-private-content",
     }],
   };
-  const current = currentState();
   const operations = [
     {
       type: "update-repository-settings" as const,
@@ -47,7 +46,6 @@ Deno.test("evaluation details are safe and resource-oriented", () => {
   ];
 
   const evaluations = buildReconciliationEvaluations(
-    current,
     desired,
     operations,
   );
@@ -96,7 +94,6 @@ Deno.test("text output is one human-readable line per changed item", () => {
     ],
   };
   const evaluations = buildReconciliationEvaluations(
-    current,
     desired,
     plan.operations,
   );
