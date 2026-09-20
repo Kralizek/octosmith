@@ -68,7 +68,14 @@ function createCli(
           const loaded = await loadConfigurationDirectory(
             commandOptions.path,
           );
-          const eventOutput = commandOptions.eventsOutput
+          if (
+            commandOptions.eventsOutput !== undefined &&
+            commandOptions.eventsOutput.length === 0
+          ) {
+            throw new Error("Events output path must not be empty");
+          }
+
+          const eventOutput = commandOptions.eventsOutput !== undefined
             ? await openEventOutput(commandOptions.eventsOutput)
             : undefined;
           const startedAt = new Date();
