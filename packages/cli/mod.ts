@@ -92,9 +92,19 @@ function createDefaultRuntime(
     );
   }
 
+  let firstTraceGroup = true;
+
   return createGitHubRuntime({
     token,
     ...(verbose && {
+      traceGroup: (name) => {
+        if (!firstTraceGroup) {
+          writeError("");
+        }
+
+        firstTraceGroup = false;
+        writeError("[" + name + "]");
+      },
       trace: ({ method, path, status }) =>
         writeError(method + " " + path + " — " + status),
     }),
