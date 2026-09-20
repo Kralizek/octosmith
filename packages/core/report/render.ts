@@ -125,10 +125,8 @@ function settingsSuffix(value: unknown): string {
 
   const entries = flattenObject(value);
 
-  return entries.length === 0
-    ? ""
-    : " — " +
-      entries.map(([key, child]) => key + ": " + formatValue(child)).join(", ");
+  return entries.length === 0 ? "" : " — " +
+    entries.map(([key, child]) => key + ": " + formatValue(child)).join(", ");
 }
 
 function flattenObject(
