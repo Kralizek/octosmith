@@ -1,5 +1,5 @@
 import type {
-  CollectionReconciliationMode,
+  CollectionManagementMode,
   Environment,
   RepositoryPermission,
   Variable,
@@ -29,7 +29,7 @@ import type {
   DesiredEnvironment,
   DesiredState,
 } from "../state/types.ts";
-import type { Operation, Plan, ReconciliationEvaluation } from "./types.ts";
+import type { ApplyEvaluation, Operation, Plan } from "./types.ts";
 
 export function buildPlan(
   current: CurrentState,
@@ -83,7 +83,7 @@ function planCustomProperties(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (desired.customProperties === undefined) {
     return;
@@ -118,7 +118,7 @@ function planActions(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (!desired.actions) {
     return;
@@ -152,7 +152,7 @@ function planTeams(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (desired.teams === undefined) {
     return;
@@ -191,7 +191,7 @@ function planActionsSecrets(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (desired.actions?.secrets === undefined) {
     return;
@@ -218,7 +218,7 @@ function planActionsSecrets(
   }
 
   // GitHub exposes secret names but never values, so declared secrets must be
-  // written on every reconciliation to guarantee their desired runtime value.
+  // written on every apply to guarantee their desired runtime value.
   for (const secret of desired.actions.secrets) {
     operations.push({
       type: "set-actions-secret",
@@ -231,7 +231,7 @@ function planActionsVariables(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (desired.actions?.variables === undefined) {
     return;
@@ -277,7 +277,7 @@ function planDependabot(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (desired.dependabot?.secrets === undefined) {
     return;
@@ -315,7 +315,7 @@ function planRulesets(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (desired.rulesets === undefined) {
     return;
@@ -369,7 +369,7 @@ function planEnvironments(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): void {
   if (desired.environments === undefined) {
     return;
@@ -479,10 +479,10 @@ function planFiles(
   }
 }
 
-export function buildReconciliationEvaluations(
+export function buildApplyEvaluations(
   desired: DesiredState,
   operations: readonly Operation[],
-): readonly ReconciliationEvaluation[] {
+): readonly ApplyEvaluation[] {
   const evaluations = operations.map(operationEvaluation);
   const has = (predicate: (operation: Operation) => boolean) =>
     operations.some(predicate);
@@ -640,7 +640,7 @@ export function buildReconciliationEvaluations(
   return evaluations;
 }
 
-function operationEvaluation(operation: Operation): ReconciliationEvaluation {
+function operationEvaluation(operation: Operation): ApplyEvaluation {
   switch (operation.type) {
     case "update-repository-settings":
       return {
@@ -983,7 +983,7 @@ function diffActionsOidc(
 function diffRuleset(
   current: CurrentRuleset,
   desired: DesiredRuleset,
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): DesiredRuleset | undefined {
   const changes: Record<string, unknown> = {
     name: desired.name,
@@ -1124,7 +1124,7 @@ function materializeRuleset(desired: DesiredRuleset): RulesetDefinition {
 function mergeRules(
   current: readonly (CurrentRefRule | CurrentPushRule)[],
   desired: readonly DesiredRulesetRule[],
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
   target: "branch" | "tag" | "push",
 ): readonly DesiredRulesetRule[] {
   if (desired.length === 0) {
@@ -1348,7 +1348,7 @@ function assertCompleteObjects(
 function environmentNeedsUpdate(
   current: Environment,
   desired: DesiredEnvironment,
-  collections: CollectionReconciliationMode,
+  collections: CollectionManagementMode,
 ): boolean {
   if (desired.secrets !== undefined) {
     if (desired.secrets.length > 0) {
