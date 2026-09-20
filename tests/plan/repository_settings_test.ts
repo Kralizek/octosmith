@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { diffRepositorySettings } from "../../packages/core/mod.ts";
+import { diffRepositorySettings } from "../../packages/octosmith/mod.ts";
 import { currentRepositorySettings } from "./fixtures.ts";
 
 Deno.test("repository settings ignore unmanaged fields", () => {
