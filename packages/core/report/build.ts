@@ -1,14 +1,14 @@
-import type { Plan, ReconciliationEvaluation } from "../plan/types.ts";
+import type { ApplyEvaluation, Plan } from "../plan/types.ts";
 import type {
   AppliedOperationLike,
-  ReconciliationItemReport,
+  ApplyItemReport,
   RepositoryReport,
 } from "./types.ts";
 
 export function reportPlannedRepository(
   template: string,
   plan: Plan,
-  evaluations: readonly ReconciliationEvaluation[],
+  evaluations: readonly ApplyEvaluation[],
 ): RepositoryReport {
   return {
     repository: plan.repository,
@@ -25,7 +25,7 @@ export function reportPlannedRepository(
 export function reportAppliedRepository(
   template: string,
   repository: string,
-  evaluations: readonly ReconciliationEvaluation[],
+  evaluations: readonly ApplyEvaluation[],
   operations: readonly AppliedOperationLike[],
 ): RepositoryReport {
   const applied = operations.filter((item) => item.status === "applied").length;
@@ -40,7 +40,7 @@ export function reportAppliedRepository(
     operations.map((item) => [item.operation, item] as const),
   );
 
-  const items: ReconciliationItemReport[] = evaluations.map((evaluation) => {
+  const items: ApplyItemReport[] = evaluations.map((evaluation) => {
     if (evaluation.operation === undefined) {
       return {
         type: evaluation.type,
