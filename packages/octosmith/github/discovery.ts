@@ -4,8 +4,8 @@ import type {
   RepositoryMetadata,
   RepositorySelector,
   RepositoryVisibility,
-} from "@octosmith/core";
-import { matchesSelector } from "@octosmith/core";
+} from "../mod.ts";
+import { matchesSelector } from "../mod.ts";
 import type { GitHubClient, GitHubQueryValue } from "./client.ts";
 
 interface RepositoryResponse {
