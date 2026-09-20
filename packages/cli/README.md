@@ -124,7 +124,8 @@ Targeted and full-scope executions use the same report shape.
 
 ## Target one repository
 
-Both commands accept an optional repository name:
+Both commands accept an optional repository name immediately after the command,
+before any options:
 
 ```sh
 octosmith plan my-repo --path ./configuration
