@@ -79,7 +79,8 @@ function describeItem(item: ReconciliationItemReport): string {
     case "actions-secret":
       return "Actions secret " + String(details.name) + actionSuffix(details);
     case "dependabot-secret":
-      return "Dependabot secret " + String(details.name) + actionSuffix(details);
+      return "Dependabot secret " + String(details.name) +
+        actionSuffix(details);
     case "team-permission": {
       const permission = details.permission !== undefined
         ? " — permission: " + formatValue(details.permission)
@@ -126,9 +127,8 @@ function settingsSuffix(value: unknown): string {
 
   return entries.length === 0
     ? ""
-    : " — " + entries.map(([key, child]) =>
-      key + ": " + formatValue(child)
-    ).join(", ");
+    : " — " +
+      entries.map(([key, child]) => key + ": " + formatValue(child)).join(", ");
 }
 
 function flattenObject(
