@@ -1,4 +1,7 @@
-import type { Operation } from "../plan/types.ts";
+import type {
+  Operation,
+  ReconciliationItemType,
+} from "../plan/types.ts";
 
 export type RepositoryReportStatus =
   | "unchanged"
@@ -7,7 +10,8 @@ export type RepositoryReportStatus =
   | "partially-applied"
   | "failed";
 
-export type OperationReportStatus =
+export type ReconciliationItemReportStatus =
+  | "unchanged"
   | "planned"
   | "applied"
   | "failed"
@@ -24,18 +28,14 @@ export interface RepositoryReport {
   readonly repository: string;
   readonly template?: string;
   readonly status: RepositoryReportStatus;
-  readonly operations: readonly OperationReport[];
+  readonly items: readonly ReconciliationItemReport[];
   readonly error?: string;
 }
 
-export interface ReportedOperation {
-  readonly type: Operation["type"];
+export interface ReconciliationItemReport {
+  readonly type: ReconciliationItemType;
+  readonly status: ReconciliationItemReportStatus;
   readonly details: Readonly<Record<string, unknown>>;
-}
-
-export interface OperationReport {
-  readonly operation: ReportedOperation;
-  readonly status: OperationReportStatus;
   readonly error?: string;
 }
 
