@@ -146,6 +146,69 @@ response bodies, headers, query parameters, or credentials. The final report is
 written only to stdout, so JSON output remains directly parseable even when
 verbose tracing is enabled.
 
+## Hooksmith resource events
+
+Both `plan` and `apply` can emit one Hooksmith event document per managed
+resource as newline-delimited JSON:
+
+```sh
+octosmith apply \
+  --events-output ./octosmith-events.ndjson \
+  --path ./configuration
+```
+
+The destination is treated as a writable path. OctoSmith does not inspect the
+resource type, so callers may use a regular file, FIFO/named pipe, or another
+writable path supported by the host operating system.
+
+Events are written as soon as each repository finishes reconciliation and the
+destination is closed when reconciliation completes. Existing output streams are
+unchanged: the final OctoSmith report remains on stdout and diagnostics/verbose
+GitHub traces remain on stderr.
+
+Plan emits `resource.planned`; apply emits `resource.applied`. Each event uses
+the GitHub organization as its source and the reconciled repository as its
+subject:
+
+```json
+{
+  "type": "resource.applied",
+  "timestamp": "2026-09-20T11:00:00.000Z",
+  "source": {
+    "kind": "github.organization",
+    "id": "acme"
+  },
+  "subject": {
+    "kind": "github.repository",
+    "id": "api-service"
+  },
+  "metadata": {
+    "producer": "octosmith",
+    "status": "applied",
+    "template": "code"
+  },
+  "data": {
+    "items": []
+  }
+}
+```
+
+Repository failures also produce an event with the corresponding report status
+and error. Failure to open or write an explicitly requested events output fails
+the CLI rather than silently dropping events.
+
+A power user can stream events directly into Hooksmith while preserving the
+normal OctoSmith report:
+
+```sh
+mkfifo /tmp/octosmith-events
+
+cat /tmp/octosmith-events |
+  hooksmith stream -c ./hooksmith.config.ts &
+
+octosmith apply --events-output /tmp/octosmith-events
+```
+
 ## Target one repository
 
 Both commands accept an optional repository name immediately after the command,

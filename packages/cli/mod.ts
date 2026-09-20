@@ -1,7 +1,13 @@
-#!/usr/bin/env -S deno run --allow-read --allow-env --allow-net
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
 
 import { Command } from "@cliffy/command";
-import { renderReport, type Report } from "@octosmith/core";
+import {
+  loadConfigurationDirectory,
+  renderReport,
+  type Report,
+  type RepositoryReport,
+} from "@octosmith/core";
+import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ReconciliationRuntime } from "./reconcile.ts";
 import { createGitHubRuntime, reconcile } from "./reconcile.ts";
@@ -50,16 +56,59 @@ function createCli(
           default: "text",
         })
         .option("--verbose", "Show unchanged reconciliation items.")
+        .option(
+          "--events-output <path:string>",
+          "Write Hooksmith repository events as NDJSON.",
+        )
         .action(async (commandOptions, repository?: string) => {
           assertRepositoryPosition(args, mode, repository);
           const format = parseOutputFormat(commandOptions.format);
           const runtime = options.runtime ??
             createDefaultRuntime(commandOptions.verbose ?? false, writeError);
-          const report = await reconcile(runtime, {
-            path: commandOptions.path,
-            mode,
-            ...(repository !== undefined && { repository }),
-          });
+          const loaded = await loadConfigurationDirectory(
+            commandOptions.path,
+          );
+          if (
+            commandOptions.eventsOutput !== undefined &&
+            commandOptions.eventsOutput.length === 0
+          ) {
+            throw new Error("Events output path must not be empty");
+          }
+
+          const eventOutput = commandOptions.eventsOutput !== undefined
+            ? await openEventOutput(commandOptions.eventsOutput)
+            : undefined;
+          const startedAt = new Date();
+          const repositories: RepositoryReport[] = [];
+
+          try {
+            await reconcile(runtime, loaded, {
+              mode,
+              ...(repository !== undefined && { repository }),
+              onRepositoryCompleted: async (repositoryReport) => {
+                repositories.push(repositoryReport);
+
+                if (eventOutput) {
+                  await eventOutput.write(
+                    toRepositoryEvent(
+                      loaded.configuration.organization,
+                      mode,
+                      repositoryReport,
+                    ),
+                  );
+                }
+              },
+            });
+          } finally {
+            eventOutput?.close();
+          }
+
+          const report: Report = {
+            organization: loaded.configuration.organization,
+            startedAt,
+            completedAt: new Date(),
+            repositories,
+          };
 
           write(
             renderOutput(
@@ -135,6 +184,7 @@ export async function main(
   options: CliExecutionOptions = {},
 ): Promise<number> {
   try {
+    validateRawEventsOutputArgument(args);
     validateRawRepositoryArgument(args);
     await createCli(options, args).parse(args);
     return 0;
@@ -146,6 +196,18 @@ export async function main(
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[ERROR] ${message}`);
     return 1;
+  }
+}
+
+function validateRawEventsOutputArgument(args: readonly string[]): void {
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === "--events-output" && args[index + 1] === "") {
+      throw new Error("Events output path must not be empty");
+    }
+
+    if (args[index] === "--events-output=") {
+      throw new Error("Events output path must not be empty");
+    }
   }
 }
 
@@ -177,6 +239,7 @@ function assertRepositoryPosition(
   }
 }
 
+export * from "./events.ts";
 export * from "./output.ts";
 export * from "./reconcile.ts";
 

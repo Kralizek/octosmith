@@ -2,10 +2,8 @@ import {
   buildPlan,
   buildReconciliationEvaluations,
   type DesiredState,
-  loadConfigurationDirectory,
   type LoadedConfiguration,
   type Plan,
-  type Report,
   reportAppliedRepository,
   reportFailedRepository,
   reportPlannedRepository,
@@ -98,34 +96,41 @@ export function createGitHubRuntime(
 }
 
 export interface ReconcileOptions {
-  readonly path: string;
   readonly mode: ReconcileMode;
   readonly repository?: string;
   readonly values?: RuntimeValueProvider;
-  readonly now?: () => Date;
+  readonly onRepositoryCompleted: (
+    report: import("@octosmith/core").RepositoryReport,
+  ) => void | Promise<void>;
 }
 
 export async function reconcile(
   runtime: ReconciliationRuntime,
+  loaded: LoadedConfiguration,
   options: ReconcileOptions,
-): Promise<Report> {
-  const now = options.now ?? (() => new Date());
-  const startedAt = now();
-
+): Promise<void> {
   if (options.repository !== undefined && options.repository.length === 0) {
     throw new Error("Repository target must not be empty");
   }
 
-  const loaded = await loadConfigurationDirectory(options.path);
   const discovery = await runtime.discover(loaded, options.repository);
-  const results: import("@octosmith/core").RepositoryReport[] = discovery
-    .failures.map((failure) =>
-      reportFailedRepository(failure.repository, failure.error)
-    );
   const values = options.values ?? environmentValue;
+
+  const addResult = async (
+    result: import("@octosmith/core").RepositoryReport,
+  ) => {
+    await options.onRepositoryCompleted(result);
+  };
+
+  for (const failure of discovery.failures) {
+    await addResult(
+      reportFailedRepository(failure.repository, failure.error),
+    );
+  }
 
   for (const repository of discovery.repositories) {
     let template: string | undefined;
+    let result: import("@octosmith/core").RepositoryReport;
 
     try {
       const desired = await resolveDesiredState(loaded, repository, values);
@@ -138,32 +143,26 @@ export async function reconcile(
       );
 
       if (options.mode === "plan") {
-        results.push(
-          reportPlannedRepository(desired.template, plan, evaluations),
+        result = reportPlannedRepository(
+          desired.template,
+          plan,
+          evaluations,
         );
-        continue;
-      }
-
-      const applied = await runtime.apply(plan);
-      results.push(
-        reportAppliedRepository(
+      } else {
+        const applied = await runtime.apply(plan);
+        result = reportAppliedRepository(
           desired.template,
           desired.repository,
           evaluations,
           applied.operations,
-        ),
-      );
+        );
+      }
     } catch (error) {
-      results.push(reportFailedRepository(repository.name, error, template));
+      result = reportFailedRepository(repository.name, error, template);
     }
-  }
 
-  return {
-    organization: loaded.configuration.organization,
-    startedAt,
-    completedAt: now(),
-    repositories: results,
-  };
+    await addResult(result);
+  }
 }
 
 function environmentValue(name: string): string {

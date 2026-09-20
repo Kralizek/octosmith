@@ -1151,6 +1151,87 @@ Deno.test("CLI verbose traces GitHub calls on stderr before JSON stdout", async 
   }
 });
 
+Deno.test("CLI streams one Hooksmith event per repository and preserves stdout report", async () => {
+  const root = await configurationDirectory(true);
+  const previous = Deno.env.get("DESIRED");
+  const eventsPath = await Deno.makeTempFile();
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        [
+          "plan",
+          "--format",
+          "json",
+          "--events-output",
+          eventsPath,
+          "--path",
+          root,
+        ],
+        {
+          runtime,
+          write: (value) => output.push(value),
+        },
+      ),
+      1,
+    );
+
+    assertEquals(output.length, 1);
+    const report = JSON.parse(output[0]);
+    assertEquals(report.repositories.length, 2);
+
+    const lines = (await Deno.readTextFile(eventsPath))
+      .split("\n")
+      .filter((line) => line.length > 0);
+    assertEquals(lines.length, 2);
+
+    const events = lines.map((line) => JSON.parse(line));
+    assertEquals(events.map((event) => event.type), [
+      "resource.planned",
+      "resource.planned",
+    ]);
+    assertEquals(events.map((event) => event.source), [
+      { kind: "github.organization", id: "acme" },
+      { kind: "github.organization", id: "acme" },
+    ]);
+    assertEquals(events.map((event) => event.subject), [
+      { kind: "github.repository", id: "missing" },
+      { kind: "github.repository", id: "sample" },
+    ]);
+    assertEquals(events[0].metadata, {
+      producer: "octosmith",
+      status: "failed",
+    });
+    assertEquals(events[0].data.items, []);
+    assertEquals(typeof events[0].data.error, "string");
+    assertEquals(events[1].metadata, {
+      producer: "octosmith",
+      status: "planned",
+      template: "code",
+    });
+    assertEquals(Array.isArray(events[1].data.items), true);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(eventsPath);
+  }
+});
+
 Deno.test("CLI JSON apply preserves the structured report shape", async () => {
   const root = await configurationDirectory();
   const previous = Deno.env.get("DESIRED");
@@ -1187,6 +1268,41 @@ Deno.test("CLI JSON apply preserves the structured report shape", async () => {
     } else {
       Deno.env.set("DESIRED", previous);
     }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI rejects an explicitly empty events output path", async () => {
+  const root = await configurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--events-output", "", "--path", root],
+        { runtime },
+      ),
+      1,
+    );
+
+    assertEquals(requests, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Events output path must not be empty",
+    );
+  } finally {
+    console.error = originalError;
     await Deno.remove(root, { recursive: true });
   }
 });
