@@ -163,7 +163,7 @@ Deno.test("configuration rejects invalid setting types without echoing values", 
   });
 });
 
-Deno.test("configuration rejects unknown file reconciliation modes", async () => {
+Deno.test("configuration rejects unknown file apply modes", async () => {
   await withConfiguration(
     configuration,
     {
