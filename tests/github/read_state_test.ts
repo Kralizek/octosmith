@@ -1,9 +1,9 @@
 import { assertEquals } from "@std/assert";
-import type { CurrentRepositorySettings, DesiredState } from "@octosmith/core";
+import type { CurrentRepositorySettings, DesiredState } from "@octosmith/octosmith";
 import {
   readCurrentState,
   type RepositoryStateSource,
-} from "@octosmith/github";
+} from "@octosmith/octosmith";
 import { currentRepositorySettings } from "../plan/fixtures.ts";
 
 class FakeStateSource implements RepositoryStateSource {
