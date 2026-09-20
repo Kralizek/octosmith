@@ -118,9 +118,16 @@ octosmith plan --format json --path ./configuration
 octosmith apply --format json --path ./configuration
 ```
 
-JSON serializes the existing structured report, including ISO 8601 timestamps,
-and preserves the same sensitive-data redaction guarantees as text output.
+JSON serializes the complete structured report, including ISO 8601 timestamps,
+and preserves the same sensitive-data guarantees as text output. Reconciliation
+items are flat objects with `type`, `status`, `details`, and optional `error`.
 Targeted and full-scope executions use the same report shape.
+
+Text output uses one line per reconciliation item. Status icons have stable
+meanings: `→` planned, `✓` reconciled, `-` already desired, `✗` failed, and
+`·` skipped. Repository rows are always shown; unchanged items are hidden by
+default. Pass `--verbose` to include unchanged items in text output. JSON always
+contains the complete item set.
 
 ## Target one repository
 
