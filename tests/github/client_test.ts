@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { FetchGitHubClient } from "@octosmith/github";
+import { FetchGitHubClient } from "@octosmith/octosmith";
 
 Deno.test("GitHub client preserves a path in the configured base URL", async () => {
   let requestedUrl: string | undefined;
