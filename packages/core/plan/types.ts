@@ -1,5 +1,5 @@
 import type {
-  CollectionReconciliationMode,
+  CollectionManagementMode,
   DesiredSecret,
   SecretName,
   TeamPermission,
@@ -19,7 +19,7 @@ export interface Plan {
   readonly operations: readonly Operation[];
 }
 
-export type ReconciliationItemType =
+export type ApplyItemType =
   | "repository-settings"
   | "custom-property"
   | "actions-settings"
@@ -32,8 +32,8 @@ export type ReconciliationItemType =
   | "environment"
   | "file";
 
-export interface ReconciliationEvaluation {
-  readonly type: ReconciliationItemType;
+export interface ApplyEvaluation {
+  readonly type: ApplyItemType;
   readonly details: Readonly<Record<string, unknown>>;
   readonly operation?: Operation;
 }
@@ -147,7 +147,7 @@ export interface CreateEnvironmentOperation {
 export interface UpdateEnvironmentOperation {
   readonly type: "update-environment";
   readonly environment: DesiredEnvironment;
-  readonly collections: CollectionReconciliationMode;
+  readonly collections: CollectionManagementMode;
 }
 
 export interface DeleteEnvironmentOperation {
