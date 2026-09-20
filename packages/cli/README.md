@@ -10,7 +10,7 @@ either reports or applies the resulting operations.
 ## Requirements
 
 Set `GITHUB_TOKEN` to a token with the GitHub permissions required by the
-configuration being applyd.
+configuration being applied.
 
 Runtime values for Actions variables, Actions secrets, Dependabot secrets, and
 environment values can be read from process environment variables. Variables can
