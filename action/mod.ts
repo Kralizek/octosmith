@@ -12,9 +12,9 @@ export function readActionInputs(
   get: (name: string) => string | undefined = (name) => Deno.env.get(name),
 ): ActionInputs {
   const mode = required(get, "INPUT_MODE");
-  const path = get("INPUT_PATH") ?? ".";
-  const repository = get("INPUT_REPOSITORY");
-  const format = get("INPUT_FORMAT") ?? "text";
+  const path = optional(get, "INPUT_PATH") ?? ".";
+  const repository = optional(get, "INPUT_REPOSITORY");
+  const format = optional(get, "INPUT_FORMAT") ?? "text";
   const verbose = parseBoolean(get("INPUT_VERBOSE") ?? "false", "verbose");
 
   return {
@@ -42,7 +42,7 @@ function required(
   get: (name: string) => string | undefined,
   name: string,
 ): string {
-  const value = get(name);
+  const value = get(name)?.trim();
 
   if (value === undefined || value.length === 0) {
     throw new Error(
@@ -53,12 +53,27 @@ function required(
   return value;
 }
 
+function optional(
+  get: (name: string) => string | undefined,
+  name: string,
+): string | undefined {
+  const value = get(name)?.trim();
+
+  if (value === undefined || value.length === 0) {
+    return undefined;
+  }
+
+  return value;
+}
+
 function parseBoolean(value: string, name: string): boolean {
-  if (value === "true") {
+  const normalized = value.trim().toLowerCase();
+
+  if (normalized === "true") {
     return true;
   }
 
-  if (value === "false") {
+  if (normalized === "false") {
     return false;
   }
 

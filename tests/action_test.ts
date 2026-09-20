@@ -59,6 +59,21 @@ Deno.test("action omits an empty repository target", () => {
   );
 });
 
+Deno.test("action trims optional inputs", () => {
+  const values: Record<string, string> = {
+    INPUT_MODE: " plan ",
+    INPUT_PATH: " ./configuration ",
+    INPUT_REPOSITORY: "  ",
+    INPUT_FORMAT: " json ",
+    INPUT_VERBOSE: " FALSE ",
+  };
+
+  assertEquals(
+    buildCliArguments(readActionInputs((name) => values[name])),
+    ["plan", "--path", "./configuration", "--format", "json"],
+  );
+});
+
 Deno.test("action rejects invalid verbose input", () => {
   assertThrows(
     () =>
@@ -71,5 +86,17 @@ Deno.test("action rejects invalid verbose input", () => {
       ),
     Error,
     "Invalid verbose input",
+  );
+});
+
+Deno.test("action accepts case-insensitive verbose values", () => {
+  const values: Record<string, string> = {
+    INPUT_MODE: "plan",
+    INPUT_VERBOSE: "TrUe",
+  };
+
+  assertEquals(
+    buildCliArguments(readActionInputs((name) => values[name])),
+    ["plan", "--path", ".", "--format", "text", "--verbose"],
   );
 });
