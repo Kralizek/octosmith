@@ -146,9 +146,9 @@ response bodies, headers, query parameters, or credentials. The final report is
 written only to stdout, so JSON output remains directly parseable even when
 verbose tracing is enabled.
 
-## Hooksmith repository events
+## Hooksmith resource events
 
-Both `plan` and `apply` can emit one Hooksmith event document per repository as
+Both `plan` and `apply` can emit one Hooksmith event document per applied resource as
 newline-delimited JSON:
 
 ```sh
@@ -166,13 +166,13 @@ destination is closed when reconciliation completes. Existing output streams are
 unchanged: the final OctoSmith report remains on stdout and diagnostics/verbose
 GitHub traces remain on stderr.
 
-Plan emits `repository.planned`; apply emits `repository.applied`. Each event
+Plan emits `resource.planned`; apply emits `resource.applied`. Each event
 uses the GitHub organization as its source and the reconciled repository as its
 subject:
 
 ```json
 {
-  "type": "repository.applied",
+  "type": "resource.applied",
   "timestamp": "2026-09-20T11:00:00.000Z",
   "source": {
     "kind": "github.organization",
