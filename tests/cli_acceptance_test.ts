@@ -7,7 +7,7 @@ interface CapturedRequest {
   readonly body?: unknown;
 }
 
-Deno.test("CLI reconciles through the real GitHub HTTP stack", async () => {
+Deno.test("CLI applys through the real GitHub HTTP stack", async () => {
   const root = await configurationDirectory();
   const strictRoot = await configurationDirectory(false, "strict");
   const previous = Deno.env.get("DESIRED");
@@ -1028,7 +1028,7 @@ Deno.test("CLI emits structured JSON reports", async () => {
   }
 });
 
-Deno.test("CLI verbose text includes unchanged reconciliation items", async () => {
+Deno.test("CLI verbose text includes unchanged apply items", async () => {
   const root = await configurationDirectory();
   const previous = Deno.env.get("DESIRED");
   const output: string[] = [];
@@ -1307,7 +1307,7 @@ Deno.test("CLI rejects an explicitly empty events output path", async () => {
   }
 });
 
-Deno.test("CLI rejects invalid output format before reconciliation", async () => {
+Deno.test("CLI rejects invalid output format before apply", async () => {
   const root = await configurationDirectory();
   const requests: CapturedRequest[] = [];
   const errors: string[] = [];
