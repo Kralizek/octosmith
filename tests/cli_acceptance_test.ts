@@ -1007,9 +1007,10 @@ Deno.test("CLI emits structured JSON reports", async () => {
     assertEquals(output.join("\n").includes("changed-value"), false);
     const items = report.repositories[0].items;
     assertEquals(Array.isArray(items), true);
-    assertEquals(items.some((item: Record<string, unknown>) =>
-      "operation" in item
-    ), false);
+    assertEquals(
+      items.some((item: Record<string, unknown>) => "operation" in item),
+      false,
+    );
     assertEquals(
       items.some((item: Record<string, unknown>) =>
         item.type === "actions-variable" && item.status === "planned"
