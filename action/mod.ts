@@ -45,7 +45,9 @@ function required(
   const value = get(name);
 
   if (value === undefined || value.length === 0) {
-    throw new Error("Missing required action input: " + name.slice(6).toLowerCase());
+    throw new Error(
+      "Missing required action input: " + name.slice(6).toLowerCase(),
+    );
   }
 
   return value;
