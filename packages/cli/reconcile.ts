@@ -19,6 +19,7 @@ import {
   FetchGitHubClient,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
+  type GitHubResponseTrace,
   readCurrentState,
   type RepositoryDiscoveryResult,
 } from "@octosmith/github";
@@ -43,6 +44,7 @@ export interface GitHubRuntimeOptions {
   readonly secretValue?: RuntimeValueProvider;
   readonly baseUrl?: string;
   readonly fetch?: typeof globalThis.fetch;
+  readonly trace?: (entry: GitHubResponseTrace) => void;
 }
 
 export function createGitHubRuntime(
@@ -52,6 +54,7 @@ export function createGitHubRuntime(
     token: options.token,
     baseUrl: options.baseUrl,
     fetch: options.fetch,
+    trace: options.trace,
   });
   const secretValue = options.secretValue ?? environmentValue;
   let source: GitHubRepositoryStateSource | undefined;
