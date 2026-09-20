@@ -29,7 +29,7 @@ import type {
   DesiredEnvironment,
   DesiredState,
 } from "../state/types.ts";
-import type { Operation, Plan } from "./types.ts";
+import type { Operation, Plan, ReconciliationEvaluation } from "./types.ts";
 
 export function buildPlan(
   current: CurrentState,
@@ -476,6 +476,306 @@ function planFiles(
         file,
       });
     }
+  }
+}
+
+export function buildReconciliationEvaluations(
+  desired: DesiredState,
+  operations: readonly Operation[],
+): readonly ReconciliationEvaluation[] {
+  const evaluations = operations.map(operationEvaluation);
+  const has = (predicate: (operation: Operation) => boolean) =>
+    operations.some(predicate);
+
+  if (
+    desired.settings !== undefined &&
+    !has((operation) => operation.type === "update-repository-settings")
+  ) {
+    evaluations.push({
+      type: "repository-settings",
+      details: { settings: desired.settings },
+    });
+  }
+
+  if (desired.customProperties !== undefined) {
+    for (const [name, value] of Object.entries(desired.customProperties)) {
+      if (
+        !has((operation) =>
+          operation.type === "set-custom-property" && operation.name === name
+        )
+      ) {
+        evaluations.push({
+          type: "custom-property",
+          details: { name, value },
+        });
+      }
+    }
+  }
+
+  if (desired.actions !== undefined) {
+    const ownsSettings = desired.actions.enabled !== undefined ||
+      desired.actions.allowedActions !== undefined ||
+      desired.actions.shaPinningRequired !== undefined ||
+      desired.actions.selectedActions !== undefined;
+
+    if (
+      ownsSettings &&
+      !has((operation) => operation.type === "update-actions-settings")
+    ) {
+      evaluations.push({
+        type: "actions-settings",
+        details: {
+          settings: {
+            ...(desired.actions.enabled !== undefined && {
+              enabled: desired.actions.enabled,
+            }),
+            ...(desired.actions.allowedActions !== undefined && {
+              allowedActions: desired.actions.allowedActions,
+            }),
+            ...(desired.actions.shaPinningRequired !== undefined && {
+              shaPinningRequired: desired.actions.shaPinningRequired,
+            }),
+            ...(desired.actions.selectedActions !== undefined && {
+              selectedActions: desired.actions.selectedActions,
+            }),
+          },
+        },
+      });
+    }
+
+    if (
+      desired.actions.oidc !== undefined &&
+      !has((operation) => operation.type === "update-actions-oidc")
+    ) {
+      evaluations.push({
+        type: "actions-oidc",
+        details: { settings: desired.actions.oidc },
+      });
+    }
+
+    for (const variable of desired.actions.variables ?? []) {
+      if (
+        !has((operation) =>
+          operation.type === "set-actions-variable" &&
+          operation.variable.name === variable.name
+        )
+      ) {
+        evaluations.push({
+          type: "actions-variable",
+          details: { name: variable.name },
+        });
+      }
+    }
+  }
+
+  for (const permission of desired.teams ?? []) {
+    if (
+      !has((operation) =>
+        operation.type === "set-team-permission" &&
+        operation.permission.team === permission.team
+      )
+    ) {
+      evaluations.push({
+        type: "team-permission",
+        details: {
+          team: permission.team,
+          permission: permission.permission.name,
+        },
+      });
+    }
+  }
+
+  for (const ruleset of desired.rulesets ?? []) {
+    if (
+      !has((operation) =>
+        (
+          operation.type === "create-ruleset" &&
+          operation.ruleset.name === ruleset.name
+        ) ||
+        (
+          operation.type === "update-ruleset" &&
+          operation.changes.name === ruleset.name
+        )
+      )
+    ) {
+      evaluations.push({
+        type: "ruleset",
+        details: { name: ruleset.name },
+      });
+    }
+  }
+
+  for (const environment of desired.environments ?? []) {
+    if (
+      !has((operation) => (
+        (operation.type === "create-environment" ||
+          operation.type === "update-environment") &&
+        operation.environment.name === environment.name
+      ))
+    ) {
+      evaluations.push({
+        type: "environment",
+        details: { name: environment.name },
+      });
+    }
+  }
+
+  for (const file of desired.files ?? []) {
+    if (
+      !has((operation) =>
+        (
+            operation.type === "create-file" ||
+            operation.type === "update-file"
+          ) && operation.file.path === file.path ||
+        operation.type === "delete-file" && operation.path === file.path
+      )
+    ) {
+      evaluations.push({
+        type: "file",
+        details: { path: file.path, ensure: file.ensure },
+      });
+    }
+  }
+
+  return evaluations;
+}
+
+function operationEvaluation(operation: Operation): ReconciliationEvaluation {
+  switch (operation.type) {
+    case "update-repository-settings":
+      return {
+        type: "repository-settings",
+        details: { settings: operation.settings, action: "update" },
+        operation,
+      };
+    case "set-custom-property":
+      return {
+        type: "custom-property",
+        details: {
+          name: operation.name,
+          value: operation.value,
+          action: operation.value === null ? "remove" : "set",
+        },
+        operation,
+      };
+    case "update-actions-settings":
+      return {
+        type: "actions-settings",
+        details: { settings: operation.settings, action: "update" },
+        operation,
+      };
+    case "update-actions-oidc":
+      return {
+        type: "actions-oidc",
+        details: { settings: operation.settings, action: "update" },
+        operation,
+      };
+    case "set-actions-variable":
+      return {
+        type: "actions-variable",
+        details: { name: operation.variable.name, action: "update" },
+        operation,
+      };
+    case "remove-actions-variable":
+      return {
+        type: "actions-variable",
+        details: { name: operation.name, action: "remove" },
+        operation,
+      };
+    case "set-actions-secret":
+      return {
+        type: "actions-secret",
+        details: { name: operation.secret.name, action: "set" },
+        operation,
+      };
+    case "remove-actions-secret":
+      return {
+        type: "actions-secret",
+        details: { name: operation.secret, action: "remove" },
+        operation,
+      };
+    case "set-dependabot-secret":
+      return {
+        type: "dependabot-secret",
+        details: { name: operation.secret.name, action: "set" },
+        operation,
+      };
+    case "remove-dependabot-secret":
+      return {
+        type: "dependabot-secret",
+        details: { name: operation.secret, action: "remove" },
+        operation,
+      };
+    case "set-team-permission":
+      return {
+        type: "team-permission",
+        details: {
+          team: operation.permission.team,
+          permission: operation.permission.permission.name,
+          action: "set",
+        },
+        operation,
+      };
+    case "remove-team-permission":
+      return {
+        type: "team-permission",
+        details: { team: operation.team, action: "remove" },
+        operation,
+      };
+    case "create-ruleset":
+      return {
+        type: "ruleset",
+        details: { name: operation.ruleset.name, action: "create" },
+        operation,
+      };
+    case "update-ruleset":
+      return {
+        type: "ruleset",
+        details: { name: operation.changes.name, action: "update" },
+        operation,
+      };
+    case "delete-ruleset":
+      return {
+        type: "ruleset",
+        details: { name: operation.name, action: "delete" },
+        operation,
+      };
+    case "create-environment":
+      return {
+        type: "environment",
+        details: { name: operation.environment.name, action: "create" },
+        operation,
+      };
+    case "update-environment":
+      return {
+        type: "environment",
+        details: { name: operation.environment.name, action: "update" },
+        operation,
+      };
+    case "delete-environment":
+      return {
+        type: "environment",
+        details: { name: operation.name, action: "delete" },
+        operation,
+      };
+    case "create-file":
+      return {
+        type: "file",
+        details: { path: operation.file.path, action: "create" },
+        operation,
+      };
+    case "update-file":
+      return {
+        type: "file",
+        details: { path: operation.file.path, action: "update" },
+        operation,
+      };
+    case "delete-file":
+      return {
+        type: "file",
+        details: { path: operation.path, action: "delete" },
+        operation,
+      };
   }
 }
 

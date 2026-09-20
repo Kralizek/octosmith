@@ -1,5 +1,6 @@
 import {
   buildPlan,
+  buildReconciliationEvaluations,
   type DesiredState,
   loadConfigurationDirectory,
   type LoadedConfiguration,
@@ -124,9 +125,15 @@ export async function reconcile(
       template = desired.template;
       const current = await runtime.read(desired);
       const plan = buildPlan(current, desired);
+      const evaluations = buildReconciliationEvaluations(
+        desired,
+        plan.operations,
+      );
 
       if (options.mode === "plan") {
-        results.push(reportPlannedRepository(desired.template, plan));
+        results.push(
+          reportPlannedRepository(desired.template, plan, evaluations),
+        );
         continue;
       }
 
@@ -135,6 +142,7 @@ export async function reconcile(
         reportAppliedRepository(
           desired.template,
           desired.repository,
+          evaluations,
           applied.operations,
         ),
       );

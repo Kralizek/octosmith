@@ -2,6 +2,7 @@
 
 import { Command } from "@cliffy/command";
 import { renderReport, type Report } from "@octosmith/core";
+import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ReconciliationRuntime } from "./reconcile.ts";
 import { createGitHubRuntime, reconcile } from "./reconcile.ts";
 import cliMetadata from "./deno.json" with { type: "json" };
@@ -14,7 +15,10 @@ export interface CliExecutionOptions {
   readonly write?: (value: string) => void;
 }
 
-function createCli(options: CliExecutionOptions = {}): Command {
+function createCli(
+  options: CliExecutionOptions = {},
+  args?: readonly string[],
+): Command {
   const write = options.write ?? console.log;
 
   const root = new Command()
@@ -40,7 +44,13 @@ function createCli(options: CliExecutionOptions = {}): Command {
         .option("-p, --path <path:string>", "Configuration directory.", {
           default: ".",
         })
+        .option("--format <format:string>", "Output format: text or json.", {
+          default: "text",
+        })
+        .option("--verbose", "Show unchanged reconciliation items.")
         .action(async (commandOptions, repository?: string) => {
+          assertRepositoryPosition(args, mode, repository);
+          const format = parseOutputFormat(commandOptions.format);
           const runtime = options.runtime ?? createDefaultRuntime();
           const report = await reconcile(runtime, {
             path: commandOptions.path,
@@ -48,7 +58,14 @@ function createCli(options: CliExecutionOptions = {}): Command {
             ...(repository !== undefined && { repository }),
           });
 
-          write(renderReport(report));
+          write(
+            renderOutput(
+              format,
+              report,
+              (value) =>
+                renderReport(value, { verbose: commandOptions.verbose }),
+            ),
+          );
 
           if (hasFailures(report)) {
             throw new ReconciliationFailedError();
@@ -96,13 +113,8 @@ export async function main(
   options: CliExecutionOptions = {},
 ): Promise<number> {
   try {
-    // Cliffy 1.2.1 treats "" as an omitted optional positional argument before
-    // invoking custom argument types or value handlers, so inspect raw argv.
-    if (hasExplicitEmptyRepositoryTarget(args)) {
-      throw new Error("Repository target must not be empty");
-    }
-
-    await createCli(options).parse(args);
+    validateRawRepositoryArgument(args);
+    await createCli(options, args).parse(args);
     return 0;
   } catch (error) {
     if (error instanceof ReconciliationFailedError) {
@@ -115,35 +127,35 @@ export async function main(
   }
 }
 
-function hasExplicitEmptyRepositoryTarget(args: readonly string[]): boolean {
+function validateRawRepositoryArgument(args: readonly string[]): void {
   const [command, ...rest] = args;
 
   if (command !== "plan" && command !== "apply") {
-    return false;
+    return;
   }
 
-  for (let index = 0; index < rest.length; index++) {
-    const argument = rest[index];
-
-    if (argument === "-p" || argument === "--path") {
-      index++;
-      continue;
-    }
-
-    if (argument.startsWith("--path=") || argument.startsWith("-p=")) {
-      continue;
-    }
-
-    if (argument.startsWith("-")) {
-      continue;
-    }
-
-    return argument.length === 0;
+  if (rest.includes("")) {
+    throw new Error("Repository target must not be empty");
   }
-
-  return false;
 }
 
+function assertRepositoryPosition(
+  args: readonly string[] | undefined,
+  command: "plan" | "apply",
+  repository: string | undefined,
+): void {
+  if (repository === undefined || args === undefined) {
+    return;
+  }
+
+  if (args[0] !== command || args[1] !== repository) {
+    throw new Error(
+      "Repository target must appear immediately after the command",
+    );
+  }
+}
+
+export * from "./output.ts";
 export * from "./reconcile.ts";
 
 if (import.meta.main) {

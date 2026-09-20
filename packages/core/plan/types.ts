@@ -19,6 +19,25 @@ export interface Plan {
   readonly operations: readonly Operation[];
 }
 
+export type ReconciliationItemType =
+  | "repository-settings"
+  | "custom-property"
+  | "actions-settings"
+  | "actions-oidc"
+  | "actions-variable"
+  | "actions-secret"
+  | "dependabot-secret"
+  | "team-permission"
+  | "ruleset"
+  | "environment"
+  | "file";
+
+export interface ReconciliationEvaluation {
+  readonly type: ReconciliationItemType;
+  readonly details: Readonly<Record<string, unknown>>;
+  readonly operation?: Operation;
+}
+
 export type Operation =
   | UpdateRepositorySettingsOperation
   | SetCustomPropertyOperation

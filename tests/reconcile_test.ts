@@ -141,7 +141,7 @@ Deno.test("reconcile returns a structured report without runtime values or file 
 
     assertEquals(serialized.includes("runtime-private-value"), false);
     assertEquals(serialized.includes("file-private-content"), false);
-    assertEquals(serialized.includes("[redacted]"), true);
+    assertEquals(serialized.includes("[redacted]"), false);
     assertEquals(serialized.includes("managed.txt"), true);
   } finally {
     await Deno.remove(root, { recursive: true });

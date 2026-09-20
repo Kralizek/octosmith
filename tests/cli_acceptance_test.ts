@@ -213,6 +213,76 @@ Deno.test("CLI rejects an explicitly empty repository target after options", asy
   }
 });
 
+Deno.test("CLI rejects an explicitly empty repository target after format option", async () => {
+  const root = await configurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "--format", "json", "", "--path", root],
+        { runtime },
+      ),
+      1,
+    );
+
+    assertEquals(requests, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Repository target must not be empty",
+    );
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI rejects repository targets after options", async () => {
+  const root = await configurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--format", "json", "sample", "--path", root],
+        { runtime },
+      ),
+      1,
+    );
+
+    assertEquals(requests, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Repository target must appear immediately after the command",
+    );
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("CLI reports an out-of-scope targeted repository without mutation", async () => {
   const root = await configurationDirectory(true);
   const requests: CapturedRequest[] = [];
@@ -434,11 +504,17 @@ Deno.test("partial apply skips later operations and continues with the next repo
     );
 
     const rendered = output.join("\n");
-    assertStringIncludes(rendered, "sample [code] — partially-applied");
-    assertStringIncludes(rendered, "update-repository-settings — applied");
-    assertStringIncludes(rendered, "set-actions-variable — failed");
-    assertStringIncludes(rendered, "create-file — skipped");
-    assertStringIncludes(rendered, "z-next [code] — applied");
+    assertStringIncludes(rendered, "✗ sample [code] — partially-applied");
+    assertStringIncludes(
+      rendered,
+      "✓ Repository settings — hasIssues: false",
+    );
+    assertStringIncludes(
+      rendered,
+      "✗ Actions variable DESIRED — update",
+    );
+    assertStringIncludes(rendered, "· File managed.txt — create");
+    assertStringIncludes(rendered, "✓ z-next [code] — applied");
     assertStringIncludes(
       rendered,
       "Summary: 0 unchanged, 0 planned, 1 applied, 1 partially-applied, 0 failed",
@@ -671,11 +747,11 @@ Deno.test("CLI plan identifies strict deletion targets and changed settings", as
     const rendered = output.join("\n");
     for (
       const detail of [
-        '"hasIssues":false',
-        '"name":"OLD"',
-        '"name":"NEW"',
-        '"name":"production"',
-        '"name":"obsolete"',
+        "Repository settings — hasIssues: false",
+        "Actions secret OLD — remove",
+        "Actions secret NEW — set",
+        "Environment production — delete",
+        "Environment obsolete — delete",
       ]
     ) {
       assertStringIncludes(rendered, detail);
@@ -898,6 +974,168 @@ function repository(
     security_and_analysis: {},
   };
 }
+
+Deno.test("CLI emits structured JSON reports", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "changed-value");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--format", "json", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const report = JSON.parse(output.join("\n"));
+    assertEquals(report.organization, "acme");
+    assertEquals(Array.isArray(report.repositories), true);
+    assertEquals(typeof report.startedAt, "string");
+    assertEquals(typeof report.completedAt, "string");
+    assertEquals(Number.isNaN(Date.parse(report.startedAt)), false);
+    assertEquals(Number.isNaN(Date.parse(report.completedAt)), false);
+    assertEquals(output.join("\n").includes("changed-value"), false);
+    const items = report.repositories[0].items;
+    assertEquals(Array.isArray(items), true);
+    assertEquals(
+      items.some((item: Record<string, unknown>) => "operation" in item),
+      false,
+    );
+    assertEquals(
+      items.some((item: Record<string, unknown>) =>
+        item.type === "actions-variable" && item.status === "planned"
+      ),
+      true,
+    );
+    assertEquals(mutations(requests), []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI verbose text includes unchanged reconciliation items", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub([]),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--verbose", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    assertStringIncludes(
+      output.join("\n"),
+      "- Actions variable DESIRED",
+    );
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI JSON apply preserves the structured report shape", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub([]),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "sample", "--format=json", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const report = JSON.parse(output.join("\n"));
+    assertEquals(Object.keys(report).sort(), [
+      "completedAt",
+      "organization",
+      "repositories",
+      "startedAt",
+    ]);
+    assertEquals(report.repositories.length, 1);
+    assertEquals(report.repositories[0].repository, "sample");
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI rejects invalid output format before reconciliation", async () => {
+  const root = await configurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "--format", "yaml", "--path", root],
+        { runtime },
+      ),
+      1,
+    );
+
+    assertEquals(requests, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Unsupported output format: yaml. Expected text or json",
+    );
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 async function configurationDirectory(
   exactNames = false,
