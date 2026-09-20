@@ -1,9 +1,6 @@
 import { assertEquals, assertThrows } from "@std/assert";
 import { parse } from "@std/yaml";
-import {
-  buildCliArguments,
-  readActionInputs,
-} from "../action/mod.ts";
+import { buildCliArguments, readActionInputs } from "../action/mod.ts";
 
 Deno.test("action metadata runs the checked-out OctoSmith source", async () => {
   const action = parse(await Deno.readTextFile("action.yml")) as Record<
@@ -15,15 +12,13 @@ Deno.test("action metadata runs the checked-out OctoSmith source", async () => {
 
   assertEquals(runs.using, "composite");
   assertEquals(
-    steps.some((step) =>
-      step.uses === "denoland/setup-deno@v2"
-    ),
+    steps.some((step) => step.uses === "denoland/setup-deno@v2"),
     true,
   );
   assertEquals(
     steps.some((step) =>
       typeof step.run === "string" &&
-      step.run.includes('$GITHUB_ACTION_PATH/action/mod.ts')
+      step.run.includes("$GITHUB_ACTION_PATH/action/mod.ts")
     ),
     true,
   );
