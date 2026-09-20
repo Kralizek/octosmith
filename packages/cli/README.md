@@ -148,8 +148,8 @@ verbose tracing is enabled.
 
 ## Hooksmith repository events
 
-Both `plan` and `apply` can emit one Hooksmith event document per repository
-as newline-delimited JSON:
+Both `plan` and `apply` can emit one Hooksmith event document per repository as
+newline-delimited JSON:
 
 ```sh
 octosmith apply \
