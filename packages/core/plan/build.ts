@@ -479,7 +479,6 @@ function planFiles(
   }
 }
 
-
 export function buildReconciliationEvaluations(
   current: CurrentState,
   desired: DesiredState,
