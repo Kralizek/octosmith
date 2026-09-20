@@ -1,3 +1,3 @@
 # @octosmith/core
 
-Core models and reconciliation primitives for OctoSmith.
+Core models and apply primitives for OctoSmith.
