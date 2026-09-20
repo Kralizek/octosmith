@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/packages/core/configuration/schemas/octosmith.schema.json",
+  "title": "OctoSmith configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "organization",
+    "repositories"
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "organization": {
+      "type": "string",
+      "minLength": 1
+    },
+    "repositories": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "scope"
+      ],
+      "properties": {
+        "scope": {
+          "$ref": "#/$defs/selector"
+        },
+        "settings": {
+          "$ref": "#/$defs/settings"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "names": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "teams": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "properties": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "$ref": "#/$defs/propertyValue"
+          }
+        },
+        "visibility": {
+          "oneOf": [
+            {
+              "type": "string",
+              "enum": [
+                "public",
+                "private",
+                "internal"
+              ]
+            },
+            {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "enum": [
+                  "public",
+                  "private",
+                  "internal"
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    "propertyValue": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        }
+      ]
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "collection_management": {
+          "type": "string",
+          "enum": [
+            "explicit",
+            "strict"
+          ]
+        }
+      }
+    }
+  }
+}
