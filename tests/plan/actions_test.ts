@@ -1,5 +1,5 @@
 import { assertEquals } from "@std/assert";
-import { buildPlan } from "../../packages/core/mod.ts";
+import { buildPlan } from "../../packages/octosmith/mod.ts";
 import { currentState } from "./fixtures.ts";
 
 Deno.test("actions scalar settings emit only drift", () => {
