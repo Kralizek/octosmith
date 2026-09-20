@@ -199,13 +199,13 @@ export async function main(
 }
 
 function validateRawRepositoryArgument(args: readonly string[]): void {
-  const [command, ...rest] = args;
+  const command = args[0];
 
   if (command !== "plan" && command !== "apply") {
     return;
   }
 
-  if (rest.includes("")) {
+  if (args[1] === "") {
     throw new Error("Repository target must not be empty");
   }
 }
