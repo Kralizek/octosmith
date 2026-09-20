@@ -13,6 +13,7 @@ export const VERSION = cliMetadata.version;
 export interface CliExecutionOptions {
   readonly runtime?: ReconciliationRuntime;
   readonly write?: (value: string) => void;
+  readonly writeError?: (value: string) => void;
 }
 
 function createCli(
@@ -20,6 +21,7 @@ function createCli(
   args?: readonly string[],
 ): Command {
   const write = options.write ?? console.log;
+  const writeError = options.writeError ?? console.error;
 
   const root = new Command()
     .name("octosmith")
@@ -51,7 +53,8 @@ function createCli(
         .action(async (commandOptions, repository?: string) => {
           assertRepositoryPosition(args, mode, repository);
           const format = parseOutputFormat(commandOptions.format);
-          const runtime = options.runtime ?? createDefaultRuntime();
+          const runtime = options.runtime ??
+            createDefaultRuntime(commandOptions.verbose ?? false, writeError);
           const report = await reconcile(runtime, {
             path: commandOptions.path,
             mode,
@@ -77,7 +80,10 @@ function createCli(
   return root;
 }
 
-function createDefaultRuntime(): ReconciliationRuntime {
+function createDefaultRuntime(
+  verbose: boolean,
+  writeError: (value: string) => void,
+): ReconciliationRuntime {
   const token = Deno.env.get("GITHUB_TOKEN");
 
   if (!token) {
@@ -86,7 +92,23 @@ function createDefaultRuntime(): ReconciliationRuntime {
     );
   }
 
-  return createGitHubRuntime({ token });
+  let firstTraceGroup = true;
+
+  return createGitHubRuntime({
+    token,
+    ...(verbose && {
+      traceGroup: (name) => {
+        if (!firstTraceGroup) {
+          writeError("");
+        }
+
+        firstTraceGroup = false;
+        writeError("[" + name + "]");
+      },
+      trace: ({ method, path, status }) =>
+        writeError(method + " " + path + " — " + status),
+    }),
+  });
 }
 
 class ReconciliationFailedError extends Error {

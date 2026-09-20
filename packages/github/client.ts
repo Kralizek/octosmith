@@ -19,11 +19,18 @@ export interface GitHubClient {
   ): Promise<T>;
 }
 
+export interface GitHubResponseTrace {
+  readonly method: string;
+  readonly path: string;
+  readonly status: number;
+}
+
 export interface FetchGitHubClientOptions {
   readonly token: string;
   readonly baseUrl?: string;
   readonly apiVersion?: string;
   readonly fetch?: typeof globalThis.fetch;
+  readonly trace?: (entry: GitHubResponseTrace) => void;
 }
 
 export class FetchGitHubClient implements GitHubClient {
@@ -31,12 +38,14 @@ export class FetchGitHubClient implements GitHubClient {
   readonly #baseUrl: string;
   readonly #apiVersion: string;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #trace?: (entry: GitHubResponseTrace) => void;
 
   constructor(options: FetchGitHubClientOptions) {
     this.#token = options.token;
     this.#baseUrl = options.baseUrl ?? "https://api.github.com";
     this.#apiVersion = options.apiVersion ?? "2026-03-10";
     this.#fetch = options.fetch ?? globalThis.fetch;
+    this.#trace = options.trace;
   }
 
   get<T>(
@@ -74,6 +83,17 @@ export class FetchGitHubClient implements GitHubClient {
       ...(options.body !== undefined && {
         body: JSON.stringify(options.body),
       }),
+    });
+
+    const basePath = new URL(baseUrl).pathname.replace(/\/$/, "");
+    const tracePath = url.pathname.startsWith(basePath)
+      ? url.pathname.slice(basePath.length) || "/"
+      : url.pathname;
+
+    this.#trace?.({
+      method,
+      path: tracePath.startsWith("/") ? tracePath : "/" + tracePath,
+      status: response.status,
     });
 
     if (response.status === 404 && options.allowNotFound) {

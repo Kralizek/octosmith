@@ -19,6 +19,7 @@ import {
   FetchGitHubClient,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
+  type GitHubResponseTrace,
   readCurrentState,
   type RepositoryDiscoveryResult,
 } from "@octosmith/github";
@@ -43,6 +44,8 @@ export interface GitHubRuntimeOptions {
   readonly secretValue?: RuntimeValueProvider;
   readonly baseUrl?: string;
   readonly fetch?: typeof globalThis.fetch;
+  readonly trace?: (entry: GitHubResponseTrace) => void;
+  readonly traceGroup?: (name: string) => void;
 }
 
 export function createGitHubRuntime(
@@ -52,6 +55,7 @@ export function createGitHubRuntime(
     token: options.token,
     baseUrl: options.baseUrl,
     fetch: options.fetch,
+    trace: options.trace,
   });
   const secretValue = options.secretValue ?? environmentValue;
   let source: GitHubRepositoryStateSource | undefined;
@@ -59,6 +63,7 @@ export function createGitHubRuntime(
 
   return {
     async discover(loaded, repository) {
+      options.traceGroup?.("organization");
       source = new GitHubRepositoryStateSource(
         client,
         loaded.configuration.organization,
@@ -73,6 +78,8 @@ export function createGitHubRuntime(
     },
 
     async read(desired) {
+      options.traceGroup?.("repository: " + desired.repository);
+
       if (!source) {
         throw new Error("GitHub runtime has not discovered repositories yet");
       }
