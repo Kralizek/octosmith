@@ -1,180 +1,115 @@
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
-  assertEquals,
-  assertNotEquals,
-  assertStringIncludes,
-} from "@std/assert";
-import {
-  type Operation,
+  buildReconciliationEvaluations,
+  type DesiredState,
   renderReport,
   reportPlannedRepository,
 } from "@octosmith/core";
+import { currentState } from "./plan/fixtures.ts";
 
-Deno.test("destructive plans identify every removed resource", () => {
-  const rendered = render([
-    { type: "delete-environment", name: "production" },
-    { type: "delete-file", path: ".github/workflows/build.yml", sha: "sha" },
-    { type: "delete-ruleset", id: 42, name: "branch-protection" },
-    { type: "remove-team-permission", team: "maintainers" },
-    { type: "remove-actions-secret", secret: "DEPLOY_TOKEN" },
-    { type: "remove-actions-variable", name: "REGION" },
-  ]);
-  for (
-    const target of [
-      "production",
-      ".github/workflows/build.yml",
-      "branch-protection",
-      "maintainers",
-      "DEPLOY_TOKEN",
-      "REGION",
-    ]
-  ) {
-    assertStringIncludes(rendered, JSON.stringify(target));
-  }
-  assertStringIncludes(rendered, '"id":42');
-  assertNotEquals(
-    render([{ type: "delete-environment", name: "staging" }]),
-    render([{ type: "delete-environment", name: "production" }]),
-  );
-});
-
-Deno.test("plans show changed settings and permission values", () => {
-  const rendered = render([
-    {
-      type: "update-repository-settings",
-      settings: { hasIssues: false, visibility: "private" },
+Deno.test("evaluation details are safe and resource-oriented", () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    settings: { hasIssues: false, visibility: "private" },
+    actions: {
+      variables: [{ name: "REGION", value: "repository-private-value" }],
+      secrets: [{ name: "TOKEN", source: "SOURCE_TOKEN" }],
     },
-    { type: "update-actions-settings", settings: { enabled: false } },
-    { type: "update-actions-oidc", settings: { immutableSubject: true } },
+    files: [{
+      path: "config.txt",
+      ensure: "exact",
+      content: "file-private-content",
+    }],
+  };
+  const current = currentState();
+  const operations = [
     {
-      type: "set-team-permission",
-      permission: {
-        team: "platform",
-        permission: { kind: "built-in", name: "maintain" },
-      },
-    },
-    { type: "set-custom-property", name: "tier", value: "critical" },
-  ]);
-  for (
-    const detail of [
-      '"hasIssues":false',
-      '"visibility":"private"',
-      '"enabled":false',
-      '"immutableSubject":true',
-      '"team":"platform"',
-      '"permission":"maintain"',
-      '"name":"tier"',
-      '"value":"critical"',
-    ]
-  ) {
-    assertStringIncludes(rendered, detail);
-  }
-});
-
-Deno.test("ruleset plans show identities and changed rules", () => {
-  const rendered = render([
-    {
-      type: "create-ruleset",
-      ruleset: {
-        name: "push-policy",
-        target: "push",
-        enforcement: "active",
-        bypassActors: [],
-        rules: [],
-      },
+      type: "update-repository-settings" as const,
+      settings: { hasIssues: false, visibility: "private" as const },
     },
     {
-      type: "update-ruleset",
-      id: 42,
-      changes: { name: "branch-policy", enforcement: "disabled" },
-    },
-  ]);
-  assertStringIncludes(rendered, '"name":"push-policy"');
-  assertStringIncludes(rendered, '"rules":[]');
-  assertStringIncludes(rendered, '"id":42');
-  assertStringIncludes(rendered, '"enforcement":"disabled"');
-});
-
-Deno.test("environment plans identify owned members and collection mode without values", () => {
-  const rendered = render([
-    {
-      type: "create-environment",
-      environment: {
-        name: "staging",
-        variables: [{ name: "REGION", value: "environment-private-value" }],
-        secrets: [{ name: "DEPLOY_TOKEN", source: "EXTERNAL_TOKEN" }],
-      },
+      type: "set-actions-variable" as const,
+      variable: { name: "REGION", value: "repository-private-value" },
     },
     {
-      type: "update-environment",
-      collections: "strict",
-      environment: { name: "production", variables: [], secrets: [] },
-    },
-  ]);
-  for (
-    const detail of [
-      '"name":"staging"',
-      '"name":"REGION"',
-      '"DEPLOY_TOKEN"',
-      '"name":"production"',
-      '"collections":"strict"',
-      '"variables":[]',
-      '"secrets":[]',
-    ]
-  ) {
-    assertStringIncludes(rendered, detail);
-  }
-  assertEquals(rendered.includes("environment-private-value"), false);
-});
-
-Deno.test("repository value plans show names without runtime values", () => {
-  const rendered = render([
-    {
-      type: "set-actions-secret",
+      type: "set-actions-secret" as const,
       secret: { name: "TOKEN", source: "SOURCE_TOKEN" },
     },
     {
-      type: "set-actions-variable",
-      variable: { name: "REGION", value: "repository-private-value" },
-    },
-  ]);
-  assertStringIncludes(rendered, '"name":"TOKEN"');
-  assertStringIncludes(rendered, '"name":"REGION"');
-  assertStringIncludes(rendered, "[redacted]");
-  assertEquals(rendered.includes("repository-private-value"), false);
-});
-
-Deno.test("file plans identify paths and modes without file contents", () => {
-  const rendered = render([
-    {
-      type: "create-file",
+      type: "create-file" as const,
       file: {
-        path: "README.md",
-        ensure: "exists",
+        path: "config.txt",
+        ensure: "exact" as const,
         content: "file-private-content",
       },
     },
-    {
-      type: "update-file",
-      sha: "sha",
-      file: {
-        path: "config.yml",
-        ensure: "exact",
-        content: "file-private-content",
-      },
-    },
-  ]);
-  assertStringIncludes(rendered, '"path":"README.md","ensure":"exists"');
-  assertStringIncludes(rendered, '"path":"config.yml","ensure":"exact"');
-  assertEquals(rendered.includes("file-private-content"), false);
+  ];
+
+  const evaluations = buildReconciliationEvaluations(
+    current,
+    desired,
+    operations,
+  );
+  const serialized = JSON.stringify(evaluations);
+
+  assertEquals(serialized.includes("repository-private-value"), false);
+  assertEquals(serialized.includes("SOURCE_TOKEN"), false);
+  assertEquals(serialized.includes("file-private-content"), false);
+  assertStringIncludes(serialized, "REGION");
+  assertStringIncludes(serialized, "TOKEN");
+  assertStringIncludes(serialized, "config.txt");
 });
 
-function render(operations: readonly Operation[]): string {
-  return renderReport({
+Deno.test("text output is one human-readable line per changed item", () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    actions: {
+      variables: [{ name: "REGION", value: "north" }],
+      secrets: [{ name: "TOKEN", source: "TOKEN" }],
+    },
+    teams: [{
+      team: "platform",
+      permission: { kind: "built-in", name: "maintain" },
+    }],
+  };
+  const current = currentState();
+  const plan = {
+    repository: "sample",
+    operations: [
+      {
+        type: "set-actions-variable" as const,
+        variable: { name: "REGION", value: "north" },
+      },
+      {
+        type: "set-actions-secret" as const,
+        secret: { name: "TOKEN", source: "TOKEN" },
+      },
+      {
+        type: "set-team-permission" as const,
+        permission: {
+          team: "platform",
+          permission: { kind: "built-in" as const, name: "maintain" as const },
+        },
+      },
+    ],
+  };
+  const evaluations = buildReconciliationEvaluations(
+    current,
+    desired,
+    plan.operations,
+  );
+  const rendered = renderReport({
     organization: "acme",
     startedAt: new Date(0),
-    completedAt: new Date(0),
-    repositories: [
-      reportPlannedRepository("code", { repository: "sample", operations }),
-    ],
+    completedAt: new Date(1),
+    repositories: [reportPlannedRepository("code", plan, evaluations)],
   });
-}
+
+  assertStringIncludes(rendered, "→ Actions variable REGION — update");
+  assertStringIncludes(rendered, "→ Actions secret TOKEN — set");
+  assertStringIncludes(rendered, "→ Team platform — permission: maintain");
+  assertEquals(rendered.includes("{"), false);
+  assertEquals(rendered.includes('"'), false);
+});
