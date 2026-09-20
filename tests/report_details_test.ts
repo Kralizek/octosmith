@@ -71,7 +71,6 @@ Deno.test("text output is one human-readable line per changed item", () => {
       permission: { kind: "built-in", name: "maintain" },
     }],
   };
-  const current = currentState();
   const plan = {
     repository: "sample",
     operations: [
