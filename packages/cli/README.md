@@ -129,6 +129,12 @@ skipped. Repository rows are always shown; unchanged items are hidden by
 default. Pass `--verbose` to include unchanged items in text output. JSON always
 contains the complete item set.
 
+Verbose mode also traces each GitHub API response to stderr as
+`METHOD /endpoint — status`. Traces never include request or response bodies,
+headers, query parameters, or credentials. The final report is written only to
+stdout, so JSON output remains directly parseable even when verbose tracing is
+enabled.
+
 ## Target one repository
 
 Both commands accept an optional repository name immediately after the command,
