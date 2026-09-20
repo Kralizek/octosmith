@@ -136,7 +136,7 @@ repository:
 [organization]
 GET /orgs/acme/repos — 200
 
-[api-service]
+[repository: api-service]
 GET /repos/acme/api-service — 200
 GET /repos/acme/api-service/actions/variables — 200
 ```
