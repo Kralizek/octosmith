@@ -1,7 +1,4 @@
-import type {
-  Operation,
-  ReconciliationItemType,
-} from "../plan/types.ts";
+import type { Operation, ReconciliationItemType } from "../plan/types.ts";
 
 export type RepositoryReportStatus =
   | "unchanged"
