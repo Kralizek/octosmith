@@ -1272,6 +1272,41 @@ Deno.test("CLI JSON apply preserves the structured report shape", async () => {
   }
 });
 
+Deno.test("CLI rejects an explicitly empty events output path", async () => {
+  const root = await configurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--events-output", "", "--path", root],
+        { runtime },
+      ),
+      1,
+    );
+
+    assertEquals(requests, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Events output path must not be empty",
+    );
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("CLI rejects invalid output format before reconciliation", async () => {
   const root = await configurationDirectory();
   const requests: CapturedRequest[] = [];
