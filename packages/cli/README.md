@@ -2,15 +2,15 @@
 
 Command-line interface for OctoSmith.
 
-OctoSmith reconciles GitHub repositories against declarative configuration. It
-loads a configuration directory, discovers repositories in scope, resolves each
+OctoSmith applies declarative configuration to GitHub repositories. It loads a
+configuration directory, discovers repositories in scope, resolves each
 repository to exactly one template, compares desired and current state, and
 either reports or applies the resulting operations.
 
 ## Requirements
 
 Set `GITHUB_TOKEN` to a token with the GitHub permissions required by the
-configuration being reconciled.
+configuration being applyd.
 
 Runtime values for Actions variables, Actions secrets, Dependabot secrets, and
 environment values can be read from process environment variables. Variables can
@@ -100,8 +100,7 @@ does not execute a previously displayed plan.
 
 Apply is not transactional. If an operation fails, earlier operations for that
 repository can already have been applied. Remaining operations for the failed
-repository are skipped, while reconciliation can continue with other
-repositories.
+repository are skipped, while apply can continue with other repositories.
 
 ## Output formats
 
@@ -119,15 +118,15 @@ octosmith apply --format json --path ./configuration
 ```
 
 JSON serializes the complete structured report, including ISO 8601 timestamps,
-and preserves the same sensitive-data guarantees as text output. Reconciliation
-items are flat objects with `type`, `status`, `details`, and optional `error`.
-Targeted and full-scope executions use the same report shape.
+and preserves the same sensitive-data guarantees as text output. Apply items are
+flat objects with `type`, `status`, `details`, and optional `error`. Targeted
+and full-scope executions use the same report shape.
 
-Text output uses one line per reconciliation item. Status icons have stable
-meanings: `→` planned, `✓` reconciled, `-` already desired, `✗` failed, and `·`
-skipped. Repository rows are always shown; unchanged items are hidden by
-default. Pass `--verbose` to include unchanged items in text output. JSON always
-contains the complete item set.
+Text output uses one line per apply item. Status icons have stable meanings: `→`
+planned, `✓` applied, `-` already desired, `✗` failed, and `·` skipped.
+Repository rows are always shown; unchanged items are hidden by default. Pass
+`--verbose` to include unchanged items in text output. JSON always contains the
+complete item set.
 
 Verbose mode also traces GitHub API responses to stderr, grouped by scope and
 repository:
@@ -161,14 +160,13 @@ The destination is treated as a writable path. OctoSmith does not inspect the
 resource type, so callers may use a regular file, FIFO/named pipe, or another
 writable path supported by the host operating system.
 
-Events are written as soon as each repository finishes reconciliation and the
-destination is closed when reconciliation completes. Existing output streams are
+Events are written as soon as apply finishes for each repository and the
+destination is closed when apply completes. Existing output streams are
 unchanged: the final OctoSmith report remains on stdout and diagnostics/verbose
 GitHub traces remain on stderr.
 
 Plan emits `resource.planned`; apply emits `resource.applied`. Each event uses
-the GitHub organization as its source and the reconciled repository as its
-subject:
+the GitHub organization as its source and the managed repository as its subject:
 
 ```json
 {
@@ -221,7 +219,7 @@ octosmith apply my-repo --path ./configuration
 
 The argument narrows the configured repository scope; it never overrides it.
 OctoSmith fetches the repository directly, verifies that it belongs to
-`repositories.scope`, and then runs the normal reconciliation flow.
+`repositories.scope`, and then runs the normal apply flow.
 
 A targeted repository outside the configured scope is reported as failed and is
 never mutated.
@@ -325,5 +323,5 @@ be processed where possible.
 OctoSmith returns exit code `0` when the command completes without failed or
 partially applied repositories.
 
-It returns exit code `1` for validation failures, reconciliation failures, and
-partially applied repositories.
+It returns exit code `1` for validation failures, apply failures, and partially
+applied repositories.
