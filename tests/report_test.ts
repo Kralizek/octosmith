@@ -7,7 +7,7 @@ import {
   reportAppliedRepository,
   reportFailedRepository,
   reportPlannedRepository,
-} from "@octosmith/core";
+} from "@octosmith/octosmith";
 
 const operation: Operation = {
   type: "set-custom-property",
