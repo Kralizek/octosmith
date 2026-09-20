@@ -1,5 +1,5 @@
 import type { EventDocument } from "@hooksmith/core";
-import type { ApplyItemReport, RepositoryReport } from "@octosmith/core";
+import type { ApplyItemReport, RepositoryReport } from "@octosmith/octosmith";
 import type { ApplyMode } from "./apply.ts";
 
 export interface RepositoryEventData {
