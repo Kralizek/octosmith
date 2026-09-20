@@ -1,4 +1,4 @@
-# @octosmith/github
+# @octosmith/octosmith
 
 GitHub REST adapter for OctoSmith.
 

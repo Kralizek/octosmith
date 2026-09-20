@@ -9,7 +9,7 @@ import type {
   SecretName,
   TeamPermission,
   Variable,
-} from "@octosmith/core";
+} from "../mod.ts";
 
 export interface RepositoryStateSource {
   getRepositorySettings(repository: string): Promise<CurrentRepositorySettings>;

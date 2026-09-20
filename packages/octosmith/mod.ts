@@ -1,5 +1,5 @@
 /**
- * Core models and apply primitives for OctoSmith.
+ * OctoSmith domain models, planning, reporting, and GitHub integration.
  *
  * @module
  */
@@ -9,6 +9,7 @@ export * from "./plan/mod.ts";
 export * from "./report/mod.ts";
 export * from "./state/mod.ts";
 export * from "./types.ts";
+export * from "./github/mod.ts";
 
 /** The apply modes supported by OctoSmith. */
 export type ApplyMode = "plan" | "apply";

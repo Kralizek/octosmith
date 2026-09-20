@@ -1,12 +1,12 @@
 import sodium from "libsodium-wrappers";
-import { buildPlan } from "@octosmith/core";
+import { buildPlan } from "@octosmith/octosmith";
 import { assert, assertEquals } from "@std/assert";
 import {
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
-} from "@octosmith/github";
+} from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
 interface Call {
@@ -21,7 +21,7 @@ class EnvironmentClient implements GitHubClient {
   request<T>(
     method: string,
     path: string,
-    options: import("@octosmith/github").GitHubRequestOptions = {},
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
   ): Promise<T> {
     this.calls.push({ method, path, query: options.query });
 
@@ -122,7 +122,7 @@ class MappingClient implements GitHubClient {
   request<T>(
     method: string,
     path: string,
-    options: import("@octosmith/github").GitHubRequestOptions = {},
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
   ): Promise<T> {
     this.requests.push({ method, path, body: options.body });
 
@@ -513,7 +513,7 @@ class SecretClient implements GitHubClient {
   request<T>(
     method: string,
     path: string,
-    options: import("@octosmith/github").GitHubRequestOptions = {},
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
   ): Promise<T> {
     this.requests.push({ method, path, body: options.body });
 
@@ -630,7 +630,7 @@ class StatefulRulesetClient implements GitHubClient {
   request<T>(
     method: string,
     path: string,
-    options: import("@octosmith/github").GitHubRequestOptions = {},
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
   ): Promise<T> {
     this.requests.push({ method, path, body: options.body });
 

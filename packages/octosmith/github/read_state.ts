@@ -1,4 +1,4 @@
-import type { CurrentState, DesiredState } from "@octosmith/core";
+import type { CurrentState, DesiredState } from "../mod.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
 
 export async function readCurrentState(

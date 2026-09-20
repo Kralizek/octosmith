@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { buildPlan } from "../../packages/core/mod.ts";
+import { buildPlan } from "../../packages/octosmith/mod.ts";
 import { currentState } from "./fixtures.ts";
 
 Deno.test("rulesets create complete push rulesets", () => {
@@ -845,7 +845,7 @@ Deno.test("ruleset required fields reject null values", () => {
               maxFileSizeMb: null,
             }],
           }],
-        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
       ),
     Error,
     "requires maxFileSizeMb",
@@ -872,7 +872,7 @@ Deno.test("ruleset required fields reject null values", () => {
               strict: true,
             }],
           }],
-        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
       ),
     Error,
     "required status check at index 0 requires context",
@@ -896,7 +896,7 @@ Deno.test("unsupported ruleset rule types are rejected", () => {
             },
             rules: [{ type: "future-rule" }],
           }],
-        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
       ),
     Error,
     "Unsupported ruleset rule type: future-rule",
@@ -925,7 +925,7 @@ Deno.test("new rules validate nested object members", () => {
               strict: true,
             }],
           }],
-        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
       ),
     Error,
     "required status check at index 0 requires context",
@@ -951,7 +951,7 @@ Deno.test("new rules validate nested object members", () => {
               workflows: [{ path: ".github/workflows/ci.yml" }],
             }],
           }],
-        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
       ),
     Error,
     "required workflow at index 0 requires repositoryId",
@@ -986,7 +986,7 @@ Deno.test("new rules validate nested object members", () => {
               requiredReviewers: [{ reviewerTeamId: 7 }],
             }],
           }],
-        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
       ),
     Error,
     "pull-request required reviewer at index 0 requires filePatterns",
@@ -1014,7 +1014,7 @@ Deno.test("new rules validate nested object members", () => {
               }],
             }],
           }],
-        } as unknown as import("../../packages/core/mod.ts").DesiredState,
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
       ),
     Error,
     "code scanning tool at index 0 requires securityAlertsThreshold",

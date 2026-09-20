@@ -1,11 +1,11 @@
 import { assertEquals, assertRejects } from "@std/assert";
-import { buildPlan } from "@octosmith/core";
+import { buildPlan } from "@octosmith/octosmith";
 import {
   FetchGitHubClient,
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryStateSource,
-} from "@octosmith/github";
+} from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
 class PagingClient implements GitHubClient {
@@ -14,7 +14,7 @@ class PagingClient implements GitHubClient {
   request<T>(
     method: string,
     path: string,
-    options: import("@octosmith/github").GitHubRequestOptions = {},
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
   ): Promise<T> {
     if (method !== "GET") {
       throw new Error("Unexpected method: " + method);
@@ -93,7 +93,7 @@ class MappingStateClient implements GitHubClient {
   request<T>(
     method: string,
     path: string,
-    _options: import("@octosmith/github").GitHubRequestOptions = {},
+    _options: import("@octosmith/octosmith").GitHubRequestOptions = {},
   ): Promise<T> {
     if (method !== "GET") {
       throw new Error("Unexpected method: " + method);

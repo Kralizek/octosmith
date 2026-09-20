@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { buildPlan } from "../../packages/core/mod.ts";
+import { buildPlan } from "../../packages/octosmith/mod.ts";
 import { currentState } from "./fixtures.ts";
 
 Deno.test("teams add and update permissions without removing undeclared teams in explicit mode", () => {

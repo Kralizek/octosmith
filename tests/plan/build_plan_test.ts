@@ -1,5 +1,5 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { buildPlan, type DesiredState } from "../../packages/core/mod.ts";
+import { buildPlan, type DesiredState } from "../../packages/octosmith/mod.ts";
 import { currentState } from "./fixtures.ts";
 
 Deno.test("buildPlan rejects mismatched repositories", () => {

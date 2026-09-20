@@ -4,7 +4,7 @@ import {
   applyPlan,
   FetchGitHubClient,
   GitHubRepositoryMutationSink,
-} from "@octosmith/github";
+} from "@octosmith/octosmith";
 
 Deno.test("missing Actions secret prevents all mutations including strict deletions", async () => {
   const requests: string[] = [];

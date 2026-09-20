@@ -6,11 +6,11 @@ import {
   type Plan,
   type RepositoryMetadata,
   type RepositoryReport,
-} from "@octosmith/core";
+} from "@octosmith/octosmith";
 import type {
   ApplyPlanResult,
   RepositoryDiscoveryFailure,
-} from "@octosmith/github";
+} from "@octosmith/octosmith";
 import { apply, type ApplyRuntime } from "../packages/cli/apply.ts";
 import { currentRepositorySettings } from "./plan/fixtures.ts";
 
@@ -32,7 +32,9 @@ class FakeRuntime implements ApplyRuntime {
     });
   }
 
-  read(desired: import("@octosmith/core").DesiredState): Promise<CurrentState> {
+  read(
+    desired: import("@octosmith/octosmith").DesiredState,
+  ): Promise<CurrentState> {
     if (this.failRead.has(desired.repository)) {
       return Promise.reject(new Error("read failed"));
     }

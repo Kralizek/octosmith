@@ -1,7 +1,7 @@
 import type {
   CurrentRepositorySettings,
   CurrentState,
-} from "../../packages/core/mod.ts";
+} from "../../packages/octosmith/mod.ts";
 
 export function currentRepositorySettings(
   overrides: Partial<CurrentRepositorySettings> = {},

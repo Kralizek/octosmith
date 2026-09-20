@@ -9,7 +9,7 @@ import {
   reportPlannedRepository,
   resolveDesiredState,
   type RuntimeValueProvider,
-} from "@octosmith/core";
+} from "@octosmith/octosmith";
 import {
   applyPlan,
   type ApplyPlanResult,
@@ -20,7 +20,7 @@ import {
   type GitHubResponseTrace,
   readCurrentState,
   type RepositoryDiscoveryResult,
-} from "@octosmith/github";
+} from "@octosmith/octosmith";
 
 export type ApplyMode = "plan" | "apply";
 
@@ -32,7 +32,7 @@ export interface ApplyRuntime {
 
   read(
     desired: DesiredState,
-  ): Promise<import("@octosmith/core").CurrentState>;
+  ): Promise<import("@octosmith/octosmith").CurrentState>;
 
   apply(plan: Plan): Promise<ApplyPlanResult>;
 }
@@ -100,7 +100,7 @@ export interface ApplyOptions {
   readonly repository?: string;
   readonly values?: RuntimeValueProvider;
   readonly onRepositoryApplied: (
-    report: import("@octosmith/core").RepositoryReport,
+    report: import("@octosmith/octosmith").RepositoryReport,
   ) => void | Promise<void>;
 }
 
@@ -117,7 +117,7 @@ export async function apply(
   const values = options.values ?? environmentValue;
 
   const addResult = async (
-    result: import("@octosmith/core").RepositoryReport,
+    result: import("@octosmith/octosmith").RepositoryReport,
   ) => {
     await options.onRepositoryApplied(result);
   };
@@ -130,7 +130,7 @@ export async function apply(
 
   for (const repository of discovery.repositories) {
     let template: string | undefined;
-    let result: import("@octosmith/core").RepositoryReport;
+    let result: import("@octosmith/octosmith").RepositoryReport;
 
     try {
       const desired = await resolveDesiredState(loaded, repository, values);

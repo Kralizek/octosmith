@@ -1,8 +1,7 @@
 {
   "workspace": [
-    "./packages/core",
-    "./packages/cli",
-    "./packages/github"
+    "./packages/octosmith",
+    "./packages/cli"
   ],
   "imports": {
     "@cliffy/command": "jsr:@cliffy/command@^1.2.1",

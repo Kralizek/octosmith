@@ -13,7 +13,7 @@ import type {
   SecretName,
   TeamPermission,
   Variable,
-} from "@octosmith/core";
+} from "../mod.ts";
 import type { GitHubClient } from "./client.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
 
@@ -449,13 +449,13 @@ function mapRuleset(value: Record<string, unknown>): CurrentRuleset {
   ).map((actor) => ({
     actorType: kebab(
       String(actor.actor_type),
-    ) as import("@octosmith/core").RulesetBypassActor["actorType"],
+    ) as import("../mod.ts").RulesetBypassActor["actorType"],
     ...(actor.actor_id !== null && actor.actor_id !== undefined && {
       actorId: Number(actor.actor_id),
     }),
     bypassMode: kebab(
       String(actor.bypass_mode),
-    ) as import("@octosmith/core").RulesetBypassActor["bypassMode"],
+    ) as import("../mod.ts").RulesetBypassActor["bypassMode"],
   }));
 
   const common = {
@@ -490,8 +490,8 @@ function mapRuleset(value: Record<string, unknown>): CurrentRuleset {
 }
 
 function mapRule(value: Record<string, unknown>):
-  | import("@octosmith/core").CurrentRefRule
-  | import("@octosmith/core").CurrentPushRule {
+  | import("../mod.ts").CurrentRefRule
+  | import("../mod.ts").CurrentPushRule {
   const type = kebab(String(value.type));
   const parameters = camelizeKeys(
     (value.parameters as Record<string, unknown> | undefined) ?? {},
@@ -595,8 +595,8 @@ function mapRule(value: Record<string, unknown>):
     type,
     ...parameters,
   } as
-    | import("@octosmith/core").CurrentRefRule
-    | import("@octosmith/core").CurrentPushRule;
+    | import("../mod.ts").CurrentRefRule
+    | import("../mod.ts").CurrentPushRule;
 }
 
 function camelizeKeys(value: unknown): unknown {

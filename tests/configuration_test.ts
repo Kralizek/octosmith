@@ -5,7 +5,7 @@ import {
   loadConfigurationDirectory,
   matchesSelector,
   resolveDesiredState,
-} from "../packages/core/mod.ts";
+} from "../packages/octosmith/mod.ts";
 
 import { currentState } from "./plan/fixtures.ts";
 
