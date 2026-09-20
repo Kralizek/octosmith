@@ -1,8 +1,4 @@
-import type {
-  ReconciliationItemReport,
-  Report,
-  RepositoryReport,
-} from "./types.ts";
+import type { ApplyItemReport, Report, RepositoryReport } from "./types.ts";
 
 export interface RenderReportOptions {
   readonly verbose?: boolean;
@@ -54,14 +50,14 @@ function renderRepository(repository: RepositoryReport): string {
     repository.repository + template + " — " + repository.status;
 }
 
-function renderItem(item: ReconciliationItemReport): string {
+function renderItem(item: ApplyItemReport): string {
   const prefix = statusSymbol(item.status) + " ";
   const error = item.error ? " — " + item.error : "";
 
   return prefix + describeItem(item) + error;
 }
 
-function describeItem(item: ReconciliationItemReport): string {
+function describeItem(item: ApplyItemReport): string {
   const details = item.details;
 
   switch (item.type) {
@@ -179,7 +175,7 @@ function formatValue(value: unknown): string {
 function statusSymbol(
   status:
     | RepositoryReport["status"]
-    | ReconciliationItemReport["status"],
+    | ApplyItemReport["status"],
 ): string {
   switch (status) {
     case "unchanged":
