@@ -6,7 +6,7 @@ import {
   renderReport,
   type Report,
   type RepositoryReport,
-} from "@octosmith/core";
+} from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ApplyRuntime } from "./apply.ts";
