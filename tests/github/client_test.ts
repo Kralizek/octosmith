@@ -122,7 +122,7 @@ Deno.test("GitHub client traces API-relative endpoints and statuses", async () =
     trace: (entry) => traces.push(entry),
   });
 
-  await client.get("/repos/acme/api", { page: 2 });
+  await client.get("/repos/acme/api?embedded=do-not-log#fragment", { page: 2 });
   assertEquals(
     await client.request("GET", "/repos/acme/missing", {
       query: { token_like_query: "do-not-log" },
