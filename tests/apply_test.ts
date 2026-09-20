@@ -32,7 +32,9 @@ class FakeRuntime implements ApplyRuntime {
     });
   }
 
-  read(desired: import("@octosmith/octosmith").DesiredState): Promise<CurrentState> {
+  read(
+    desired: import("@octosmith/octosmith").DesiredState,
+  ): Promise<CurrentState> {
     if (this.failRead.has(desired.repository)) {
       return Promise.reject(new Error("read failed"));
     }
