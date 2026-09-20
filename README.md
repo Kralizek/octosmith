@@ -1,11 +1,11 @@
 # OctoSmith
 
-A toolkit for defining, validating, and reconciling GitHub configuration as
-code.
+A toolkit for defining, validating, planning, and applying GitHub configuration
+as code.
 
 ## Packages
 
-- `@octosmith/core` — core models and apply primitives.
+- `@octosmith/octosmith` — OctoSmith domain models, planning, reporting, and GitHub integration.
 - `@octosmith/cli` — command-line interface.
 
 ## Examples
