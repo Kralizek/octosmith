@@ -78,7 +78,7 @@ export function createGitHubRuntime(
     },
 
     async read(desired) {
-      options.traceGroup?.(desired.repository);
+      options.traceGroup?.("repository: " + desired.repository);
 
       if (!source) {
         throw new Error("GitHub runtime has not discovered repositories yet");
