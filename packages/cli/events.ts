@@ -17,7 +17,7 @@ export function toRepositoryEvent(
   timestamp: Date = new Date(),
 ): EventDocument<RepositoryEventData> {
   return {
-    type: mode === "plan" ? "repository.planned" : "repository.applied",
+    type: mode === "plan" ? "resource.planned" : "resource.applied",
     timestamp: timestamp.toISOString(),
     source: {
       kind: "github.organization",
