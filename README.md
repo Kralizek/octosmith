@@ -38,14 +38,14 @@ Supported inputs are:
 
 The token is passed only through `GITHUB_TOKEN`; it is never added to CLI
 arguments or output. The token must be able to read every organization and
-repository resource used by `plan`. For `apply`, grant the corresponding
-write permission for every resource OctoSmith is configured to manage. In most
+repository resource used by `plan`. For `apply`, grant the corresponding write
+permission for every resource OctoSmith is configured to manage. In most
 organization-wide workflows this means using a fine-grained personal access
-token or GitHub App installation token rather than the repository-scoped
-default `GITHUB_TOKEN`.
+token or GitHub App installation token rather than the repository-scoped default
+`GITHUB_TOKEN`.
 
-Action releases should maintain a moving major tag such as `v1` pointing at
-the latest compatible v1 release.
+Action releases should maintain a moving major tag such as `v1` pointing at the
+latest compatible v1 release.
 
 ## Examples
 
