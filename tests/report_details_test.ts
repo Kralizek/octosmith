@@ -48,7 +48,12 @@ Deno.test("evaluation details are safe and resource-oriented", () => {
     desired,
     operations,
   );
-  const serialized = JSON.stringify(evaluations);
+  const report = reportPlannedRepository(
+    "code",
+    { repository: "sample", operations },
+    evaluations,
+  );
+  const serialized = JSON.stringify(report);
 
   assertEquals(serialized.includes("repository-private-value"), false);
   assertEquals(serialized.includes("SOURCE_TOKEN"), false);
