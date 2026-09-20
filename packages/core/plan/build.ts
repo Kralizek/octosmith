@@ -480,7 +480,6 @@ function planFiles(
 }
 
 export function buildReconciliationEvaluations(
-  current: CurrentState,
   desired: DesiredState,
   operations: readonly Operation[],
 ): readonly ReconciliationEvaluation[] {
