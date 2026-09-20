@@ -184,6 +184,7 @@ export async function main(
   options: CliExecutionOptions = {},
 ): Promise<number> {
   try {
+    validateRawEventsOutputArgument(args);
     validateRawRepositoryArgument(args);
     await createCli(options, args).parse(args);
     return 0;
@@ -198,14 +199,26 @@ export async function main(
   }
 }
 
+function validateRawEventsOutputArgument(args: readonly string[]): void {
+  for (let index = 0; index < args.length; index++) {
+    if (args[index] === "--events-output" && args[index + 1] === "") {
+      throw new Error("Events output path must not be empty");
+    }
+
+    if (args[index] === "--events-output=") {
+      throw new Error("Events output path must not be empty");
+    }
+  }
+}
+
 function validateRawRepositoryArgument(args: readonly string[]): void {
-  const command = args[0];
+  const [command, ...rest] = args;
 
   if (command !== "plan" && command !== "apply") {
     return;
   }
 
-  if (args[1] === "") {
+  if (rest.includes("")) {
     throw new Error("Repository target must not be empty");
   }
 }
