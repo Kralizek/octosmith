@@ -1,6 +1,6 @@
 import { assertEquals } from "@std/assert";
-import type { Operation, Plan } from "@octosmith/core";
-import { applyPlan, type RepositoryMutationSink } from "@octosmith/github";
+import type { Operation, Plan } from "@octosmith/octosmith";
+import { applyPlan, type RepositoryMutationSink } from "@octosmith/octosmith";
 
 class FakeSink implements RepositoryMutationSink {
   readonly calls: string[] = [];
