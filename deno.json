@@ -10,7 +10,8 @@
     "@std/yaml": "jsr:@std/yaml@^1",
     "@std/path": "jsr:@std/path@^1",
     "ajv/2020": "npm:ajv@8.17.1/dist/2020.js",
-    "libsodium-wrappers": "npm:libsodium-wrappers@0.8.4"
+    "libsodium-wrappers": "npm:libsodium-wrappers@0.8.4",
+    "@hooksmith/core": "jsr:@hooksmith/core@^0.12.0"
   },
   "tasks": {
     "check": "deno fmt --check && deno lint && deno test -A",
