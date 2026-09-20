@@ -504,11 +504,17 @@ Deno.test("partial apply skips later operations and continues with the next repo
     );
 
     const rendered = output.join("\n");
-    assertStringIncludes(rendered, "sample [code] — partially-applied");
-    assertStringIncludes(rendered, "update-repository-settings — applied");
-    assertStringIncludes(rendered, "set-actions-variable — failed");
-    assertStringIncludes(rendered, "create-file — skipped");
-    assertStringIncludes(rendered, "z-next [code] — applied");
+    assertStringIncludes(rendered, "✗ sample [code] — partially-applied");
+    assertStringIncludes(
+      rendered,
+      "✓ Repository settings — hasIssues: false",
+    );
+    assertStringIncludes(
+      rendered,
+      "✗ Actions variable DESIRED — update",
+    );
+    assertStringIncludes(rendered, "· File managed.txt — create");
+    assertStringIncludes(rendered, "✓ z-next [code] — applied");
     assertStringIncludes(
       rendered,
       "Summary: 0 unchanged, 0 planned, 1 applied, 1 partially-applied, 0 failed",
@@ -741,11 +747,11 @@ Deno.test("CLI plan identifies strict deletion targets and changed settings", as
     const rendered = output.join("\n");
     for (
       const detail of [
-        '"hasIssues":false',
-        '"name":"OLD"',
-        '"name":"NEW"',
-        '"name":"production"',
-        '"name":"obsolete"',
+        "Repository settings — hasIssues: false",
+        "Actions secret OLD — remove",
+        "Actions secret NEW — set",
+        "Environment production — delete",
+        "Environment obsolete — delete",
       ]
     ) {
       assertStringIncludes(rendered, detail);
@@ -999,7 +1005,53 @@ Deno.test("CLI emits structured JSON reports", async () => {
     assertEquals(Number.isNaN(Date.parse(report.startedAt)), false);
     assertEquals(Number.isNaN(Date.parse(report.completedAt)), false);
     assertEquals(output.join("\n").includes("changed-value"), false);
+    const items = report.repositories[0].items;
+    assertEquals(Array.isArray(items), true);
+    assertEquals(items.some((item: Record<string, unknown>) =>
+      "operation" in item
+    ), false);
+    assertEquals(
+      items.some((item: Record<string, unknown>) =>
+        item.type === "actions-variable" && item.status === "planned"
+      ),
+      true,
+    );
     assertEquals(mutations(requests), []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI verbose text includes unchanged reconciliation items", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub([]),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--verbose", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    assertStringIncludes(
+      output.join("\n"),
+      "- Actions variable DESIRED",
+    );
   } finally {
     if (previous === undefined) {
       Deno.env.delete("DESIRED");
