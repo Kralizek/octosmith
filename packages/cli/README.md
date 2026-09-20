@@ -148,8 +148,8 @@ verbose tracing is enabled.
 
 ## Hooksmith resource events
 
-Both `plan` and `apply` can emit one Hooksmith event document per applied resource as
-newline-delimited JSON:
+Both `plan` and `apply` can emit one Hooksmith event document per managed
+resource as newline-delimited JSON:
 
 ```sh
 octosmith apply \
@@ -166,8 +166,8 @@ destination is closed when reconciliation completes. Existing output streams are
 unchanged: the final OctoSmith report remains on stdout and diagnostics/verbose
 GitHub traces remain on stderr.
 
-Plan emits `resource.planned`; apply emits `resource.applied`. Each event
-uses the GitHub organization as its source and the reconciled repository as its
+Plan emits `resource.planned`; apply emits `resource.applied`. Each event uses
+the GitHub organization as its source and the reconciled repository as its
 subject:
 
 ```json
