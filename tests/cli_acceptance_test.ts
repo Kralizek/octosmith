@@ -7,7 +7,7 @@ interface CapturedRequest {
   readonly body?: unknown;
 }
 
-Deno.test("CLI applys through the real GitHub HTTP stack", async () => {
+Deno.test("CLI applies through the real GitHub HTTP stack", async () => {
   const root = await configurationDirectory();
   const strictRoot = await configurationDirectory(false, "strict");
   const previous = Deno.env.get("DESIRED");
