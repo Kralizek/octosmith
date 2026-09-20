@@ -4,7 +4,7 @@ import {
   type DesiredState,
   renderReport,
   reportPlannedRepository,
-} from "@octosmith/core";
+} from "@octosmith/octosmith";
 
 Deno.test("evaluation details are safe and resource-oriented", () => {
   const desired: DesiredState = {
