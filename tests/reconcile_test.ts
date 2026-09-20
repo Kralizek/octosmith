@@ -172,6 +172,32 @@ Deno.test("reconcile reports discovery failures without stopping other repositor
   }
 });
 
+Deno.test("reconcile invokes completion callback exactly once when callback fails", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime([metadata("sample")]);
+    const loaded = await loadConfigurationDirectory(root);
+    let calls = 0;
+
+    await assertRejects(
+      () =>
+        reconcile(runtime, loaded, {
+          mode: "plan",
+          onRepositoryCompleted: () => {
+            calls++;
+            throw new Error("event write failed");
+          },
+        }),
+      Error,
+      "event write failed",
+    );
+
+    assertEquals(calls, 1);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("reconcile isolates repository failures", async () => {
   const root = await configurationDirectory();
   try {
