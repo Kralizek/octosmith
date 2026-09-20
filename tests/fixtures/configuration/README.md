@@ -7,4 +7,4 @@ Each repository fixture is resolved against that configuration and compared with
 the matching file under `expected/`.
 
 These fixtures describe policy resolution only. They do not model current GitHub
-repository state or reconciliation plans.
+repository state or apply plans.

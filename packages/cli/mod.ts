@@ -9,15 +9,15 @@ import {
 } from "@octosmith/core";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
-import type { ReconciliationRuntime } from "./reconcile.ts";
-import { createGitHubRuntime, reconcile } from "./reconcile.ts";
+import type { ApplyRuntime } from "./apply.ts";
+import { apply, createGitHubRuntime } from "./apply.ts";
 import cliMetadata from "./deno.json" with { type: "json" };
 
 /** The OctoSmith CLI version. */
 export const VERSION = cliMetadata.version;
 
 export interface CliExecutionOptions {
-  readonly runtime?: ReconciliationRuntime;
+  readonly runtime?: ApplyRuntime;
   readonly write?: (value: string) => void;
   readonly writeError?: (value: string) => void;
 }
@@ -31,7 +31,7 @@ function createCli(
 
   const root = new Command()
     .name("octosmith")
-    .description("Declaratively reconcile GitHub repository configuration.")
+    .description("Declaratively apply GitHub repository configuration.")
     .version(VERSION)
     .versionOption("-v, --version", "Print the OctoSmith CLI version.")
     .noExit()
@@ -55,7 +55,7 @@ function createCli(
         .option("--format <format:string>", "Output format: text or json.", {
           default: "text",
         })
-        .option("--verbose", "Show unchanged reconciliation items.")
+        .option("--verbose", "Show unchanged apply items.")
         .option(
           "--events-output <path:string>",
           "Write Hooksmith repository events as NDJSON.",
@@ -82,10 +82,10 @@ function createCli(
           const repositories: RepositoryReport[] = [];
 
           try {
-            await reconcile(runtime, loaded, {
+            await apply(runtime, loaded, {
               mode,
               ...(repository !== undefined && { repository }),
-              onRepositoryCompleted: async (repositoryReport) => {
+              onRepositoryApplied: async (repositoryReport) => {
                 repositories.push(repositoryReport);
 
                 if (eventOutput) {
@@ -120,7 +120,7 @@ function createCli(
           );
 
           if (hasFailures(report)) {
-            throw new ReconciliationFailedError();
+            throw new ApplyFailedError();
           }
         }),
     );
@@ -132,7 +132,7 @@ function createCli(
 function createDefaultRuntime(
   verbose: boolean,
   writeError: (value: string) => void,
-): ReconciliationRuntime {
+): ApplyRuntime {
   const token = Deno.env.get("GITHUB_TOKEN");
 
   if (!token) {
@@ -160,9 +160,9 @@ function createDefaultRuntime(
   });
 }
 
-class ReconciliationFailedError extends Error {
+class ApplyFailedError extends Error {
   constructor() {
-    super("Reconciliation completed with failures");
+    super("Apply completed with failures");
   }
 }
 
@@ -189,7 +189,7 @@ export async function main(
     await createCli(options, args).parse(args);
     return 0;
   } catch (error) {
-    if (error instanceof ReconciliationFailedError) {
+    if (error instanceof ApplyFailedError) {
       return 1;
     }
 
@@ -241,7 +241,7 @@ function assertRepositoryPosition(
 
 export * from "./events.ts";
 export * from "./output.ts";
-export * from "./reconcile.ts";
+export * from "./apply.ts";
 
 if (import.meta.main) {
   Deno.exit(await main(Deno.args));

@@ -1,18 +1,15 @@
 import type { EventDocument } from "@hooksmith/core";
-import type {
-  ReconciliationItemReport,
-  RepositoryReport,
-} from "@octosmith/core";
-import type { ReconcileMode } from "./reconcile.ts";
+import type { ApplyItemReport, RepositoryReport } from "@octosmith/core";
+import type { ApplyMode } from "./apply.ts";
 
 export interface RepositoryEventData {
-  readonly items: readonly ReconciliationItemReport[];
+  readonly items: readonly ApplyItemReport[];
   readonly error?: string;
 }
 
 export function toRepositoryEvent(
   organization: string,
-  mode: ReconcileMode,
+  mode: ApplyMode,
   report: RepositoryReport,
   timestamp: Date = new Date(),
 ): EventDocument<RepositoryEventData> {

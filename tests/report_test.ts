@@ -1,7 +1,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
+  type ApplyEvaluation,
   type Operation,
-  type ReconciliationEvaluation,
   renderReport,
   type Report,
   reportAppliedRepository,
@@ -15,13 +15,13 @@ const operation: Operation = {
   value: "critical",
 };
 
-const evaluation: ReconciliationEvaluation = {
+const evaluation: ApplyEvaluation = {
   type: "custom-property",
   details: { name: "tier", value: "critical", action: "set" },
   operation,
 };
 
-const unchangedEvaluation: ReconciliationEvaluation = {
+const unchangedEvaluation: ApplyEvaluation = {
   type: "team-permission",
   details: { team: "maintainers", permission: "maintain" },
 };
@@ -53,7 +53,7 @@ Deno.test("planned reports include changed and unchanged evaluations", () => {
   );
 });
 
-Deno.test("applied reports map outcomes onto reconciliation items", () => {
+Deno.test("applied reports map outcomes onto apply items", () => {
   const report = reportAppliedRepository(
     "code",
     "sample",
@@ -130,7 +130,7 @@ Deno.test("text renderer uses concise status icons and hides unchanged items", (
   assertStringIncludes(rendered, "✗ read failed");
 });
 
-Deno.test("verbose text includes unchanged reconciliation items", () => {
+Deno.test("verbose text includes unchanged apply items", () => {
   const report: Report = {
     organization: "acme",
     startedAt: new Date(0),

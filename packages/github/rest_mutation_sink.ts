@@ -500,7 +500,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       this.repo(repository) + "/contents/" + encodePath(path),
       {
         body: {
-          message: "OctoSmith: reconcile " + path,
+          message: "OctoSmith: apply " + path,
           content: encodeBase64(content),
           ...(sha !== undefined && { sha }),
         },

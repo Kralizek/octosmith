@@ -11,13 +11,10 @@ import type {
   ApplyPlanResult,
   RepositoryDiscoveryFailure,
 } from "@octosmith/github";
-import {
-  reconcile,
-  type ReconciliationRuntime,
-} from "../packages/cli/reconcile.ts";
+import { apply, type ApplyRuntime } from "../packages/cli/apply.ts";
 import { currentRepositorySettings } from "./plan/fixtures.ts";
 
-class FakeRuntime implements ReconciliationRuntime {
+class FakeRuntime implements ApplyRuntime {
   readonly applied: Plan[] = [];
   readonly discoveredTargets: (string | undefined)[] = [];
 
@@ -76,18 +73,18 @@ class FakeRuntime implements ReconciliationRuntime {
   }
 }
 
-Deno.test("reconcile rejects an empty repository target before discovery", async () => {
+Deno.test("apply rejects an empty repository target before discovery", async () => {
   const runtime = new FakeRuntime([]);
 
   await assertRejects(
     () =>
-      reconcile(
+      apply(
         runtime,
         {} as LoadedConfiguration,
         {
           mode: "apply",
           repository: "",
-          onRepositoryCompleted: () => {},
+          onRepositoryApplied: () => {},
         },
       ),
     Error,
@@ -98,11 +95,11 @@ Deno.test("reconcile rejects an empty repository target before discovery", async
   assertEquals(runtime.applied, []);
 });
 
-Deno.test("reconcile plan builds reports without applying", async () => {
+Deno.test("apply plan builds reports without applying", async () => {
   const root = await configurationDirectory();
   try {
     const runtime = new FakeRuntime([metadata("sample")]);
-    const results = await reconcileResults(runtime, root, "plan");
+    const results = await applyResults(runtime, root, "plan");
 
     assertEquals(results[0].status, "planned");
     assertEquals(runtime.applied, []);
@@ -111,11 +108,11 @@ Deno.test("reconcile plan builds reports without applying", async () => {
   }
 });
 
-Deno.test("reconcile apply executes the fresh plan", async () => {
+Deno.test("apply apply executes the fresh plan", async () => {
   const root = await configurationDirectory();
   try {
     const runtime = new FakeRuntime([metadata("sample")]);
-    const results = await reconcileResults(runtime, root, "apply");
+    const results = await applyResults(runtime, root, "apply");
 
     assertEquals(results[0].status, "applied");
     assertEquals(runtime.applied.length, 1);
@@ -124,16 +121,16 @@ Deno.test("reconcile apply executes the fresh plan", async () => {
   }
 });
 
-Deno.test("reconcile returns a structured report without runtime values or file contents", async () => {
+Deno.test("apply returns a structured report without runtime values or file contents", async () => {
   const root = await sensitiveConfigurationDirectory();
   try {
     const runtime = new FakeRuntime([metadata("sample")]);
     const loaded = await loadConfigurationDirectory(root);
     const results: RepositoryReport[] = [];
-    await reconcile(runtime, loaded, {
+    await apply(runtime, loaded, {
       mode: "plan",
       values: () => "runtime-private-value",
-      onRepositoryCompleted: (report) => {
+      onRepositoryApplied: (report) => {
         results.push(report);
       },
     });
@@ -149,7 +146,7 @@ Deno.test("reconcile returns a structured report without runtime values or file 
   }
 });
 
-Deno.test("reconcile reports discovery failures without stopping other repositories", async () => {
+Deno.test("apply reports discovery failures without stopping other repositories", async () => {
   const root = await configurationDirectory();
   try {
     const runtime = new FakeRuntime(
@@ -157,7 +154,7 @@ Deno.test("reconcile reports discovery failures without stopping other repositor
       new Set(),
       [{ repository: "missing", error: new Error("not found") }],
     );
-    const results = await reconcileResults(runtime, root, "plan");
+    const results = await applyResults(runtime, root, "plan");
 
     assertEquals(
       results.map((item) => [item.repository, item.status]),
@@ -172,7 +169,7 @@ Deno.test("reconcile reports discovery failures without stopping other repositor
   }
 });
 
-Deno.test("reconcile invokes completion callback exactly once when callback fails", async () => {
+Deno.test("apply invokes completion callback exactly once when callback fails", async () => {
   const root = await configurationDirectory();
   try {
     const runtime = new FakeRuntime([metadata("sample")]);
@@ -181,9 +178,9 @@ Deno.test("reconcile invokes completion callback exactly once when callback fail
 
     await assertRejects(
       () =>
-        reconcile(runtime, loaded, {
+        apply(runtime, loaded, {
           mode: "plan",
-          onRepositoryCompleted: () => {
+          onRepositoryApplied: () => {
             calls++;
             throw new Error("event write failed");
           },
@@ -198,14 +195,14 @@ Deno.test("reconcile invokes completion callback exactly once when callback fail
   }
 });
 
-Deno.test("reconcile isolates repository failures", async () => {
+Deno.test("apply isolates repository failures", async () => {
   const root = await configurationDirectory();
   try {
     const runtime = new FakeRuntime(
       [metadata("broken"), metadata("sample")],
       new Set(["broken"]),
     );
-    const results = await reconcileResults(runtime, root, "plan");
+    const results = await applyResults(runtime, root, "plan");
 
     assertEquals(
       results.map((item) => item.status),
@@ -295,17 +292,17 @@ function metadata(name: string): RepositoryMetadata {
   };
 }
 
-async function reconcileResults(
-  runtime: ReconciliationRuntime,
+async function applyResults(
+  runtime: ApplyRuntime,
   root: string,
   mode: "plan" | "apply",
 ): Promise<RepositoryReport[]> {
   const loaded = await loadConfigurationDirectory(root);
   const results: RepositoryReport[] = [];
 
-  await reconcile(runtime, loaded, {
+  await apply(runtime, loaded, {
     mode,
-    onRepositoryCompleted: (report) => {
+    onRepositoryApplied: (report) => {
       results.push(report);
     },
   });

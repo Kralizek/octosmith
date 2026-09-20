@@ -1,6 +1,6 @@
 import {
+  buildApplyEvaluations,
   buildPlan,
-  buildReconciliationEvaluations,
   type DesiredState,
   type LoadedConfiguration,
   type Plan,
@@ -22,9 +22,9 @@ import {
   type RepositoryDiscoveryResult,
 } from "@octosmith/github";
 
-export type ReconcileMode = "plan" | "apply";
+export type ApplyMode = "plan" | "apply";
 
-export interface ReconciliationRuntime {
+export interface ApplyRuntime {
   discover(
     loaded: LoadedConfiguration,
     repository?: string,
@@ -48,7 +48,7 @@ export interface GitHubRuntimeOptions {
 
 export function createGitHubRuntime(
   options: GitHubRuntimeOptions,
-): ReconciliationRuntime {
+): ApplyRuntime {
   const client = new FetchGitHubClient({
     token: options.token,
     baseUrl: options.baseUrl,
@@ -95,19 +95,19 @@ export function createGitHubRuntime(
   };
 }
 
-export interface ReconcileOptions {
-  readonly mode: ReconcileMode;
+export interface ApplyOptions {
+  readonly mode: ApplyMode;
   readonly repository?: string;
   readonly values?: RuntimeValueProvider;
-  readonly onRepositoryCompleted: (
+  readonly onRepositoryApplied: (
     report: import("@octosmith/core").RepositoryReport,
   ) => void | Promise<void>;
 }
 
-export async function reconcile(
-  runtime: ReconciliationRuntime,
+export async function apply(
+  runtime: ApplyRuntime,
   loaded: LoadedConfiguration,
-  options: ReconcileOptions,
+  options: ApplyOptions,
 ): Promise<void> {
   if (options.repository !== undefined && options.repository.length === 0) {
     throw new Error("Repository target must not be empty");
@@ -119,7 +119,7 @@ export async function reconcile(
   const addResult = async (
     result: import("@octosmith/core").RepositoryReport,
   ) => {
-    await options.onRepositoryCompleted(result);
+    await options.onRepositoryApplied(result);
   };
 
   for (const failure of discovery.failures) {
@@ -137,7 +137,7 @@ export async function reconcile(
       template = desired.template;
       const current = await runtime.read(desired);
       const plan = buildPlan(current, desired);
-      const evaluations = buildReconciliationEvaluations(
+      const evaluations = buildApplyEvaluations(
         desired,
         plan.operations,
       );

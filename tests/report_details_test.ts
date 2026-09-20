@@ -1,6 +1,6 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
-  buildReconciliationEvaluations,
+  buildApplyEvaluations,
   type DesiredState,
   renderReport,
   reportPlannedRepository,
@@ -44,7 +44,7 @@ Deno.test("evaluation details are safe and resource-oriented", () => {
     },
   ];
 
-  const evaluations = buildReconciliationEvaluations(
+  const evaluations = buildApplyEvaluations(
     desired,
     operations,
   );
@@ -96,7 +96,7 @@ Deno.test("text output is one human-readable line per changed item", () => {
       },
     ],
   };
-  const evaluations = buildReconciliationEvaluations(
+  const evaluations = buildApplyEvaluations(
     desired,
     plan.operations,
   );
