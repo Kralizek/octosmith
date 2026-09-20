@@ -14,7 +14,7 @@ export function toRepositoryEvent(
   organization: string,
   mode: ReconcileMode,
   report: RepositoryReport,
-  timestamp = new Date(),
+  timestamp: Date = new Date(),
 ): EventDocument<RepositoryEventData> {
   return {
     type: mode === "plan" ? "repository.planned" : "repository.applied",
