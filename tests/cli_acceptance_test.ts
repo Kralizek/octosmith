@@ -1063,6 +1063,88 @@ Deno.test("CLI verbose text includes unchanged reconciliation items", async () =
   }
 });
 
+Deno.test("CLI verbose traces GitHub calls on stderr before JSON stdout", async () => {
+  const root = await configurationDirectory();
+  const previousDesired = Deno.env.get("DESIRED");
+  const previousToken = Deno.env.get("GITHUB_TOKEN");
+  const originalFetch = globalThis.fetch;
+  const requests: CapturedRequest[] = [];
+  const stdout: string[] = [];
+  const stderr: string[] = [];
+  const events: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    Deno.env.set("GITHUB_TOKEN", "test-token");
+    const enterpriseFetch = fakeGitHub(requests);
+    globalThis.fetch = (input, init) => {
+      const url = new URL(
+        input instanceof Request ? input.url : String(input),
+      );
+      url.pathname = "/api/v3" + url.pathname;
+      return enterpriseFetch(url, init);
+    };
+
+    assertEquals(
+      await main(
+        ["plan", "--verbose", "--format", "json", "--path", root],
+        {
+          write: (value) => {
+            stdout.push(value);
+            events.push("stdout");
+          },
+          writeError: (value) => {
+            stderr.push(value);
+            events.push("stderr");
+          },
+        },
+      ),
+      0,
+    );
+
+    assertEquals(stdout.length, 1);
+    JSON.parse(stdout[0]);
+
+    assertEquals(stderr.length > 0, true);
+    assertEquals(events.at(-1), "stdout");
+    assertEquals(
+      events.slice(0, -1).every((event) => event === "stderr"),
+      true,
+    );
+
+    for (const line of stderr) {
+      assertEquals(line.includes("Bearer"), false);
+      assertEquals(line.includes("{"), false);
+      assertEquals(line.includes("?"), false);
+    }
+
+    assertStringIncludes(
+      stderr.join("\n"),
+      "GET /repos/acme/sample — 200",
+    );
+    assertStringIncludes(
+      stderr.join("\n"),
+      "GET /repos/acme/sample/actions/variables — 200",
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+
+    if (previousDesired === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previousDesired);
+    }
+
+    if (previousToken === undefined) {
+      Deno.env.delete("GITHUB_TOKEN");
+    } else {
+      Deno.env.set("GITHUB_TOKEN", previousToken);
+    }
+
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("CLI JSON apply preserves the structured report shape", async () => {
   const root = await configurationDirectory();
   const previous = Deno.env.get("DESIRED");
