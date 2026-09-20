@@ -104,6 +104,7 @@ export interface ReconcileOptions {
   readonly values?: RuntimeValueProvider;
   readonly now?: () => Date;
   readonly onRepositoryCompleted?: (
+    organization: string,
     report: import("@octosmith/core").RepositoryReport,
   ) => void | Promise<void>;
 }
@@ -128,7 +129,10 @@ export async function reconcile(
     result: import("@octosmith/core").RepositoryReport,
   ) => {
     results.push(result);
-    await options.onRepositoryCompleted?.(result);
+    await options.onRepositoryCompleted?.(
+      loaded.configuration.organization,
+      result,
+    );
   };
 
   for (const failure of discovery.failures) {
