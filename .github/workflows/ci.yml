@@ -24,5 +24,34 @@ jobs:
       - name: Check
         run: deno task check
 
+      - name: Prepare Action smoke-test configuration
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/octosmith-action-smoke/templates"
+          cat > "$RUNNER_TEMP/octosmith-action-smoke/octosmith.yml" <<'YAML'
+          version: 1
+          organization: Kralizek
+          repositories:
+            scope:
+              names:
+                - octosmith
+          YAML
+          cat > "$RUNNER_TEMP/octosmith-action-smoke/templates/default.yml" <<'YAML'
+          kind: repository
+          match:
+            names:
+              - octosmith
+          repository: {}
+          YAML
+
+      - name: Smoke test local Action
+        uses: ./
+        with:
+          mode: plan
+          path: ${{ runner.temp }}/octosmith-action-smoke
+          github-token: ${{ github.token }}
+          repository: octosmith
+          format: json
+
       - name: Validate packages
         run: deno publish --dry-run
