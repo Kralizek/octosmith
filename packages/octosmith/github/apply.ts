@@ -1,4 +1,4 @@
-import type { Operation, Plan } from "@octosmith/core";
+import type { Operation, Plan } from "../mod.ts";
 
 export type ApplyOperationStatus = "applied" | "failed" | "skipped";
 
