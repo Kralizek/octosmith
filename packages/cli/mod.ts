@@ -47,6 +47,7 @@ function createCli(
         .option("--format <format:string>", "Output format: text or json.", {
           default: "text",
         })
+        .option("--verbose", "Show unchanged reconciliation items.")
         .action(async (commandOptions, repository?: string) => {
           assertRepositoryPosition(args, mode, repository);
           const format = parseOutputFormat(commandOptions.format);
@@ -57,7 +58,13 @@ function createCli(
             ...(repository !== undefined && { repository }),
           });
 
-          write(renderOutput(format, report, renderReport));
+          write(
+            renderOutput(
+              format,
+              report,
+              (value) => renderReport(value, { verbose: commandOptions.verbose }),
+            ),
+          );
 
           if (hasFailures(report)) {
             throw new ReconciliationFailedError();
