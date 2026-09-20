@@ -1,7 +1,8 @@
-#!/usr/bin/env -S deno run --allow-read --allow-env --allow-net
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
 
 import { Command } from "@cliffy/command";
 import { renderReport, type Report } from "@octosmith/core";
+import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ReconciliationRuntime } from "./reconcile.ts";
 import { createGitHubRuntime, reconcile } from "./reconcile.ts";
@@ -50,16 +51,36 @@ function createCli(
           default: "text",
         })
         .option("--verbose", "Show unchanged reconciliation items.")
+        .option(
+          "--events-output <path:string>",
+          "Write Hooksmith repository events as NDJSON.",
+        )
         .action(async (commandOptions, repository?: string) => {
           assertRepositoryPosition(args, mode, repository);
           const format = parseOutputFormat(commandOptions.format);
           const runtime = options.runtime ??
             createDefaultRuntime(commandOptions.verbose ?? false, writeError);
-          const report = await reconcile(runtime, {
-            path: commandOptions.path,
-            mode,
-            ...(repository !== undefined && { repository }),
-          });
+          const eventOutput = commandOptions.eventsOutput
+            ? await openEventOutput(commandOptions.eventsOutput)
+            : undefined;
+
+          let report: Report;
+
+          try {
+            report = await reconcile(runtime, {
+              path: commandOptions.path,
+              mode,
+              ...(repository !== undefined && { repository }),
+              ...(eventOutput && {
+                onRepositoryCompleted: async (organization, repositoryReport) =>
+                  await eventOutput.write(
+                    toRepositoryEvent(organization, mode, repositoryReport),
+                  ),
+              }),
+            });
+          } finally {
+            eventOutput?.close();
+          }
 
           write(
             renderOutput(
@@ -177,6 +198,7 @@ function assertRepositoryPosition(
   }
 }
 
+export * from "./events.ts";
 export * from "./output.ts";
 export * from "./reconcile.ts";
 
