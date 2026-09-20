@@ -1,7 +1,4 @@
-import type {
-  Plan,
-  ReconciliationEvaluation,
-} from "../plan/types.ts";
+import type { Plan, ReconciliationEvaluation } from "../plan/types.ts";
 import type {
   AppliedOperationLike,
   ReconciliationItemReport,
