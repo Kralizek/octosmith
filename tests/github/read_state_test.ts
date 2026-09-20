@@ -1,5 +1,8 @@
 import { assertEquals } from "@std/assert";
-import type { CurrentRepositorySettings, DesiredState } from "@octosmith/octosmith";
+import type {
+  CurrentRepositorySettings,
+  DesiredState,
+} from "@octosmith/octosmith";
 import {
   readCurrentState,
   type RepositoryStateSource,
