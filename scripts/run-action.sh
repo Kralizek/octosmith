@@ -54,6 +54,21 @@ if [[ -z "$path" ]]; then
   path="."
 fi
 
+if [[ "$mode" == "validate" ]]; then
+  if [[ -n "$repository" ]]; then
+    echo "::error::repository is not supported for validate." >&2
+    exit 1
+  fi
+  if [[ "$verbose" == "true" ]]; then
+    echo "::error::verbose is not supported for validate." >&2
+    exit 1
+  fi
+  if [[ -n "$events_output" ]]; then
+    echo "::error::events-output is not supported for validate." >&2
+    exit 1
+  fi
+fi
+
 args=("$mode")
 if [[ -n "$repository" ]]; then
   args+=("$repository")
