@@ -116,7 +116,7 @@ Deno.test("validate rejects overlapping repository templates", async () => {
       errors.push(values.map(String).join(" "));
 
     assertEquals(await main(["validate", "--path", root]), 1);
-    assertStringIncludes(errors.join("\n"), "templates can overlap");
+    assertStringIncludes(errors.join("\n"), "templates can overlap within configured scope");
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
@@ -160,7 +160,7 @@ Deno.test("validate rejects literal scoped repositories without a template", asy
     assertEquals(await main(["validate", "--path", root]), 1);
     assertStringIncludes(
       errors.join("\n"),
-      "cannot match any configured template",
+      "cannot match any template within configured scope",
     );
   } finally {
     console.error = originalError;
@@ -296,6 +296,108 @@ Deno.test("validate allows incompatible metadata selectors", async () => {
 
     assertEquals(await main(["validate", "--path", root]), 0);
   } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate allows template overlap outside configured scope", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - api-*",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/api.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - api-*",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/web.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - web-*",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/all-web.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - web-*",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    assertEquals(await main(["validate", "--path", root]), 0);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate rejects scope metadata incompatible with all templates", async () => {
+  const root = await Deno.makeTempDir();
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    properties:",
+        "      tier: backend",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/frontend.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  properties:",
+        "    tier: frontend",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+
+    assertEquals(await main(["validate", "--path", root]), 1);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Configured repository scope cannot match any template",
+    );
+  } finally {
+    console.error = originalError;
     await Deno.remove(root, { recursive: true });
   }
 });
