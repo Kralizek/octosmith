@@ -16,9 +16,10 @@ runtime.
 
 @@WORKFLOW_DOCUMENTATION@@
 
-The generated configuration initially scopes OctoSmith to `@@REPOSITORY_NAME_RAW@@`
-only and uses `@@COLLECTION_MANAGEMENT_RAW@@` collection management. Expand
-the scope and templates deliberately as you adopt more repositories.
+The generated configuration initially scopes OctoSmith to
+`@@REPOSITORY_NAME_RAW@@` only and uses `@@COLLECTION_MANAGEMENT_RAW@@`
+collection management. Expand the scope and templates deliberately as you adopt
+more repositories.
 
 @@EVENT_STREAMING_DOCUMENTATION@@
 
