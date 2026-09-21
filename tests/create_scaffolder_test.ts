@@ -317,6 +317,14 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   );
   assertStringIncludes(
     readme?.content ?? "",
+    'kill "$octosmith_pid" 2>/dev/null || true',
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    'wait "$octosmith_pid" 2>/dev/null || true',
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
     'kill "$hooksmith_pid" 2>/dev/null || true',
   );
   assertStringIncludes(
@@ -433,6 +441,10 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   assertStringIncludes(
     applyWorkflow?.content ?? "",
     'kill "$octosmith_pid" 2>/dev/null || true',
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    'wait "$octosmith_pid" 2>/dev/null || true',
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
