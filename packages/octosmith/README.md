@@ -24,6 +24,10 @@ For example, validate a configuration directory without accessing GitHub:
 await validateConfigurationDirectory("./configuration");
 ```
 
+For deeper guidance, see the repository documentation for
+[configuration](../../docs/configuration.md) and
+[architecture](../../docs/architecture.md).
+
 ## Configuration model
 
 An OctoSmith configuration directory has one root file and one or more
