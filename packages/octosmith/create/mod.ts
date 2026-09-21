@@ -62,8 +62,8 @@ repository: {}
   if (options.workflows) {
     files.push(
       {
-        path: ".github/workflows/octosmith-plan.yml",
-        content: buildPlanWorkflow(),
+        path: ".github/workflows/octosmith-validate.yml",
+        content: buildValidateWorkflow(),
       },
       {
         path: ".github/workflows/octosmith-apply.yml",
@@ -237,29 +237,25 @@ async function ensureTargetDirectoryIsAvailable(path: string): Promise<void> {
   }
 }
 
-function buildPlanWorkflow(): string {
-  return `name: OctoSmith plan
+function buildValidateWorkflow(): string {
+  return `name: OctoSmith validate
 
 on:
-  pull_request_target:
+  pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  plan:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          ref: \${{ github.event.pull_request.head.sha }}
-          persist-credentials: false
 
       - uses: Kralizek/octosmith@v0
         with:
-          mode: plan
+          mode: validate
           path: .
-          github-token: \${{ secrets.OCTOSMITH_TOKEN }}
 `;
 }
 
