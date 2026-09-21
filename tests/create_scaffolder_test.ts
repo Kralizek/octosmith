@@ -363,6 +363,9 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   const applyWorkflow = files.find((file) =>
     file.path === ".github/workflows/octosmith-apply.yml"
   );
+  const applyScript = files.find((file) =>
+    file.path === ".github/scripts/octosmith-apply-streaming.sh"
+  );
   const readme = files.find((file) => file.path === "README.md");
 
   assertStringIncludes(
@@ -387,11 +390,6 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
     applyWorkflow?.content ?? "",
     "persist-credentials: false",
   );
-  assertStringIncludes(applyWorkflow?.content ?? "", "mkfifo");
-  assertStringIncludes(
-    applyWorkflow?.content ?? "",
-    "jsr:@hooksmith/cli@0 stream",
-  );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
     "group: octosmith-apply",
@@ -406,56 +404,66 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
+    "run: bash .github/scripts/octosmith-apply-streaming.sh",
+  );
+
+  assertStringIncludes(applyScript?.content ?? "", "mkfifo");
+  assertStringIncludes(
+    applyScript?.content ?? "",
+    "jsr:@hooksmith/cli@0 stream",
+  );
+  assertStringIncludes(
+    applyScript?.content ?? "",
     "docker run --rm --name",
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     "denoland/deno:2.x",
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     '--mount type=bind,src="$stream_dir",dst=/hooksmith,readonly',
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     "env -u GITHUB_TOKEN -u OCTOSMITH_GITHUB_TOKEN",
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     'GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN"',
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     "jsr:@octosmith/cli@0 apply",
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     '--events-output "$events_pipe"',
   );
-  assertStringIncludes(applyWorkflow?.content ?? "", "hooksmith_pid=$!");
-  assertStringIncludes(applyWorkflow?.content ?? "", "octosmith_pid=$!");
+  assertStringIncludes(applyScript?.content ?? "", "hooksmith_pid=$!");
+  assertStringIncludes(applyScript?.content ?? "", "octosmith_pid=$!");
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     "wait -n -p completed_pid",
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     'wait "$octosmith_pid"',
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     'exit "$octosmith_status"',
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     'kill "$octosmith_pid" 2>/dev/null || true',
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     'wait "$octosmith_pid" 2>/dev/null || true',
   );
   assertStringIncludes(
-    applyWorkflow?.content ?? "",
+    applyScript?.content ?? "",
     'kill "$hooksmith_pid" 2>/dev/null || true',
   );
 
