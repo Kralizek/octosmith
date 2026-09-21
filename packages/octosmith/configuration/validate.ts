@@ -54,7 +54,9 @@ function assertTemplatesDoNotOverlap(
   for (let leftIndex = 0; leftIndex < entries.length; leftIndex++) {
     const [leftName, left] = entries[leftIndex];
 
-    for (let rightIndex = leftIndex + 1; rightIndex < entries.length; rightIndex++) {
+    for (
+      let rightIndex = leftIndex + 1; rightIndex < entries.length; rightIndex++
+    ) {
       const [rightName, right] = entries[rightIndex];
 
       if (selectorsCanOverlap(left.match, right.match)) {
@@ -133,7 +135,9 @@ function nameSelectorsCanOverlap(
   }
 
   return left.some((leftPattern) =>
-    right.some((rightPattern) => globPatternsCanOverlap(leftPattern, rightPattern))
+    right.some((rightPattern) =>
+      globPatternsCanOverlap(leftPattern, rightPattern)
+    )
   );
 }
 
@@ -168,7 +172,10 @@ function propertiesCanOverlap(
   return true;
 }
 
-function equalPropertyValue(left: PropertyValue, right: PropertyValue): boolean {
+function equalPropertyValue(
+  left: PropertyValue,
+  right: PropertyValue,
+): boolean {
   if (Array.isArray(left) && Array.isArray(right)) {
     return left.length === right.length &&
       left.every((value, index) => value === right[index]);
