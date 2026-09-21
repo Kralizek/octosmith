@@ -1,10 +1,5 @@
 import type { Config } from "jsr:@hooksmith/core";
-import {
-  all,
-  eventType,
-  logEvent,
-  subjectKind,
-} from "jsr:@hooksmith/standard";
+import { all, eventType, logEvent, subjectKind } from "jsr:@hooksmith/standard";
 
 export default {
   routes: [{
