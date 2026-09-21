@@ -6,7 +6,10 @@ import {
 } from "@std/assert";
 import { join } from "@std/path";
 import { parse } from "@std/yaml";
-import { loadConfigurationDirectory } from "../packages/octosmith/mod.ts";
+import {
+  loadConfigurationDirectory,
+  validateConfigurationDirectory,
+} from "../packages/octosmith/mod.ts";
 import {
   buildScaffold,
   parseScaffoldArguments,
@@ -108,6 +111,7 @@ Deno.test("generated scaffold validates as OctoSmith configuration", async () =>
 
     const loaded = await loadConfigurationDirectory(target);
     assertEquals(loaded.configuration.organization, "acme");
+    await validateConfigurationDirectory(target);
 
     const validateWorkflow = await Deno.readTextFile(
       join(target, ".github/workflows/octosmith-validate.yml"),
@@ -232,7 +236,16 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
     '--events-output "$events_pipe"',
   );
   assertStringIncludes(applyWorkflow?.content ?? "", "hooksmith_pid=$!");
-  assertStringIncludes(applyWorkflow?.content ?? "", 'wait "$hooksmith_pid"');
+  assertStringIncludes(applyWorkflow?.content ?? "", "octosmith_pid=$!");
+  assertStringIncludes(applyWorkflow?.content ?? "", "wait -n -p completed_pid");
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    'kill "$octosmith_pid" 2>/dev/null || true',
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    'kill "$hooksmith_pid" 2>/dev/null || true',
+  );
 
   assertStringIncludes(readme?.content ?? "", "Event streaming with Hooksmith");
   assertStringIncludes(readme?.content ?? "", "local FIFO");
