@@ -1,4 +1,4 @@
-import { isAbsolute, join } from "@std/path";
+import { isAbsolute, relative, resolve } from "@std/path";
 import type {
   BuiltInRepositoryPermission,
   PropertyValue,
@@ -32,6 +32,8 @@ export interface RepositoryMetadata {
 }
 
 export type RuntimeValueProvider = (name: string) => string;
+
+const MAX_CONFIGURATION_SOURCE_SIZE = 10 * 1024 * 1024;
 
 const BUILT_IN_PERMISSIONS = new Set<BuiltInRepositoryPermission>([
   "pull",
@@ -100,19 +102,53 @@ export async function resolveDesiredState(
             return { path, ensure: "absent" } satisfies DesiredFile;
           }
 
-          const source = isAbsolute(file.source)
-            ? file.source
-            : join(loaded.root, file.source);
-
           return {
             path,
             ensure: file.ensure,
-            content: await Deno.readTextFile(source),
+            content: await readConfigurationSource(loaded.root, file.source),
           } satisfies DesiredFile;
         }),
       ),
     }),
   };
+}
+
+async function readConfigurationSource(
+  root: string,
+  source: string,
+): Promise<string> {
+  if (isAbsolute(source)) {
+    throw new Error("File source must be relative to the configuration root: " + source);
+  }
+
+  const rootPath = await Deno.realPath(root);
+  const sourcePath = await Deno.realPath(resolve(rootPath, source));
+  const relativePath = relative(rootPath, sourcePath);
+
+  if (
+    relativePath === ".." ||
+    relativePath.startsWith("../") ||
+    relativePath.startsWith("..\\") ||
+    isAbsolute(relativePath)
+  ) {
+    throw new Error("File source escapes the configuration root: " + source);
+  }
+
+  const info = await Deno.stat(sourcePath);
+  if (!info.isFile) {
+    throw new Error("File source must be a regular file: " + source);
+  }
+
+  if (info.size > MAX_CONFIGURATION_SOURCE_SIZE) {
+    throw new Error(
+      "File source exceeds the maximum size of " +
+        MAX_CONFIGURATION_SOURCE_SIZE +
+        " bytes: " +
+        source,
+    );
+  }
+
+  return await Deno.readTextFile(sourcePath);
 }
 
 export function matchesSelector(
