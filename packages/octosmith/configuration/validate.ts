@@ -23,11 +23,9 @@ export async function validateConfigurationDirectory(
 ): Promise<void> {
   const loaded = await loadConfigurationDirectory(root);
 
-  assertTemplatesDoNotOverlap(loaded.templates);
-  assertLiteralScopeCanMatchTemplate(
-    loaded.configuration.repositories.scope.names ?? [],
-    loaded.templates,
-  );
+  const scope = loaded.configuration.repositories.scope;
+  assertTemplatesDoNotOverlap(scope, loaded.templates);
+  assertScopeCanMatchTemplate(scope, loaded.templates);
 
   for (const [name, template] of Object.entries(loaded.templates)) {
     const repository = repositoryForTemplate(name, template);
@@ -42,6 +40,7 @@ export async function validateConfigurationDirectory(
 }
 
 function assertTemplatesDoNotOverlap(
+  scope: RepositorySelector,
   templates: Readonly<Record<string, RepositoryTemplate>>,
 ): void {
   const entries = Object.entries(templates);
@@ -56,113 +55,141 @@ function assertTemplatesDoNotOverlap(
     ) {
       const [rightName, right] = entries[rightIndex];
 
-      if (selectorsCanOverlap(left.match, right.match)) {
+      if (selectorsCanOverlap(scope, left.match, right.match)) {
         throw new Error(
-          "Repository templates can overlap: " + leftName + ", " + rightName,
+          "Repository templates can overlap within configured scope: " +
+            leftName + ", " + rightName,
         );
       }
     }
   }
 }
 
-function assertLiteralScopeCanMatchTemplate(
-  names: readonly string[],
+function assertScopeCanMatchTemplate(
+  scope: RepositorySelector,
   templates: Readonly<Record<string, RepositoryTemplate>>,
 ): void {
-  for (const name of names) {
+  const templateSelectors = Object.values(templates).map((template) =>
+    template.match
+  );
+
+  if (
+    templateSelectors.length === 0 ||
+    !templateSelectors.some((selector) => selectorsCanOverlap(scope, selector))
+  ) {
+    throw new Error("Configured repository scope cannot match any template");
+  }
+
+  for (const name of scope.names ?? []) {
     if (name.includes("*") || name.includes("?")) {
       continue;
     }
 
-    const possible = Object.values(templates).some((template) =>
-      selectorCanPossiblyMatchName(template.match, name)
+    const literalName: RepositorySelector = { names: [name] };
+    const possible = templateSelectors.some((selector) =>
+      selectorsCanOverlap(scope, literalName, selector)
     );
 
     if (!possible) {
       throw new Error(
-        "Repository " + name + " cannot match any configured template",
+        "Repository " + name +
+          " cannot match any template within configured scope",
       );
     }
   }
 }
 
-function selectorCanPossiblyMatchName(
-  selector: RepositorySelector,
-  name: string,
-): boolean {
-  if (selector.names === undefined) {
-    return true;
-  }
-
-  return selector.names.some((pattern) =>
-    matchesSelector(
-      { names: [pattern] },
-      { name, teams: [], properties: {} },
-    )
-  );
-}
-
 function selectorsCanOverlap(
-  left: RepositorySelector,
-  right: RepositorySelector,
+  ...selectors: readonly RepositorySelector[]
 ): boolean {
-  if (!nameSelectorsCanOverlap(left.names, right.names)) {
+  if (!nameSelectorsCanOverlap(selectors.map((selector) => selector.names))) {
     return false;
   }
 
-  if (!visibilityCanOverlap(left.visibility, right.visibility)) {
+  if (
+    !visibilityCanOverlap(selectors.map((selector) => selector.visibility))
+  ) {
     return false;
   }
 
-  if (!propertiesCanOverlap(left.properties, right.properties)) {
+  if (
+    !propertiesCanOverlap(selectors.map((selector) => selector.properties))
+  ) {
     return false;
   }
 
-  // Team selectors are conjunctions. A repository can satisfy both by belonging
-  // to the union of both team sets.
+  // Team selectors are conjunctions. A repository can satisfy all selectors by
+  // belonging to the union of every required team set.
   return true;
 }
 
 function nameSelectorsCanOverlap(
-  left: readonly string[] | undefined,
-  right: readonly string[] | undefined,
+  selectors: readonly (readonly string[] | undefined)[],
 ): boolean {
-  if (left === undefined || right === undefined) {
+  const constrained = selectors.filter(
+    (names): names is readonly string[] => names !== undefined,
+  );
+
+  if (constrained.length === 0) {
     return true;
   }
 
-  return left.some((leftPattern) =>
-    right.some((rightPattern) =>
-      globPatternsCanOverlap(leftPattern, rightPattern)
-    )
+  return globChoiceCanOverlap(constrained, 0, []);
+}
+
+function globChoiceCanOverlap(
+  choices: readonly (readonly string[])[],
+  index: number,
+  selected: readonly string[],
+): boolean {
+  if (index === choices.length) {
+    return globPatternsCanOverlap(...selected);
+  }
+
+  return choices[index].some((pattern) =>
+    globChoiceCanOverlap(choices, index + 1, [...selected, pattern])
   );
 }
 
 function visibilityCanOverlap(
-  left: RepositorySelector["visibility"],
-  right: RepositorySelector["visibility"],
+  selectors: readonly RepositorySelector["visibility"][],
 ): boolean {
-  if (left === undefined || right === undefined) {
-    return true;
+  const candidates = new Set(["public", "private", "internal"] as const);
+
+  for (const visibility of selectors) {
+    if (visibility === undefined) {
+      continue;
+    }
+
+    const allowed = Array.isArray(visibility) ? visibility : [visibility];
+    for (const candidate of [...candidates]) {
+      if (!allowed.includes(candidate)) {
+        candidates.delete(candidate);
+      }
+    }
   }
 
-  const leftValues = Array.isArray(left) ? left : [left];
-  const rightValues = Array.isArray(right) ? right : [right];
-
-  return leftValues.some((value) => rightValues.includes(value));
+  return candidates.size > 0;
 }
 
 function propertiesCanOverlap(
-  left: Readonly<Record<string, PropertyValue>> | undefined,
-  right: Readonly<Record<string, PropertyValue>> | undefined,
+  selectors: readonly (
+    Readonly<Record<string, PropertyValue>> | undefined
+  )[],
 ): boolean {
-  if (left === undefined || right === undefined) {
-    return true;
-  }
+  const required = new Map<string, PropertyValue>();
 
-  for (const [name, leftValue] of Object.entries(left)) {
-    if (name in right && !equalPropertyValue(leftValue, right[name])) {
-      return false;
+  for (const properties of selectors) {
+    if (properties === undefined) {
+      continue;
+    }
+
+    for (const [name, value] of Object.entries(properties)) {
+      const existing = required.get(name);
+      if (existing !== undefined && !equalPropertyValue(existing, value)) {
+        return false;
+      }
+      required.set(name, value);
     }
   }
 
@@ -181,39 +208,43 @@ function equalPropertyValue(
   return left === right;
 }
 
-function globPatternsCanOverlap(left: string, right: string): boolean {
-  const queue: Array<readonly [number, number]> = [[0, 0]];
+function globPatternsCanOverlap(...patterns: readonly string[]): boolean {
+  const initial = patterns.map(() => 0);
+  const queue: number[][] = [initial];
   const visited = new Set<string>();
 
   while (queue.length > 0) {
-    const [leftIndex, rightIndex] = queue.shift()!;
-    const key = leftIndex + ":" + rightIndex;
+    const positions = queue.shift()!;
+    const key = positions.join(":");
 
     if (visited.has(key)) {
       continue;
     }
     visited.add(key);
 
-    if (leftIndex === left.length && rightIndex === right.length) {
+    if (positions.every((position, index) => position === patterns[index].length)) {
       return true;
     }
 
-    if (left[leftIndex] === "*") {
-      queue.push([leftIndex + 1, rightIndex]);
-    }
-    if (right[rightIndex] === "*") {
-      queue.push([leftIndex, rightIndex + 1]);
+    for (let index = 0; index < patterns.length; index++) {
+      if (patterns[index][positions[index]] === "*") {
+        const advanced = [...positions];
+        advanced[index]++;
+        queue.push(advanced);
+      }
     }
 
-    const leftToken = consumingToken(left, leftIndex);
-    const rightToken = consumingToken(right, rightIndex);
+    const tokens = patterns.map((pattern, index) =>
+      consumingToken(pattern, positions[index])
+    );
 
     if (
-      leftToken !== undefined &&
-      rightToken !== undefined &&
-      tokensCanMatchSameCharacter(leftToken.token, rightToken.token)
+      tokens.every((token) => token !== undefined) &&
+      tokensCanMatchSameCharacter(
+        ...tokens.map((token) => token!.token),
+      )
     ) {
-      queue.push([leftToken.next, rightToken.next]);
+      queue.push(tokens.map((token) => token!.next));
     }
   }
 
@@ -242,10 +273,10 @@ function consumingToken(
 }
 
 function tokensCanMatchSameCharacter(
-  left: string | null,
-  right: string | null,
+  ...tokens: readonly (string | null)[]
 ): boolean {
-  return left === null || right === null || left === right;
+  const literals = tokens.filter((token): token is string => token !== null);
+  return literals.length === 0 || literals.every((token) => token === literals[0]);
 }
 
 function repositoryForTemplate(
