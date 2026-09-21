@@ -5,7 +5,7 @@ import configurationTemplate from "./templates/octosmith.yml" with {
 };
 import repositoryTemplate from "./templates/default.yml" with { type: "text" };
 import gitignoreTemplate from "./templates/gitignore" with { type: "text" };
-import hooksmithTemplate from "./templates/hooksmith.config.ts" with {
+import hooksmithTemplate from "./templates/hooksmith.config.ts.txt" with {
   type: "text",
 };
 import validateWorkflowTemplate from "./templates/workflows/validate.yml" with {
