@@ -88,6 +88,63 @@ Deno.test("fixture organization agrees with root configuration", async () => {
   assertEquals(organization.organization, loaded.configuration.organization);
 });
 
+Deno.test("rejects symlinked root configuration file", async () => {
+  const root = await Deno.makeTempDir();
+  const outside = await Deno.makeTempFile();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      outside,
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.symlink(outside, join(root, "octosmith.yml"));
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "must be a regular file",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(outside);
+  }
+});
+
+Deno.test("rejects oversized root configuration file", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    const configuration = await Deno.open(join(root, "octosmith.yml"), {
+      create: true,
+      write: true,
+      truncate: true,
+    });
+    try {
+      await configuration.truncate(10 * 1024 * 1024 + 1);
+    } finally {
+      configuration.close();
+    }
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "exceeds the maximum size",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("preserves arbitrary configuration map keys", async () => {
   const root = await Deno.makeTempDir();
 
