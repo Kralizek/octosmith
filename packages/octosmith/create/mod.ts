@@ -287,7 +287,7 @@ function renderTemplate(
 }
 
 function githubBranchPatternLiteral(branch: string): string {
-  return branch.replace(/[\\*?+\[\]!(){}|@]/g, (character) => "\\" + character);
+  return branch.replace(/[\\*?+\[\]!]/g, (character) => "\\" + character);
 }
 
 function yamlScalar(value: string): string {
