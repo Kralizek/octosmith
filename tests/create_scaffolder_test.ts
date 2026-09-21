@@ -135,6 +135,27 @@ Deno.test("generated scaffold validates as OctoSmith configuration", async () =>
   }
 });
 
+for (const targetDirectory of ["control-*", "control-?"]) {
+  Deno.test(
+    `create scaffolder rejects wildcard repository name ${targetDirectory}`,
+    () => {
+      assertThrows(
+        () =>
+          buildScaffold({
+            targetDirectory,
+            organization: "acme",
+            collectionManagement: "explicit",
+            defaultBranch: "main",
+            workflows: false,
+            eventStreaming: false,
+          }),
+        Error,
+        "must not contain wildcard characters",
+      );
+    },
+  );
+}
+
 Deno.test("create scaffolder preserves placeholder-like replacement values", () => {
   const files = buildScaffold({
     targetDirectory: "control",
