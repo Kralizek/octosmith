@@ -333,19 +333,29 @@ jobs:
             < "$events_pipe" &
           hooksmith_pid=$!
 
-          set +e
           deno run -A jsr:@octosmith/cli@0 apply \
             --path . \
-            --events-output "$events_pipe"
-          octosmith_status=$?
+            --events-output "$events_pipe" &
+          octosmith_pid=$!
 
-          if [[ "$octosmith_status" -ne 0 ]]; then
-            kill "$hooksmith_pid" 2>/dev/null || true
-            wait "$hooksmith_pid" 2>/dev/null || true
-            set -e
-            exit "$octosmith_status"
+          set +e
+          wait -n -p completed_pid "$hooksmith_pid" "$octosmith_pid"
+          first_status=$?
+          set -e
+
+          if [[ "$completed_pid" == "$hooksmith_pid" ]]; then
+            kill "$octosmith_pid" 2>/dev/null || true
+            wait "$octosmith_pid" 2>/dev/null || true
+            exit "$first_status"
           fi
 
+          if [[ "$first_status" -ne 0 ]]; then
+            kill "$hooksmith_pid" 2>/dev/null || true
+            wait "$hooksmith_pid" 2>/dev/null || true
+            exit "$first_status"
+          fi
+
+          set +e
           wait "$hooksmith_pid"
           hooksmith_status=$?
           set -e
@@ -407,10 +417,11 @@ on this repository for automation.`;
 The apply workflow creates a local FIFO, starts \`hooksmith stream\` in the
 background using \`hooksmith.config.ts\`, runs the pinned 0.x
 \`jsr:@octosmith/cli@0\` package with \`--events-output\` pointed at that
-FIFO, and waits for Hooksmith before the workflow exits. The direct CLI
-invocation is intentional here: the producer and FIFO consumer must share one
-shell so the workflow can wait for the Hooksmith child process. Events therefore
-reach Hooksmith as each repository finishes.
+FIFO. Hooksmith and OctoSmith run as supervised sibling processes: if either
+exits first with a failure, the workflow terminates the other instead of leaving
+a FIFO reader or writer blocked indefinitely. The direct CLI invocation is
+intentional here because both processes must share one shell for supervision.
+Events therefore reach Hooksmith as each repository finishes.
 
 The generated Hooksmith configuration handles \`resource.applied\` events for
 \`github.repository\` subjects and logs each applied repository. Extend that
