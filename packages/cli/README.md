@@ -22,11 +22,11 @@ deno run -A jsr:@octosmith/cli@0 --help
 
 ## Commands
 
-| Command | GitHub access | Mutates GitHub | Purpose |
-| --- | --- | --- | --- |
-| `validate` | No | No | Validate configuration and static planner invariants |
-| `plan` | Yes | No | Compare current GitHub state with desired state |
-| `apply` | Yes | Yes | Build a fresh plan and apply its operations |
+| Command    | GitHub access | Mutates GitHub | Purpose                                              |
+| ---------- | ------------- | -------------- | ---------------------------------------------------- |
+| `validate` | No            | No             | Validate configuration and static planner invariants |
+| `plan`     | Yes           | No             | Compare current GitHub state with desired state      |
+| `apply`    | Yes           | Yes            | Build a fresh plan and apply its operations          |
 
 ### validate
 
@@ -144,5 +144,5 @@ The CLI returns:
 --events-output <path>   Write repository events as NDJSON
 ```
 
-`--verbose` and `--events-output` apply to `plan` and `apply`.
-`validate` supports `--path` and `--format`.
+`--verbose` and `--events-output` apply to `plan` and `apply`. `validate`
+supports `--path` and `--format`.
