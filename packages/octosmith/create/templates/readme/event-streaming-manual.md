@@ -13,7 +13,7 @@ rm -f "$events_pipe"
 mkfifo "$events_pipe"
 
 env -u GITHUB_TOKEN -u OCTOSMITH_TOKEN \
-  deno run -A jsr:@hooksmith/cli stream \
+  deno run -A jsr:@hooksmith/cli@0 stream \
     --config ./hooksmith.config.ts \
     < "$events_pipe" &
 hooksmith_pid=$!
@@ -43,4 +43,5 @@ exit "$hooksmith_status"
 Hooksmith receives neither `GITHUB_TOKEN` nor `OCTOSMITH_TOKEN`; the token is
 injected only into the OctoSmith subprocess. If apply fails before opening the
 FIFO, the shell terminates and reaps Hooksmith before returning the apply
-failure. Otherwise it returns the Hooksmith status.
+failure. Otherwise it returns the Hooksmith status. Both direct CLI invocations
+are pinned to their respective 0.x release lines.
