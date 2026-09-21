@@ -15,6 +15,10 @@ format="$(trim "${OCTOSMITH_FORMAT:-text}")"
 verbose="$(trim "${OCTOSMITH_VERBOSE:-false}")"
 events_output="$(trim "${OCTOSMITH_EVENTS_OUTPUT:-}")"
 
+if [[ -z "$format" ]]; then
+  format="text"
+fi
+
 case "$mode" in
   validate|plan|apply) ;;
   *)
