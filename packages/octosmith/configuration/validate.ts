@@ -55,7 +55,9 @@ function assertTemplatesDoNotOverlap(
     const [leftName, left] = entries[leftIndex];
 
     for (
-      let rightIndex = leftIndex + 1; rightIndex < entries.length; rightIndex++
+      let rightIndex = leftIndex + 1;
+      rightIndex < entries.length;
+      rightIndex++
     ) {
       const [rightName, right] = entries[rightIndex];
 
