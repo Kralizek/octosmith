@@ -30,6 +30,13 @@ export async function loadConfigurationDirectory(
   );
 
   const templatesDirectory = join(root, "templates");
+  const templatesDirectoryInfo = await Deno.lstat(templatesDirectory);
+  if (!templatesDirectoryInfo.isDirectory) {
+    throw new Error(
+      "Templates path must be a real directory: " + templatesDirectory,
+    );
+  }
+
   const templates: Record<string, RepositoryTemplate> = {};
 
   for await (const entry of Deno.readDir(templatesDirectory)) {
