@@ -302,6 +302,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: octosmith-apply
+  cancel-in-progress: false
+
 jobs:
   apply:
     runs-on: ubuntu-latest
