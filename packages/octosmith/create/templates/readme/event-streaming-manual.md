@@ -16,6 +16,12 @@ hooksmith_container="octosmith-hooksmith-manual"
 cp ./hooksmith.config.ts "$stream_dir/hooksmith.config.ts"
 mkfifo "$events_pipe"
 
+cleanup() {
+  docker rm -f "$hooksmith_container" >/dev/null 2>&1 || true
+  rm -rf "$stream_dir"
+}
+trap cleanup EXIT
+
 docker run --rm --name "$hooksmith_container" -i \
   --mount type=bind,src="$stream_dir",dst=/hooksmith,readonly \
   --workdir /hooksmith \
@@ -25,26 +31,42 @@ docker run --rm --name "$hooksmith_container" -i \
     < "$events_pipe" &
 hooksmith_pid=$!
 
-set +e
 GITHUB_TOKEN="$OCTOSMITH_TOKEN" \
   deno run -A jsr:@octosmith/cli@0 apply \
     --path . \
-    --events-output "$events_pipe"
-octosmith_status=$?
+    --events-output "$events_pipe" &
+octosmith_pid=$!
 
-if [ "$octosmith_status" -ne 0 ]; then
-  docker rm -f "$hooksmith_container" >/dev/null 2>&1 || true
-  kill "$hooksmith_pid" 2>/dev/null || true
-  wait "$hooksmith_pid" 2>/dev/null || true
-  rm -rf "$stream_dir"
+set +e
+wait -n -p completed_pid "$hooksmith_pid" "$octosmith_pid"
+first_status=$?
+set -e
+
+if [ "$completed_pid" = "$hooksmith_pid" ]; then
+  if [ "$first_status" -ne 0 ]; then
+    kill "$octosmith_pid" 2>/dev/null || true
+    wait "$octosmith_pid" 2>/dev/null || true
+    exit "$first_status"
+  fi
+
+  set +e
+  wait "$octosmith_pid"
+  octosmith_status=$?
+  set -e
   exit "$octosmith_status"
 fi
 
+if [ "$first_status" -ne 0 ]; then
+  docker rm -f "$hooksmith_container" >/dev/null 2>&1 || true
+  kill "$hooksmith_pid" 2>/dev/null || true
+  wait "$hooksmith_pid" 2>/dev/null || true
+  exit "$first_status"
+fi
+
+set +e
 wait "$hooksmith_pid"
 hooksmith_status=$?
 set -e
-
-rm -rf "$stream_dir"
 exit "$hooksmith_status"
 ```
 
