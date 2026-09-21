@@ -1,8 +1,7 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import { parse } from "@std/yaml";
-import { buildCliArguments, readActionInputs } from "../action/mod.ts";
 
-Deno.test("action metadata runs the checked-out OctoSmith source", async () => {
+Deno.test("action metadata delegates to the CLI package", async () => {
   const action = parse(await Deno.readTextFile("action.yml")) as Record<
     string,
     unknown
@@ -15,88 +14,134 @@ Deno.test("action metadata runs the checked-out OctoSmith source", async () => {
     steps.some((step) => step.uses === "denoland/setup-deno@v2"),
     true,
   );
-  assertEquals(
-    steps.some((step) =>
-      typeof step.run === "string" &&
-      step.run.includes("$GITHUB_ACTION_PATH/action/mod.ts")
-    ),
-    true,
+
+  const runStep = steps.find((step) => step.name === "Run OctoSmith");
+  assertStringIncludes(
+    String(runStep?.run ?? ""),
+    "$GITHUB_ACTION_PATH/scripts/run-action.sh",
   );
+
+  const script = await Deno.readTextFile("scripts/run-action.sh");
+  assertStringIncludes(script, "$GITHUB_ACTION_PATH/packages/cli/mod.ts");
+  assertEquals(script.includes("$GITHUB_ACTION_PATH/action/mod.ts"), false);
+  assertEquals(script.includes("jsr:@octosmith/cli"), false);
 });
 
-Deno.test("action inputs map to CLI grammar", () => {
-  const values: Record<string, string> = {
-    INPUT_MODE: "apply",
-    INPUT_PATH: "./configuration",
-    INPUT_REPOSITORY: "api-service",
-    INPUT_FORMAT: "json",
-    INPUT_VERBOSE: "true",
-  };
+Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
+  const result = await runActionWrapper({
+    OCTOSMITH_MODE: " apply ",
+    OCTOSMITH_PATH: " ./configuration ",
+    OCTOSMITH_REPOSITORY: " api-service ",
+    OCTOSMITH_FORMAT: " json ",
+    OCTOSMITH_VERBOSE: " TrUe ",
+    OCTOSMITH_EVENTS_OUTPUT: " /tmp/octosmith-events ",
+  });
 
-  assertEquals(
-    buildCliArguments(readActionInputs((name) => values[name])),
+  assertEquals(result.code, 0);
+  assertEquals(result.args, [
+    "run",
+    "--config",
+    `${Deno.cwd()}/deno.json`,
+    "-A",
+    `${Deno.cwd()}/packages/cli/mod.ts`,
+    "apply",
+    "api-service",
+    "--path",
+    "./configuration",
+    "--format",
+    "json",
+    "--verbose",
+    "--events-output",
+    "/tmp/octosmith-events",
+  ]);
+});
+
+Deno.test("action wrapper applies optional input defaults", async () => {
+  const result = await runActionWrapper({
+    OCTOSMITH_MODE: "plan",
+  });
+
+  assertEquals(result.code, 0);
+  assertEquals(result.args.slice(-5), [
+    "plan",
+    "--path",
+    ".",
+    "--format",
+    "text",
+  ]);
+});
+
+for (
+  const [name, env, message] of [
     [
-      "apply",
-      "api-service",
-      "--path",
-      "./configuration",
-      "--format",
-      "json",
-      "--verbose",
+      "mode",
+      { OCTOSMITH_MODE: "invalid" },
+      "mode must be either 'plan' or 'apply'",
     ],
-  );
-});
+    [
+      "format",
+      { OCTOSMITH_MODE: "plan", OCTOSMITH_FORMAT: "xml" },
+      "format must be either 'text' or 'json'",
+    ],
+    [
+      "verbose",
+      { OCTOSMITH_MODE: "plan", OCTOSMITH_VERBOSE: "maybe" },
+      "verbose must be either 'true' or 'false'",
+    ],
+  ] as const
+) {
+  Deno.test(`action wrapper rejects invalid ${name}`, async () => {
+    const result = await runActionWrapper(env);
+    assertEquals(result.code, 1);
+    assertStringIncludes(result.stderr, message);
+  });
+}
 
-Deno.test("action omits an empty repository target", () => {
-  const values: Record<string, string> = {
-    INPUT_MODE: "plan",
-    INPUT_REPOSITORY: "",
-  };
+async function runActionWrapper(
+  env: Record<string, string>,
+): Promise<{ code: number; args: string[]; stderr: string }> {
+  const root = await Deno.makeTempDir();
 
-  assertEquals(
-    buildCliArguments(readActionInputs((name) => values[name])),
-    ["plan", "--path", ".", "--format", "text"],
-  );
-});
+  try {
+    const bin = `${root}/bin`;
+    const capture = `${root}/args.txt`;
+    await Deno.mkdir(bin);
 
-Deno.test("action trims optional inputs", () => {
-  const values: Record<string, string> = {
-    INPUT_MODE: " plan ",
-    INPUT_PATH: " ./configuration ",
-    INPUT_REPOSITORY: "  ",
-    INPUT_FORMAT: " json ",
-    INPUT_VERBOSE: " FALSE ",
-  };
+    const deno = `${bin}/deno`;
+    await Deno.writeTextFile(
+      deno,
+      `#!/usr/bin/env bash
+printf '%s\\n' "$@" > "$OCTOSMITH_TEST_ARGS"
+`,
+    );
+    await Deno.chmod(deno, 0o755);
 
-  assertEquals(
-    buildCliArguments(readActionInputs((name) => values[name])),
-    ["plan", "--path", "./configuration", "--format", "json"],
-  );
-});
+    const command = new Deno.Command("bash", {
+      args: ["scripts/run-action.sh"],
+      env: {
+        ...env,
+        GITHUB_ACTION_PATH: Deno.cwd(),
+        OCTOSMITH_TEST_ARGS: capture,
+        PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
+      },
+      stdout: "piped",
+      stderr: "piped",
+    });
 
-Deno.test("action rejects invalid verbose input", () => {
-  assertThrows(
-    () =>
-      readActionInputs((name) =>
-        name === "INPUT_MODE"
-          ? "plan"
-          : name === "INPUT_VERBOSE"
-          ? "yes"
-          : undefined
-      ),
-    Error,
-    "Invalid verbose input",
-  );
-});
+    const output = await command.output();
+    const stderr = new TextDecoder().decode(output.stderr);
+    let args: string[] = [];
 
-Deno.test("action accepts case-insensitive verbose values", () => {
-  const values: Record<string, string> = {
-    INPUT_MODE: "plan",
-    INPUT_VERBOSE: "TrUe",
-  };
+    try {
+      args = (await Deno.readTextFile(capture)).trimEnd().split("\n");
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) {
+        throw error;
+      }
+    }
 
-  assertEquals(
-    buildCliArguments(readActionInputs((name) => values[name])),
-    ["plan", "--path", ".", "--format", "text", "--verbose"],
-  );
-});
+    return { code: output.code, args, stderr };
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+}
