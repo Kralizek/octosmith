@@ -127,6 +127,8 @@ Deno.test("generated scaffold validates as OctoSmith configuration", async () =>
     assertEquals(validateWorkflow.includes("github-token:"), false);
     assertStringIncludes(applyWorkflow, "mode: apply");
     assertStringIncludes(applyWorkflow, '- "main"');
+    assertStringIncludes(applyWorkflow, "group: octosmith-apply");
+    assertStringIncludes(applyWorkflow, "cancel-in-progress: false");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -226,6 +228,14 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   assertStringIncludes(
     applyWorkflow?.content ?? "",
     "jsr:@hooksmith/cli stream",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    "env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli stream",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    'GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN"',
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
