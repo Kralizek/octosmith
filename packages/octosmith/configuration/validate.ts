@@ -2,7 +2,6 @@ import {
   buildPlan,
   type CurrentState,
   loadConfigurationDirectory,
-  type LoadedConfiguration,
   type RepositoryMetadata,
   type RepositoryTemplate,
   resolveDesiredState,
@@ -23,12 +22,27 @@ export async function validateConfigurationDirectory(
 
   for (const [name, template] of Object.entries(loaded.templates)) {
     const repository = repositoryForTemplate(name, template);
-    const isolated: LoadedConfiguration = {
-      ...loaded,
-      templates: { [name]: template },
+    const desired = await resolveDesiredState(
+      loaded,
+      repository,
+      (value) => "validation:" + value,
+    );
+
+    buildPlan(emptyCurrentState(repository.name), desired);
+  }
+
+  for (const name of loaded.configuration.repositories.scope.names ?? []) {
+    if (name.includes("*") || name.includes("?")) {
+      continue;
+    }
+
+    const repository: RepositoryMetadata = {
+      name,
+      teams: [],
+      properties: {},
     };
     const desired = await resolveDesiredState(
-      isolated,
+      loaded,
       repository,
       (value) => "validation:" + value,
     );
