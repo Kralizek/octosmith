@@ -281,18 +281,18 @@ function renderTemplate(
   template: string,
   replacements: Readonly<Record<string, string>>,
 ): string {
-  let rendered = template;
+  const placeholders = [...new Set(template.match(/@@[A-Z0-9_]+@@/g) ?? [])];
+  const missing = placeholders.filter((token) => !(token in replacements));
 
-  for (const [token, value] of Object.entries(replacements)) {
-    rendered = rendered.replaceAll(token, value);
+  if (missing.length > 0) {
+    throw new Error(
+      "Unresolved scaffold template placeholders: " + missing.join(", "),
+    );
   }
 
-  const unresolved = rendered.match(/@@[A-Z0-9_]+@@/g);
-  if (unresolved) {
-    throw new Error(
-      "Unresolved scaffold template placeholders: " +
-        [...new Set(unresolved)].join(", "),
-    );
+  let rendered = template;
+  for (const [token, value] of Object.entries(replacements)) {
+    rendered = rendered.replaceAll(token, value);
   }
 
   return rendered;
