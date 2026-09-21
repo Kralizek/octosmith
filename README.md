@@ -110,6 +110,16 @@ streams live `resource.applied` events while OctoSmith is running. Hooksmith is
 an optional consumer; the OctoSmith library itself does not depend on Hooksmith
 for apply behavior.
 
+## Documentation
+
+Detailed documentation lives under [`docs/`](docs/README.md):
+
+- [Getting started](docs/getting-started.md)
+- [Configuration](docs/configuration.md)
+- [Automation](docs/automation.md)
+- [Architecture](docs/architecture.md)
+- [Agent guide](docs/agent-guide.md)
+
 ## Packages
 
 | Package                                                | Purpose                                                                                                                     |
