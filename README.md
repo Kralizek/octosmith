@@ -112,10 +112,10 @@ for apply behavior.
 
 ## Packages
 
-| Package | Purpose |
-| --- | --- |
+| Package                                                | Purpose                                                                                                                     |
+| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | [`@octosmith/octosmith`](packages/octosmith/README.md) | Configuration, desired/current state models, planning, reporting, GitHub integration, and the control-repository scaffolder |
-| [`@octosmith/cli`](packages/cli/README.md) | Command-line interface for validate, plan, apply, reporting, and event output |
+| [`@octosmith/cli`](packages/cli/README.md)             | Command-line interface for validate, plan, apply, reporting, and event output                                               |
 
 ## Examples
 
