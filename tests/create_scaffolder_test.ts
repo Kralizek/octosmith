@@ -109,21 +109,18 @@ Deno.test("generated scaffold validates as OctoSmith configuration", async () =>
     const loaded = await loadConfigurationDirectory(target);
     assertEquals(loaded.configuration.organization, "acme");
 
-    const planWorkflow = await Deno.readTextFile(
-      join(target, ".github/workflows/octosmith-plan.yml"),
+    const validateWorkflow = await Deno.readTextFile(
+      join(target, ".github/workflows/octosmith-validate.yml"),
     );
     const applyWorkflow = await Deno.readTextFile(
       join(target, ".github/workflows/octosmith-apply.yml"),
     );
 
-    assertStringIncludes(planWorkflow, "pull_request_target:");
-    assertStringIncludes(
-      planWorkflow,
-      "ref: ${{ github.event.pull_request.head.sha }}",
-    );
-    assertStringIncludes(planWorkflow, "persist-credentials: false");
-    assertStringIncludes(planWorkflow, "uses: Kralizek/octosmith@v0");
-    assertStringIncludes(planWorkflow, "mode: plan");
+    assertStringIncludes(validateWorkflow, "pull_request:");
+    assertStringIncludes(validateWorkflow, "uses: Kralizek/octosmith@v0");
+    assertStringIncludes(validateWorkflow, "mode: validate");
+    assertEquals(validateWorkflow.includes("OCTOSMITH_TOKEN"), false);
+    assertEquals(validateWorkflow.includes("github-token:"), false);
     assertStringIncludes(applyWorkflow, "mode: apply");
     assertStringIncludes(applyWorkflow, '- "main"');
   } finally {
@@ -191,7 +188,7 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   assertStringIncludes(readme?.content ?? "", "Hooksmith");
   assertStringIncludes(
     readme?.content ?? "",
-    "Set `GITHUB_TOKEN` before running either plan or apply locally",
+    "Set `GITHUB_TOKEN` before running plan or apply locally",
   );
 });
 
