@@ -216,6 +216,12 @@ export function parseScaffoldArguments(
 function inferRepositoryName(targetDirectory: string): string {
   const repositoryName = basename(resolve(targetDirectory.trim()));
 
+  if (repositoryName.includes("*") || repositoryName.includes("?")) {
+    throw new Error(
+      "Target repository name must not contain wildcard characters '*' or '?'",
+    );
+  }
+
   return repositoryName.length > 0 ? repositoryName : "github-config";
 }
 
