@@ -8,8 +8,12 @@ Deno.test("usage identifies OctoSmith", () => {
   assertStringIncludes(usage(), "validate");
 });
 
-Deno.test("version comes from package metadata", () => {
-  assertStringIncludes(VERSION, "0.1.0");
+Deno.test("version comes from package metadata", async () => {
+  const metadata = JSON.parse(
+    await Deno.readTextFile(new URL("./deno.json", import.meta.url)),
+  );
+
+  assertEquals(VERSION, metadata.version);
 });
 
 Deno.test("missing GITHUB_TOKEN returns a clear CLI failure", async () => {
