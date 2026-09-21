@@ -5,6 +5,7 @@ Deno.test("usage identifies OctoSmith", () => {
   assertStringIncludes(usage(), "octosmith");
   assertStringIncludes(usage(), "plan");
   assertStringIncludes(usage(), "apply");
+  assertStringIncludes(usage(), "validate");
 });
 
 Deno.test("version comes from package metadata", () => {
