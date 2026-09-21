@@ -7,8 +7,6 @@ import {
   type Report,
   type RepositoryReport,
   validateConfigurationDirectory,
-  type Report,
-  type RepositoryReport,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
