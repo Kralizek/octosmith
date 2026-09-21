@@ -237,7 +237,10 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   );
   assertStringIncludes(applyWorkflow?.content ?? "", "hooksmith_pid=$!");
   assertStringIncludes(applyWorkflow?.content ?? "", "octosmith_pid=$!");
-  assertStringIncludes(applyWorkflow?.content ?? "", "wait -n -p completed_pid");
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    "wait -n -p completed_pid",
+  );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
     'kill "$octosmith_pid" 2>/dev/null || true',
