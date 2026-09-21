@@ -18,9 +18,15 @@ deno create jsr:@octosmith/octosmith github-config
 ```
 
 The scaffolder prompts for the GitHub organization when it is not supplied. For
-non-interactive use, pass `--organization`. Additional options are
-`--collection-management explicit|strict`, `--default-branch <name>`,
-`--no-workflows`, and `--event-streaming`.
+non-interactive use, pass template options after Deno's `--` separator, for
+example:
+
+```sh
+deno create jsr:@octosmith/octosmith github-config -- --organization acme
+```
+
+Additional options are `--collection-management explicit|strict`,
+`--default-branch <name>`, `--no-workflows`, and `--event-streaming`.
 
 When `--event-streaming` is enabled, the generated apply workflow uses a local
 FIFO to stream `resource.applied` repository events into Hooksmith while
