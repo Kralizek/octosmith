@@ -47,9 +47,9 @@ It does not maintain a separate Action-specific CLI adapter.
 
 Supported inputs are:
 
-- `mode`: required, `plan` or `apply`
+- `mode`: required, `validate`, `plan`, or `apply`
 - `path`: configuration directory, default `.`
-- `github-token`: required GitHub credential
+- `github-token`: GitHub credential required by `plan` and `apply`; not required by `validate`
 - `repository`: optional repository target
 - `format`: `text` or `json`, default `text`
 - `verbose`: `true` or `false`, default `false`
