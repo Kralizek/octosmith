@@ -226,7 +226,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           this.repo(repository) + "/contents/" + encodePath(operation.path),
           {
             body: {
-              message: "OctoSmith: remove " + operation.path,
+              message: "Octosmith: remove " + operation.path,
               sha: operation.sha,
             },
           },
@@ -503,7 +503,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       this.repo(repository) + "/contents/" + encodePath(path),
       {
         body: {
-          message: "OctoSmith: apply " + path,
+          message: "Octosmith: apply " + path,
           content: encodeBase64(content),
           ...(sha !== undefined && { sha }),
         },
