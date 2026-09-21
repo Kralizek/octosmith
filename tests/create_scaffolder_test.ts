@@ -346,7 +346,7 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
-    "--mount type=bind,src=\"$stream_dir\",dst=/hooksmith,readonly",
+    '--mount type=bind,src="$stream_dir",dst=/hooksmith,readonly',
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
