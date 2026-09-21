@@ -1,6 +1,6 @@
 # Getting started
 
-The recommended way to start with OctoSmith is to create a dedicated control
+The recommended way to start with Octosmith is to create a dedicated control
 repository and let the scaffolder generate a conservative baseline.
 
 ## Create a control repository
@@ -61,5 +61,5 @@ applied when a later operation fails.
 
 - Read [configuration](configuration.md) before widening repository scope.
 - Read [automation](automation.md) before adding organization credentials to CI.
-- See [architecture](architecture.md) when embedding OctoSmith or extending the
+- See [architecture](architecture.md) when embedding Octosmith or extending the
   engine.
