@@ -18,8 +18,8 @@ Supported modes are `validate`, `plan`, and `apply`.
 
 ## Credentials
 
-The credential is exposed to the CLI through `GITHUB_TOKEN`; it is not passed
-as a CLI argument.
+The credential is exposed to the CLI through `GITHUB_TOKEN`; it is not passed as
+a CLI argument.
 
 The token needs read permissions for resources used by plan and corresponding
 write permissions for resources managed by apply.
@@ -38,8 +38,7 @@ The generated apply workflow expects an `OCTOSMITH_TOKEN` repository secret.
 
 ## Event streaming
 
-`plan` and `apply` can emit NDJSON repository events through
-`--events-output`.
+`plan` and `apply` can emit NDJSON repository events through `--events-output`.
 
 The destination may be a regular file, FIFO, or another writable path.
 
