@@ -1,17 +1,35 @@
 import { basename, dirname, join } from "@std/path";
 import type { CollectionManagementMode } from "../types.ts";
-import configurationTemplate from "./templates/octosmith.yml" with { type: "text" };
+import configurationTemplate from "./templates/octosmith.yml" with {
+  type: "text",
+};
 import repositoryTemplate from "./templates/default.yml" with { type: "text" };
 import gitignoreTemplate from "./templates/gitignore" with { type: "text" };
-import hooksmithTemplate from "./templates/hooksmith.config.ts" with { type: "text" };
-import validateWorkflowTemplate from "./templates/workflows/validate.yml" with { type: "text" };
-import applyWorkflowTemplate from "./templates/workflows/apply.yml" with { type: "text" };
-import streamingApplyWorkflowTemplate from "./templates/workflows/apply-streaming.yml" with { type: "text" };
+import hooksmithTemplate from "./templates/hooksmith.config.ts" with {
+  type: "text",
+};
+import validateWorkflowTemplate from "./templates/workflows/validate.yml" with {
+  type: "text",
+};
+import applyWorkflowTemplate from "./templates/workflows/apply.yml" with {
+  type: "text",
+};
+import streamingApplyWorkflowTemplate from "./templates/workflows/apply-streaming.yml" with {
+  type: "text",
+};
 import readmeTemplate from "./templates/README.md" with { type: "text" };
-import workflowsReadmeTemplate from "./templates/readme/workflows.md" with { type: "text" };
-import noWorkflowsReadmeTemplate from "./templates/readme/no-workflows.md" with { type: "text" };
-import eventStreamingReadmeTemplate from "./templates/readme/event-streaming.md" with { type: "text" };
-import manualEventStreamingReadmeTemplate from "./templates/readme/event-streaming-manual.md" with { type: "text" };
+import workflowsReadmeTemplate from "./templates/readme/workflows.md" with {
+  type: "text",
+};
+import noWorkflowsReadmeTemplate from "./templates/readme/no-workflows.md" with {
+  type: "text",
+};
+import eventStreamingReadmeTemplate from "./templates/readme/event-streaming.md" with {
+  type: "text",
+};
+import manualEventStreamingReadmeTemplate from "./templates/readme/event-streaming-manual.md" with {
+  type: "text",
+};
 
 export interface ScaffoldOptions {
   readonly targetDirectory: string;
@@ -57,7 +75,9 @@ export function buildScaffold(
         "@@REPOSITORY_NAME_RAW@@": repositoryName,
         "@@COLLECTION_MANAGEMENT_RAW@@": options.collectionManagement,
         "@@WORKFLOW_DOCUMENTATION@@": (
-          options.workflows ? workflowsReadmeTemplate : noWorkflowsReadmeTemplate
+          options.workflows
+            ? workflowsReadmeTemplate
+            : noWorkflowsReadmeTemplate
         ).trim(),
         "@@EVENT_STREAMING_DOCUMENTATION@@": options.eventStreaming
           ? (
