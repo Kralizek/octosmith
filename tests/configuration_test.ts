@@ -1,4 +1,4 @@
-import { assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { fromFileUrl, join } from "@std/path";
 import {
   buildPlan,
@@ -174,6 +174,191 @@ Deno.test("name selectors treat regex metacharacters literally", () => {
     ),
     false,
   );
+});
+
+for (
+  const [name, source, message] of [
+    [
+      "absolute configuration file source",
+      "/dev/zero",
+      "must be relative to the configuration root",
+    ],
+    [
+      "configuration file source escaping root",
+      "../outside.txt",
+      "escapes the configuration root",
+    ],
+  ] as const
+) {
+  Deno.test(`rejects ${name}`, async () => {
+    const root = await Deno.makeTempDir();
+
+    try {
+      await Deno.mkdir(join(root, "templates"));
+      await Deno.writeTextFile(
+        join(root, "octosmith.yml"),
+        [
+          "version: 1",
+          "organization: example-org",
+          "repositories:",
+          "  scope:",
+          "    names:",
+          "      - sample",
+          "",
+        ].join("\n"),
+      );
+      await Deno.writeTextFile(
+        join(root, "templates", "sample.yml"),
+        [
+          "kind: repository",
+          "match:",
+          "  names:",
+          "    - sample",
+          "repository:",
+          "  files:",
+          "    README.md:",
+          "      ensure: exact",
+          `      source: ${source}`,
+          "",
+        ].join("\n"),
+      );
+
+      if (source.startsWith("..")) {
+        await Deno.writeTextFile(join(root, "..", "outside.txt"), "outside");
+      }
+
+      const loaded = await loadConfigurationDirectory(root);
+
+      await assertRejects(
+        () =>
+          resolveDesiredState(
+            loaded,
+            { name: "sample", teams: [], properties: {} },
+            (value) => value,
+          ),
+        Error,
+        message,
+      );
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}
+
+Deno.test("rejects configuration file sources larger than 10 MiB", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.mkdir(join(root, "files"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  files:",
+        "    README.md:",
+        "      ensure: exact",
+        "      source: files/large.txt",
+        "",
+      ].join("\n"),
+    );
+
+    const largeFile = await Deno.open(join(root, "files", "large.txt"), {
+      create: true,
+      write: true,
+      truncate: true,
+    });
+    try {
+      await largeFile.truncate(10 * 1024 * 1024 + 1);
+    } finally {
+      largeFile.close();
+    }
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    await assertRejects(
+      () =>
+        resolveDesiredState(
+          loaded,
+          { name: "sample", teams: [], properties: {} },
+          (value) => value,
+        ),
+      Error,
+      "exceeds the maximum size",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("rejects symlinked configuration file sources escaping root", async () => {
+  const root = await Deno.makeTempDir();
+  const outside = await Deno.makeTempFile();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.mkdir(join(root, "files"));
+    await Deno.symlink(outside, join(root, "files", "linked.txt"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  files:",
+        "    README.md:",
+        "      ensure: exact",
+        "      source: files/linked.txt",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    await assertRejects(
+      () =>
+        resolveDesiredState(
+          loaded,
+          { name: "sample", teams: [], properties: {} },
+          (value) => value,
+        ),
+      Error,
+      "escapes the configuration root",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(outside);
+  }
 });
 
 Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
