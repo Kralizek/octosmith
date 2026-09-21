@@ -69,8 +69,8 @@ This keeps GitHub REST shapes out of planning logic.
 Collection management belongs to desired-state interpretation, not GitHub API
 transport.
 
-`explicit` preserves undeclared members. `strict` may remove undeclared
-members for supported named collections.
+`explicit` preserves undeclared members. `strict` may remove undeclared members
+for supported named collections.
 
 ## GitHub integration
 
