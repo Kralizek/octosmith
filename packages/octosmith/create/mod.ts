@@ -1,4 +1,4 @@
-import { basename, dirname, join } from "@std/path";
+import { basename, dirname, join, resolve } from "@std/path";
 import type { CollectionManagementMode } from "../types.ts";
 import configurationTemplate from "./templates/octosmith.yml" with {
   type: "text",
@@ -214,30 +214,9 @@ export function parseScaffoldArguments(
 }
 
 function inferRepositoryName(targetDirectory: string): string {
-  const normalizedTargetDirectory = targetDirectory.trim().replace(
-    /[\\/]+$/,
-    "",
-  );
-  const repositoryName = basename(normalizedTargetDirectory);
+  const repositoryName = basename(resolve(targetDirectory.trim()));
 
-  if (
-    repositoryName.length > 0 &&
-    repositoryName !== "." &&
-    repositoryName !== ".."
-  ) {
-    return repositoryName;
-  }
-
-  const cwdRepositoryName = basename(Deno.cwd());
-  if (
-    cwdRepositoryName.length > 0 &&
-    cwdRepositoryName !== "." &&
-    cwdRepositoryName !== ".."
-  ) {
-    return cwdRepositoryName;
-  }
-
-  return "github-config";
+  return repositoryName.length > 0 ? repositoryName : "github-config";
 }
 
 function requireValue(
@@ -290,12 +269,10 @@ function renderTemplate(
     );
   }
 
-  let rendered = template;
-  for (const [token, value] of Object.entries(replacements)) {
-    rendered = rendered.replaceAll(token, value);
-  }
-
-  return rendered;
+  return template.replace(
+    /@@[A-Z0-9_]+@@/g,
+    (token) => replacements[token] ?? token,
+  );
 }
 
 function yamlScalar(value: string): string {
