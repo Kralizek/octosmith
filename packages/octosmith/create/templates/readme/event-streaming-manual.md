@@ -16,8 +16,23 @@ hooksmith_container="octosmith-hooksmith-manual"
 cp ./hooksmith.config.ts "$stream_dir/hooksmith.config.ts"
 mkfifo "$events_pipe"
 
+hooksmith_pid=""
+octosmith_pid=""
+
 cleanup() {
+  if [ -n "$octosmith_pid" ] && kill -0 "$octosmith_pid" 2>/dev/null; then
+    kill "$octosmith_pid" 2>/dev/null || true
+  fi
+  if [ -n "$octosmith_pid" ]; then
+    wait "$octosmith_pid" 2>/dev/null || true
+  fi
   docker rm -f "$hooksmith_container" >/dev/null 2>&1 || true
+  if [ -n "$hooksmith_pid" ] && kill -0 "$hooksmith_pid" 2>/dev/null; then
+    kill "$hooksmith_pid" 2>/dev/null || true
+  fi
+  if [ -n "$hooksmith_pid" ]; then
+    wait "$hooksmith_pid" 2>/dev/null || true
+  fi
   rm -rf "$stream_dir"
 }
 trap cleanup EXIT
