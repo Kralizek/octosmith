@@ -24,6 +24,10 @@ inputs:
     description: Include unchanged items and GitHub API response traces
     required: false
     default: "false"
+  events-output:
+    description: Optional writable path for NDJSON Hooksmith resource events
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -35,11 +39,13 @@ runs:
 
     - name: Run OctoSmith
       shell: bash
+      working-directory: ${{ github.workspace }}
       env:
         GITHUB_TOKEN: ${{ inputs.github-token }}
-        INPUT_MODE: ${{ inputs.mode }}
-        INPUT_PATH: ${{ inputs.path }}
-        INPUT_REPOSITORY: ${{ inputs.repository }}
-        INPUT_FORMAT: ${{ inputs.format }}
-        INPUT_VERBOSE: ${{ inputs.verbose }}
-      run: deno run -A "$GITHUB_ACTION_PATH/action/mod.ts"
+        OCTOSMITH_MODE: ${{ inputs.mode }}
+        OCTOSMITH_PATH: ${{ inputs.path }}
+        OCTOSMITH_REPOSITORY: ${{ inputs.repository }}
+        OCTOSMITH_FORMAT: ${{ inputs.format }}
+        OCTOSMITH_VERBOSE: ${{ inputs.verbose }}
+        OCTOSMITH_EVENTS_OUTPUT: ${{ inputs.events-output }}
+      run: bash "$GITHUB_ACTION_PATH/scripts/run-action.sh"
