@@ -119,6 +119,36 @@ Deno.test("rejects symlinked root configuration file", async () => {
   }
 });
 
+Deno.test("rejects symlinked templates directory", async () => {
+  const root = await Deno.makeTempDir();
+  const outside = await Deno.makeTempDir();
+
+  try {
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.symlink(outside, join(root, "templates"));
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "Templates path must be a real directory",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(outside, { recursive: true });
+  }
+});
+
 Deno.test("rejects oversized root configuration file", async () => {
   const root = await Deno.makeTempDir();
 
