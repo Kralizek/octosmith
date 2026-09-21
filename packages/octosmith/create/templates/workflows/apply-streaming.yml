@@ -1,0 +1,87 @@
+name: OctoSmith apply
+
+on:
+  push:
+    branches:
+      - @@DEFAULT_BRANCH@@
+
+permissions:
+  contents: read
+
+concurrency:
+  group: octosmith-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Apply with event streaming
+        shell: bash
+        env:
+          OCTOSMITH_GITHUB_TOKEN: ${{ secrets.OCTOSMITH_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          events_pipe="$RUNNER_TEMP/octosmith-events"
+          rm -f "$events_pipe"
+          mkfifo "$events_pipe"
+
+          hooksmith_pid=""
+          cleanup() {
+            rm -f "$events_pipe"
+            if [[ -n "$hooksmith_pid" ]] && kill -0 "$hooksmith_pid" 2>/dev/null; then
+              kill "$hooksmith_pid" 2>/dev/null || true
+            fi
+          }
+          trap cleanup EXIT
+
+          env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli stream \
+            --config ./hooksmith.config.ts \
+            < "$events_pipe" &
+          hooksmith_pid=$!
+
+          GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN" \
+            deno run -A jsr:@octosmith/cli@0 apply \
+              --path . \
+              --events-output "$events_pipe" &
+          octosmith_pid=$!
+
+          set +e
+          wait -n -p completed_pid "$hooksmith_pid" "$octosmith_pid"
+          first_status=$?
+          set -e
+
+          if [[ "$completed_pid" == "$hooksmith_pid" ]]; then
+            if [[ "$first_status" -ne 0 ]]; then
+              kill "$octosmith_pid" 2>/dev/null || true
+              wait "$octosmith_pid" 2>/dev/null || true
+              exit "$first_status"
+            fi
+
+            set +e
+            wait "$octosmith_pid"
+            octosmith_status=$?
+            set -e
+
+            exit "$octosmith_status"
+          fi
+
+          if [[ "$first_status" -ne 0 ]]; then
+            kill "$hooksmith_pid" 2>/dev/null || true
+            wait "$hooksmith_pid" 2>/dev/null || true
+            exit "$first_status"
+          fi
+
+          set +e
+          wait "$hooksmith_pid"
+          hooksmith_status=$?
+          set -e
+
+          exit "$hooksmith_status"
