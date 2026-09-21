@@ -41,7 +41,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: bash .github/scripts/detect-incomplete-release.sh
+        run: bash .github/workflows/scripts/detect-incomplete-release.sh
 
       - name: Calculate next release
         if: steps.resume.outputs.resume != 'true'
