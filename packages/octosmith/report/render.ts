@@ -1,5 +1,6 @@
 import type { ApplyItemReport, Report, RepositoryReport } from "./types.ts";
 
+/** Describes render report options. */
 export interface RenderReportOptions {
   readonly verbose?: boolean;
 }
