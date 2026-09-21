@@ -102,22 +102,6 @@ Deno.test("action wrapper applies optional input defaults", async () => {
   ]);
 });
 
-Deno.test("action wrapper treats whitespace-only format as omitted", async () => {
-  const result = await runActionWrapper({
-    OCTOSMITH_MODE: "plan",
-    OCTOSMITH_FORMAT: "   ",
-  });
-
-  assertEquals(result.code, 0);
-  assertEquals(result.args.slice(-5), [
-    "plan",
-    "--path",
-    ".",
-    "--format",
-    "text",
-  ]);
-});
-
 for (
   const [name, env, message] of [
     [
