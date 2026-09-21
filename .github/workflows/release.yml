@@ -1,0 +1,308 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        required: true
+        default: minor
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+
+      - name: Detect incomplete release
+        id: resume
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/workflows/scripts/detect-incomplete-release.sh
+
+      - name: Calculate next release
+        if: steps.resume.outputs.resume != 'true'
+        id: calculated
+        uses: Kralizek/github-actions/actions/calculate-next-version@v0.3
+        with:
+          bump: ${{ inputs.bump }}
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          RESUME: ${{ steps.resume.outputs.resume }}
+          RESUMED_VERSION: ${{ steps.resume.outputs.version }}
+          RESUMED_TAG: ${{ steps.resume.outputs.tag }}
+          RESUMED_PREVIOUS_TAG: ${{ steps.resume.outputs['previous-tag'] }}
+          CALCULATED_VERSION: ${{ steps.calculated.outputs.version }}
+          CALCULATED_TAG: ${{ steps.calculated.outputs.tag }}
+          CALCULATED_PREVIOUS_TAG: ${{ steps.calculated.outputs['previous-tag'] }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$RESUME" == "true" ]]; then
+            version="$RESUMED_VERSION"
+            tag="$RESUMED_TAG"
+            previous_tag="$RESUMED_PREVIOUS_TAG"
+          else
+            version="$CALCULATED_VERSION"
+            tag="$CALCULATED_TAG"
+            previous_tag="$CALCULATED_PREVIOUS_TAG"
+          fi
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "previous-tag=$previous_tag" >> "$GITHUB_OUTPUT"
+          echo "resume=$RESUME" >> "$GITHUB_OUTPUT"
+
+      - name: Resume release commit
+        if: steps.version.outputs.resume == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: git checkout "$TAG"
+
+      - name: Set package versions
+        if: steps.version.outputs.resume != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          deno eval --allow-read --allow-write --allow-env '
+            const version = Deno.env.get("VERSION")!;
+            const root = JSON.parse(await Deno.readTextFile("deno.json"));
+
+            for (const member of root.workspace) {
+              const file = `${member}/deno.json`;
+              const config = JSON.parse(await Deno.readTextFile(file));
+              config.version = version;
+              await Deno.writeTextFile(file, `${JSON.stringify(config, null, 2)}\n`);
+            }
+          '
+
+      - name: Create release commit
+        if: steps.version.outputs.resume != 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet; then
+            echo "Package versions already match $TAG; tagging current commit."
+            exit 0
+          fi
+
+          mapfile -t manifests < <(jq -r '.workspace[] + "/deno.json"' deno.json)
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "${manifests[@]}"
+          git commit -m "Release $TAG"
+
+      - name: Validate
+        run: |
+          deno task check
+          deno publish --dry-run
+
+      - name: Push release commit
+        if: steps.version.outputs.resume != 'true'
+        run: git push origin HEAD:master
+
+      - name: Create or reuse immutable version tag
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            tagged_commit="$(git rev-parse "$TAG^{commit}")"
+            head_commit="$(git rev-parse HEAD)"
+            if [[ "$tagged_commit" != "$head_commit" ]]; then
+              echo "Tag $TAG exists but points to $tagged_commit instead of $head_commit." >&2
+              exit 1
+            fi
+            echo "Reusing $TAG."
+          else
+            git tag "$TAG" HEAD
+            git push origin "$TAG"
+          fi
+
+      - name: Create or reuse draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PREVIOUS_TAG: ${{ steps.version.outputs['previous-tag'] }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Reusing existing release $TAG."
+            exit 0
+          fi
+
+          args=(
+            "$TAG"
+            --verify-tag
+            --generate-notes
+            --title "$TAG"
+            --draft
+          )
+
+          if [[ -n "$PREVIOUS_TAG" && "$PREVIOUS_TAG" != "$TAG" ]]; then
+            args+=(--notes-start-tag "$PREVIOUS_TAG")
+          fi
+
+          gh release create "${args[@]}"
+
+  publish:
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.create-release.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+
+      - name: Validate release tag
+        id: release-version
+        uses: Kralizek/github-actions/actions/validate-release@v0.3
+        with:
+          tag: ${{ needs.create-release.outputs.tag }}
+          prerelease: false
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        env:
+          VERSION: ${{ steps.release-version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          IFS='.' read -r major minor patch <<< "$VERSION"
+
+          while IFS= read -r manifest; do
+            actual="$(jq -r .version "$manifest")"
+            if [[ "$actual" != "$VERSION" ]]; then
+              echo "$manifest has version $actual, expected $VERSION" >&2
+              exit 1
+            fi
+          done < <(jq -r '.workspace[] + "/deno.json"' deno.json)
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "major_tag=v$major" >> "$GITHUB_OUTPUT"
+          echo "minor_tag=v$major.$minor" >> "$GITHUB_OUTPUT"
+
+      - name: Check
+        run: deno task check
+
+      - name: Validate packages
+        run: |
+          set -euo pipefail
+          deno publish --dry-run
+
+          while IFS= read -r member; do
+            (
+              cd "$member"
+              deno publish --dry-run
+              deno pack --dry-run
+            )
+          done < <(jq -r '.workspace[]' deno.json)
+
+      - name: Pack release assets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ASSET_DIR: ${{ runner.temp }}/octosmith-dist
+        run: |
+          set -euo pipefail
+          mkdir -p "$ASSET_DIR"
+
+          while IFS= read -r member; do
+            name="$(jq -r .name "$member/deno.json")"
+            asset_name="${name#@octosmith/}"
+
+            (
+              cd "$member"
+              deno pack --output "$ASSET_DIR/octosmith-${asset_name}-${VERSION}.tgz"
+            )
+          done < <(jq -r '.workspace[]' deno.json)
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+          ASSET_DIR: ${{ runner.temp }}/octosmith-dist
+        run: gh release upload "$TAG" "$ASSET_DIR"/*.tgz --clobber
+
+      - name: Publish packages
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          while IFS= read -r member; do
+            name="$(jq -r .name "$member/deno.json")"
+            package_meta="$(curl -fsSL -H 'Accept: application/json' "https://jsr.io/${name}/meta.json" || true)"
+
+            if [[ -n "$package_meta" ]] && jq -e --arg version "$VERSION" '.versions[$version] != null' <<< "$package_meta" >/dev/null; then
+              echo "jsr:${name}@${VERSION} is already published; skipping."
+              continue
+            fi
+
+            (cd "$member" && deno publish)
+          done < <(jq -r '.workspace[]' deno.json)
+
+      - name: Move action version tags
+        env:
+          MAJOR_TAG: ${{ steps.version.outputs.major_tag }}
+          MINOR_TAG: ${{ steps.version.outputs.minor_tag }}
+        run: |
+          set -euo pipefail
+
+          git tag --force "$MAJOR_TAG" HEAD
+          git tag --force "$MINOR_TAG" HEAD
+          git push --force origin "$MAJOR_TAG" "$MINOR_TAG"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.create-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+
+          if [[ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" == "true" ]]; then
+            gh release edit "$TAG" --draft=false
+          else
+            echo "Release $TAG is already published."
+          fi

@@ -1,0 +1,31 @@
+name: OctoSmith apply
+
+on:
+  push:
+    branches:
+      - @@DEFAULT_BRANCH@@
+
+permissions:
+  contents: read
+
+concurrency:
+  group: octosmith-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Apply with event streaming
+        shell: bash
+        env:
+          OCTOSMITH_GITHUB_TOKEN: ${{ secrets.OCTOSMITH_TOKEN }}
+        run: bash .github/scripts/octosmith-apply-streaming.sh
