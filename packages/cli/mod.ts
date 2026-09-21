@@ -17,6 +17,7 @@ import cliMetadata from "./deno.json" with { type: "json" };
 /** The OctoSmith CLI version. */
 export const VERSION = cliMetadata.version;
 
+/** Describes cli execution options. */
 export interface CliExecutionOptions {
   readonly runtime?: ApplyRuntime;
   readonly write?: (value: string) => void;
