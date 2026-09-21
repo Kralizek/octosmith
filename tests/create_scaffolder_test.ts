@@ -243,6 +243,10 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
+    "OCTOSMITH_GITHUB_TOKEN: ${{ secrets.OCTOSMITH_TOKEN }}",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
     'GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN"',
   );
   assertStringIncludes(
