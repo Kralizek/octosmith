@@ -1,17 +1,18 @@
 name: OctoSmith
-description: Plan or apply declarative GitHub configuration with OctoSmith
+description: Validate, plan, or apply declarative GitHub configuration with OctoSmith
 
 inputs:
   mode:
-    description: OctoSmith command to run (plan or apply)
+    description: OctoSmith command to run (validate, plan, or apply)
     required: true
   path:
     description: Configuration directory
     required: false
     default: "."
   github-token:
-    description: GitHub token used by OctoSmith
-    required: true
+    description: GitHub token used by plan/apply; not required for validate
+    required: false
+    default: ""
   repository:
     description: Optional repository target
     required: false
