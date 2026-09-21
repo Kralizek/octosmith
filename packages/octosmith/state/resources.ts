@@ -113,7 +113,7 @@ export interface CurrentCopilotInternetAccessSettings {
  *
  * MCP configuration is shared by Copilot cloud agent and code review.
  * GitHub's public repository API currently exposes this configuration as
- * read-only, so OctoSmith does not model a desired counterpart yet.
+ * read-only, so Octosmith does not model a desired counterpart yet.
  */
 export interface CurrentCopilotSettings {
   readonly mcp: CurrentCopilotMcpSettings;
