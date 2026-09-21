@@ -118,7 +118,9 @@ async function readConfigurationSource(
   source: string,
 ): Promise<string> {
   if (isAbsolute(source)) {
-    throw new Error("File source must be relative to the configuration root: " + source);
+    throw new Error(
+      "File source must be relative to the configuration root: " + source,
+    );
   }
 
   const rootPath = await Deno.realPath(root);
