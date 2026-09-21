@@ -13,21 +13,25 @@ import type {
   SquashMergeCommitTitle,
 } from "../types.ts";
 
+/** Describes configuration. */
 export interface Configuration {
   readonly version: 1;
   readonly organization: string;
   readonly repositories: RepositoriesConfiguration;
 }
 
+/** Describes repositories configuration. */
 export interface RepositoriesConfiguration {
   readonly scope: RepositorySelector;
   readonly settings?: RepositoryManagementSettings;
 }
 
+/** Describes repository management settings. */
 export interface RepositoryManagementSettings {
   readonly collectionManagement?: CollectionManagementMode;
 }
 
+/** Describes repository selector. */
 export interface RepositorySelector {
   readonly names?: readonly string[];
   readonly teams?: readonly string[];
@@ -35,12 +39,14 @@ export interface RepositorySelector {
   readonly properties?: Readonly<Record<string, PropertyValue>>;
 }
 
+/** Describes repository template. */
 export interface RepositoryTemplate {
   readonly kind: "repository";
   readonly match: RepositorySelector;
   readonly repository: RepositoryConfiguration;
 }
 
+/** Describes repository configuration. */
 export interface RepositoryConfiguration {
   readonly settings?: RepositorySettingsConfiguration;
   readonly customProperties?: Readonly<
@@ -54,6 +60,7 @@ export interface RepositoryConfiguration {
   readonly files?: Readonly<Record<string, FileConfiguration>>;
 }
 
+/** Describes repository settings configuration. */
 export interface RepositorySettingsConfiguration {
   readonly description?: string | null;
   readonly website?: string | null;
@@ -75,6 +82,7 @@ export interface RepositorySettingsConfiguration {
   readonly securityAndAnalysis?: SecurityAndAnalysisConfiguration;
 }
 
+/** Describes merge configuration. */
 export interface MergeConfiguration {
   readonly squash?: boolean;
   readonly mergeCommit?: boolean;
@@ -87,6 +95,7 @@ export interface MergeConfiguration {
   readonly mergeCommitMessage?: MergeCommitMessage;
 }
 
+/** Describes security and analysis configuration. */
 export interface SecurityAndAnalysisConfiguration {
   readonly advancedSecurity?: SecurityFeatureStatus;
   readonly codeSecurity?: SecurityFeatureStatus;
@@ -95,6 +104,7 @@ export interface SecurityAndAnalysisConfiguration {
   readonly secretScanningAiDetection?: SecurityFeatureStatus;
 }
 
+/** Describes secret configuration. */
 export type SecretConfiguration =
   | string
   | {
@@ -102,6 +112,7 @@ export type SecretConfiguration =
     readonly to: string;
   };
 
+/** Describes variable configuration. */
 export type VariableConfiguration =
   | string
   | {
@@ -113,6 +124,7 @@ export type VariableConfiguration =
     readonly value: string;
   };
 
+/** Describes actions configuration. */
 export interface ActionsConfiguration {
   readonly secrets?: readonly SecretConfiguration[];
   readonly variables?: readonly VariableConfiguration[];
@@ -123,16 +135,19 @@ export interface ActionsConfiguration {
   readonly oidc?: ActionsOidcConfiguration;
 }
 
+/** Describes dependabot configuration. */
 export interface DependabotConfiguration {
   readonly secrets?: readonly SecretConfiguration[];
 }
 
+/** Describes selected actions configuration. */
 export interface SelectedActionsConfiguration {
   readonly githubOwnedAllowed?: boolean;
   readonly verifiedAllowed?: boolean;
   readonly patternsAllowed?: readonly string[];
 }
 
+/** Describes subject claim template configuration. */
 export type SubjectClaimTemplateConfiguration =
   | {
     readonly source: "default";
@@ -145,16 +160,19 @@ export type SubjectClaimTemplateConfiguration =
     readonly claims: readonly string[];
   };
 
+/** Describes actions OIDC configuration. */
 export interface ActionsOidcConfiguration {
   readonly subjectClaimTemplate?: SubjectClaimTemplateConfiguration;
   readonly immutableSubject?: boolean;
 }
 
+/** Describes team permission configuration. */
 export interface TeamPermissionConfiguration {
   readonly name: string;
   readonly permission: string;
 }
 
+/** Describes ruleset configuration. */
 export interface RulesetConfiguration {
   readonly name: string;
   readonly target?: RulesetTarget;
@@ -164,21 +182,25 @@ export interface RulesetConfiguration {
   readonly rules?: readonly RulesetRuleConfiguration[];
 }
 
+/** Describes ruleset bypass actor configuration. */
 export interface RulesetBypassActorConfiguration {
   readonly actorType: RulesetBypassActorType;
   readonly actorId?: number;
   readonly bypassMode: RulesetBypassMode;
 }
 
+/** Describes ruleset conditions configuration. */
 export interface RulesetConditionsConfiguration {
   readonly refName?: RefNameConditionConfiguration;
 }
 
+/** Describes ref name condition configuration. */
 export interface RefNameConditionConfiguration {
   readonly include?: readonly string[];
   readonly exclude?: readonly string[];
 }
 
+/** Describes ruleset rule type configuration. */
 export type RulesetRuleTypeConfiguration =
   | "creation"
   | "update"
@@ -206,17 +228,20 @@ export type RulesetRuleTypeConfiguration =
   | "file_extension_restriction"
   | "max_file_size";
 
+/** Describes ruleset rule configuration. */
 export interface RulesetRuleConfiguration {
   readonly type: RulesetRuleTypeConfiguration;
   readonly parameters?: Readonly<Record<string, unknown>>;
 }
 
+/** Describes environment configuration. */
 export interface EnvironmentConfiguration {
   readonly name: string;
   readonly secrets?: readonly SecretConfiguration[];
   readonly variables?: readonly VariableConfiguration[];
 }
 
+/** Describes file configuration. */
 export type FileConfiguration =
   | {
     readonly ensure: "exact";
