@@ -241,7 +241,11 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   );
   assertStringIncludes(
     readme?.content ?? "",
-    "env -u GITHUB_TOKEN -u OCTOSMITH_TOKEN",
+    "docker run --rm --name",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    "denoland/deno:2.x",
   );
   assertStringIncludes(
     readme?.content ?? "",
@@ -331,6 +335,18 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   assertStringIncludes(
     applyWorkflow?.content ?? "",
     "OCTOSMITH_GITHUB_TOKEN: ${{ secrets.OCTOSMITH_TOKEN }}",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    "docker run --rm --name",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    "denoland/deno:2.x",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    "--mount type=bind,src=\"$stream_dir\",dst=/hooksmith,readonly",
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
