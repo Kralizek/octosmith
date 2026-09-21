@@ -2,6 +2,7 @@ import {
   buildPlan,
   type CurrentState,
   loadConfigurationDirectory,
+  type LoadedConfiguration,
   type PropertyValue,
   type RepositoryMetadata,
   type RepositorySelector,
@@ -27,9 +28,16 @@ export async function validateConfigurationDirectory(
   assertScopeCanMatchTemplate(scope, loaded.templates);
 
   for (const [name, template] of Object.entries(loaded.templates)) {
-    const repository = repositoryForTemplate(name, template);
+    const inScope = selectorsCanOverlap(scope, template.match);
+    const repository = repositoryForSelectors(
+      name,
+      inScope ? [scope, template.match] : [template.match],
+    );
+    const configuration: LoadedConfiguration = inScope
+      ? loaded
+      : { ...loaded, templates: { [name]: template } };
     const desired = await resolveDesiredState(
-      loaded,
+      configuration,
       repository,
       (value) => "validation:" + value,
     );
@@ -72,13 +80,6 @@ function assertScopeCanMatchTemplate(
     template.match
   );
 
-  if (
-    templateSelectors.length === 0 ||
-    !templateSelectors.some((selector) => selectorsCanOverlap(scope, selector))
-  ) {
-    throw new Error("Configured repository scope cannot match any template");
-  }
-
   for (const name of scope.names ?? []) {
     if (name.includes("*") || name.includes("?")) {
       continue;
@@ -95,6 +96,13 @@ function assertScopeCanMatchTemplate(
           " cannot match any template within configured scope",
       );
     }
+  }
+
+  if (
+    templateSelectors.length === 0 ||
+    !templateSelectors.some((selector) => selectorsCanOverlap(scope, selector))
+  ) {
+    throw new Error("Configured repository scope cannot match any template");
   }
 }
 
@@ -208,12 +216,20 @@ function equalPropertyValue(
 }
 
 function globPatternsCanOverlap(...patterns: readonly string[]): boolean {
+  return globPatternsIntersectionWitness(...patterns) !== undefined;
+}
+
+function globPatternsIntersectionWitness(
+  ...patterns: readonly string[]
+): string | undefined {
   const initial = patterns.map(() => 0);
-  const queue: number[][] = [initial];
+  const queue: Array<{ readonly positions: number[]; readonly value: string }> = [
+    { positions: initial, value: "" },
+  ];
   const visited = new Set<string>();
 
   while (queue.length > 0) {
-    const positions = queue.shift()!;
+    const { positions, value } = queue.shift()!;
     const key = positions.join(":");
 
     if (visited.has(key)) {
@@ -224,14 +240,14 @@ function globPatternsCanOverlap(...patterns: readonly string[]): boolean {
     if (
       positions.every((position, index) => position === patterns[index].length)
     ) {
-      return true;
+      return value;
     }
 
     for (let index = 0; index < patterns.length; index++) {
       if (patterns[index][positions[index]] === "*") {
         const advanced = [...positions];
         advanced[index]++;
-        queue.push(advanced);
+        queue.push({ positions: advanced, value });
       }
     }
 
@@ -245,11 +261,17 @@ function globPatternsCanOverlap(...patterns: readonly string[]): boolean {
         ...tokens.map((token) => token!.token),
       )
     ) {
-      queue.push(tokens.map((token) => token!.next));
+      const literals = tokens
+        .map((token) => token!.token)
+        .filter((token): token is string => token !== null);
+      queue.push({
+        positions: tokens.map((token) => token!.next),
+        value: value + (literals[0] ?? "x"),
+      });
     }
   }
 
-  return false;
+  return undefined;
 }
 
 function consumingToken(
@@ -281,32 +303,98 @@ function tokensCanMatchSameCharacter(
     literals.every((token) => token === literals[0]);
 }
 
-function repositoryForTemplate(
-  templateName: string,
-  template: RepositoryTemplate,
+function repositoryForSelectors(
+  fallbackName: string,
+  selectors: readonly RepositorySelector[],
 ): RepositoryMetadata {
-  const selector = template.match;
-  const name = selector.names?.[0]
-    ? materializeName(selector.names[0], templateName)
-    : "validation-" + templateName;
-  const visibility = Array.isArray(selector.visibility)
-    ? selector.visibility[0]
-    : selector.visibility;
+  const name = nameIntersectionWitness(
+    selectors.map((selector) => selector.names),
+  ) ?? "validation-" + fallbackName;
+  const visibility = visibilityIntersectionWitness(
+    selectors.map((selector) => selector.visibility),
+  );
+  const teams = [
+    ...new Set(selectors.flatMap((selector) => selector.teams ?? [])),
+  ];
+  const properties = mergeProperties(
+    selectors.map((selector) => selector.properties),
+  );
 
   return {
     name,
-    teams: selector.teams ?? [],
+    teams,
     ...(visibility !== undefined && { visibility }),
-    properties: selector.properties ?? {},
+    properties,
   };
 }
 
-function materializeName(pattern: string, fallback: string): string {
-  const value = pattern
-    .replaceAll("*", "validation")
-    .replaceAll("?", "x");
+function nameIntersectionWitness(
+  selectors: readonly (readonly string[] | undefined)[],
+): string | undefined {
+  const constrained = selectors.filter(
+    (names): names is readonly string[] => names !== undefined,
+  );
 
-  return value.length > 0 ? value : "validation-" + fallback;
+  if (constrained.length === 0) {
+    return undefined;
+  }
+
+  return globChoiceWitness(constrained, 0, []);
+}
+
+function globChoiceWitness(
+  choices: readonly (readonly string[])[],
+  index: number,
+  selected: readonly string[],
+): string | undefined {
+  if (index === choices.length) {
+    return globPatternsIntersectionWitness(...selected);
+  }
+
+  for (const pattern of choices[index]) {
+    const witness = globChoiceWitness(choices, index + 1, [
+      ...selected,
+      pattern,
+    ]);
+    if (witness !== undefined) {
+      return witness;
+    }
+  }
+
+  return undefined;
+}
+
+function visibilityIntersectionWitness(
+  selectors: readonly RepositorySelector["visibility"][],
+): "public" | "private" | "internal" | undefined {
+  const candidates = ["public", "private", "internal"] as const;
+
+  return candidates.find((candidate) =>
+    selectors.every((visibility) => {
+      if (visibility === undefined) {
+        return true;
+      }
+      const allowed = Array.isArray(visibility) ? visibility : [visibility];
+      return allowed.includes(candidate);
+    })
+  );
+}
+
+function mergeProperties(
+  selectors: readonly (
+    Readonly<Record<string, PropertyValue>> | undefined
+  )[],
+): Readonly<Record<string, PropertyValue>> {
+  const result: Record<string, PropertyValue> = {};
+
+  for (const properties of selectors) {
+    if (properties === undefined) {
+      continue;
+    }
+    Object.assign(result, properties);
+  }
+
+  return result;
 }
 
 function emptyCurrentState(repository: string): CurrentState {
