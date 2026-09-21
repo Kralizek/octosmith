@@ -17,6 +17,9 @@ import applyWorkflowTemplate from "./templates/workflows/apply.yml" with {
 import streamingApplyWorkflowTemplate from "./templates/workflows/apply-streaming.yml" with {
   type: "text",
 };
+import streamingApplyScriptTemplate from "./templates/scripts/octosmith-apply-streaming.sh" with {
+  type: "text",
+};
 import readmeTemplate from "./templates/README.md" with { type: "text" };
 import workflowsReadmeTemplate from "./templates/readme/workflows.md" with {
   type: "text",
@@ -95,6 +98,13 @@ export function buildScaffold(
       path: "hooksmith.config.ts",
       content: hooksmithTemplate,
     });
+
+    if (options.workflows) {
+      files.push({
+        path: ".github/scripts/octosmith-apply-streaming.sh",
+        content: streamingApplyScriptTemplate,
+      });
+    }
   }
 
   if (options.workflows) {
