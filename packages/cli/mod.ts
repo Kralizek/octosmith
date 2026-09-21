@@ -7,7 +7,6 @@
  * @module
  */
 
-
 import { Command } from "@cliffy/command";
 import {
   loadConfigurationDirectory,
