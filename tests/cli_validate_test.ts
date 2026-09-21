@@ -158,7 +158,10 @@ Deno.test("validate rejects literal scoped repositories without a template", asy
       errors.push(values.map(String).join(" "));
 
     assertEquals(await main(["validate", "--path", root]), 1);
-    assertStringIncludes(errors.join("\n"), "cannot match any configured template");
+    assertStringIncludes(
+      errors.join("\n"),
+      "cannot match any configured template",
+    );
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
