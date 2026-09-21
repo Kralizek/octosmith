@@ -4,6 +4,7 @@ import { Command } from "@cliffy/command";
 import {
   loadConfigurationDirectory,
   renderReport,
+  validateConfigurationDirectory,
   type Report,
   type RepositoryReport,
 } from "@octosmith/octosmith";
@@ -38,6 +39,29 @@ function createCli(
     .action(function () {
       this.showHelp();
     });
+
+  root.command(
+    "validate",
+    new Command()
+      .description("Validate configuration without accessing GitHub.")
+      .option("-p, --path <path:string>", "Configuration directory.", {
+        default: ".",
+      })
+      .option("--format <format:string>", "Output format: text or json.", {
+        default: "text",
+      })
+      .action(async (commandOptions) => {
+        const format = parseOutputFormat(commandOptions.format);
+        await validateConfigurationDirectory(commandOptions.path);
+        write(
+          renderOutput(
+            format,
+            { valid: true },
+            () => "Configuration is valid.",
+          ),
+        );
+      }),
+  );
 
   for (const mode of ["plan", "apply"] as const) {
     root.command(
