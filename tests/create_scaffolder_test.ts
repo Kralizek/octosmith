@@ -285,6 +285,14 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   );
   assertStringIncludes(
     readme?.content ?? "",
+    "Bash 5.1 or newer",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    "```bash",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
     "docker run --rm --name",
   );
   assertStringIncludes(
