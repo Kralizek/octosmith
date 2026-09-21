@@ -34,6 +34,7 @@ import manualEventStreamingReadmeTemplate from "./templates/readme/event-streami
   type: "text",
 };
 
+/** Describes scaffold options. */
 export interface ScaffoldOptions {
   readonly targetDirectory: string;
   readonly organization: string;
@@ -43,6 +44,7 @@ export interface ScaffoldOptions {
   readonly eventStreaming: boolean;
 }
 
+/** Describes scaffold file. */
 export interface ScaffoldFile {
   readonly path: string;
   readonly content: string;
