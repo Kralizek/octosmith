@@ -56,6 +56,21 @@ Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
   ]);
 });
 
+Deno.test("action wrapper supports offline validate", async () => {
+  const result = await runActionWrapper({
+    OCTOSMITH_MODE: "validate",
+  });
+
+  assertEquals(result.code, 0);
+  assertEquals(result.args.slice(-5), [
+    "validate",
+    "--path",
+    ".",
+    "--format",
+    "text",
+  ]);
+});
+
 Deno.test("action wrapper applies optional input defaults", async () => {
   const result = await runActionWrapper({
     OCTOSMITH_MODE: "plan",
@@ -76,7 +91,7 @@ for (
     [
       "mode",
       { OCTOSMITH_MODE: "invalid" },
-      "mode must be either 'plan' or 'apply'",
+      "mode must be 'validate', 'plan', or 'apply'",
     ],
     [
       "format",
