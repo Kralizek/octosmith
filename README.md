@@ -1,80 +1,129 @@
 # OctoSmith
 
-A toolkit for defining, validating, planning, and applying GitHub configuration
-as code.
+Declarative desired-state management for GitHub repositories.
+
+OctoSmith lets an organization describe which repositories it manages, assign
+each repository to a template, inspect the changes required to reach that
+desired state, and apply those changes through the CLI or GitHub Actions.
+
+## Quick start
+
+Create a control repository:
+
+```sh
+deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme
+```
+
+The generated repository starts deliberately small:
+
+```text
+github-config/
+├── .github/
+│   └── workflows/
+│       ├── octosmith-apply.yml
+│       └── octosmith-validate.yml
+├── templates/
+│   └── default.yml
+├── octosmith.yml
+├── README.md
+└── .gitignore
+```
+
+Edit `octosmith.yml` to define the repositories in scope, then edit or add
+templates under `templates/` to describe their desired state.
+
+The generated pull-request workflow validates configuration offline without
+organization credentials. The default-branch workflow applies the configuration
+using the `OCTOSMITH_TOKEN` secret.
+
+For non-interactive scaffolding, options after Deno's `--` separator include:
+
+- `--organization <name>`
+- `--collection-management <explicit|strict>`
+- `--default-branch <name>`
+- `--no-workflows`
+- `--event-streaming`
+
+## How OctoSmith works
+
+OctoSmith follows the same pipeline whether it runs locally or in GitHub
+Actions:
+
+1. Load and validate the configuration directory.
+2. Discover repositories inside `repositories.scope`.
+3. Resolve each repository to exactly one matching template.
+4. Read the current GitHub state.
+5. Build a plan from current state to desired state.
+6. Report the plan or apply its operations.
+
+The default collection-management mode is `explicit`: OctoSmith manages only
+members explicitly declared by configuration. `strict` makes supported named
+collections authoritative and can remove undeclared members.
+
+See the [library package README](packages/octosmith/README.md) for the
+configuration model and programmatic API.
+
+## Run OctoSmith
+
+### CLI
+
+Install the CLI:
+
+```sh
+deno install -A -n octosmith jsr:@octosmith/cli@0
+```
+
+Then validate, plan, or apply:
+
+```sh
+octosmith validate --path .
+octosmith plan --path .
+octosmith apply --path .
+```
+
+`plan` and `apply` use `GITHUB_TOKEN`. `validate` is fully offline.
+
+See the [CLI package README](packages/cli/README.md) for command options,
+targeted runs, output formats, exit behavior, and event output.
+
+### GitHub Action
+
+The repository also ships a GitHub Action:
+
+```yaml
+- uses: Kralizek/octosmith@v0
+  with:
+    mode: apply
+    github-token: ${{ secrets.OCTOSMITH_TOKEN }}
+```
+
+Supported modes are `validate`, `plan`, and `apply`. The moving `v0` tag tracks
+the latest compatible 0.x Action release.
+
+## Event streaming
+
+The CLI can emit one NDJSON resource event per repository while planning or
+applying. The output path can be a normal file, FIFO, or another writable path.
+
+The scaffolder's `--event-streaming` option generates a Hooksmith example that
+streams live `resource.applied` events while OctoSmith is running. Hooksmith is
+an optional consumer; the OctoSmith library itself does not depend on Hooksmith
+for apply behavior.
 
 ## Packages
 
-- `@octosmith/octosmith` — OctoSmith domain models, planning, reporting, and
-  GitHub integration.
-- `@octosmith/cli` — command-line interface.
-
-## Create a control repository
-
-Scaffold a conservative OctoSmith organization control repository with:
-
-```sh
-deno create jsr:@octosmith/octosmith github-config
-```
-
-The scaffolder prompts for the GitHub organization when it is not supplied. For
-non-interactive use, pass template options after Deno's `--` separator, for
-example:
-
-```sh
-deno create jsr:@octosmith/octosmith github-config -- --organization acme
-```
-
-Additional options are `--collection-management explicit|strict`,
-`--default-branch <name>`, `--no-workflows`, and `--event-streaming`.
-
-When `--event-streaming` is enabled, the generated apply workflow uses a local
-FIFO to stream `resource.applied` repository events into Hooksmith while
-OctoSmith is still running. The generated `hooksmith.config.ts` simply logs each
-applied repository and is intended as a starting point for richer reactions.
-
-## GitHub Action
-
-Use the repository-level Action to run the OctoSmith CLI from a workflow:
-
-```yaml
-steps:
-  - uses: actions/checkout@v7
-
-  - uses: Kralizek/octosmith@v0
-    with:
-      mode: apply
-      github-token: ${{ secrets.OCTOSMITH_TOKEN }}
-```
-
-The Action delegates directly to the `@octosmith/cli` package source shipped in
-the same Action release, following the same distribution pattern as Hooksmith.
-It does not maintain a separate Action-specific CLI adapter.
-
-Supported inputs are:
-
-- `mode`: required, `validate`, `plan`, or `apply`
-- `path`: configuration directory, default `.`
-- `github-token`: GitHub credential required by `plan` and `apply`; not required
-  by `validate`
-- `repository`: optional repository target
-- `format`: `text` or `json`, default `text`
-- `verbose`: `true` or `false`, default `false`
-- `events-output`: optional writable path for NDJSON Hooksmith resource events
-
-The token is passed only through `GITHUB_TOKEN`; it is never added to CLI
-arguments or output. The token must be able to read every organization and
-repository resource used by `plan`. For `apply`, grant the corresponding write
-permission for every resource OctoSmith is configured to manage. In most
-organization-wide workflows this means using a fine-grained personal access
-token. A GitHub App can also be used, but its short-lived installation token
-should be minted during the workflow rather than stored as a long-lived secret.
-
-Action releases maintain a moving major tag such as `v0` pointing at the latest
-compatible 0.x release.
+| Package | Purpose |
+| --- | --- |
+| [`@octosmith/octosmith`](packages/octosmith/README.md) | Configuration, desired/current state models, planning, reporting, GitHub integration, and the control-repository scaffolder |
+| [`@octosmith/cli`](packages/cli/README.md) | Command-line interface for validate, plan, apply, reporting, and event output |
 
 ## Examples
 
-See [`examples/configuration`](examples/configuration) for a sample
-configuration directory covering repository scope, typed repository templates,
-and managed files.
+[`examples/configuration`](examples/configuration) contains a fuller
+configuration with repository selectors, repository settings, rulesets,
+environments, teams, and managed files.
+
+## Versioning
+
+OctoSmith is currently on the 0.x release line. The public surface is usable,
+but configuration and APIs may still evolve before 1.0.
