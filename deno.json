@@ -13,9 +13,10 @@
     "@hooksmith/core": "jsr:@hooksmith/core@^0.12.0"
   },
   "tasks": {
-    "check": "deno fmt --check && deno lint && deno test -A",
+    "check": "deno fmt --check && deno lint && deno task check:docs && deno test -A",
     "test": "deno test -A",
-    "cli": "deno run -A packages/cli/mod.ts"
+    "cli": "deno run -A packages/cli/mod.ts",
+    "check:docs": "deno run --allow-read=packages scripts/check_export_docs.ts"
   },
   "lock": false
 }
