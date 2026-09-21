@@ -198,6 +198,29 @@ Deno.test("create scaffolder preserves placeholder-like branch names", () => {
   assertEquals(push.branches, ["@@RELEASE@@"]);
 });
 
+Deno.test("create scaffolder escapes GitHub branch glob metacharacters", () => {
+  const files = buildScaffold({
+    targetDirectory: "control",
+    organization: "acme",
+    collectionManagement: "explicit",
+    defaultBranch: "!release+candidate",
+    workflows: true,
+    eventStreaming: false,
+  });
+
+  const applyWorkflowFile = files.find((file) =>
+    file.path === ".github/workflows/octosmith-apply.yml"
+  );
+  const applyWorkflow = parse(applyWorkflowFile?.content ?? "") as Record<
+    string,
+    unknown
+  >;
+  const trigger = applyWorkflow.on as Record<string, unknown>;
+  const push = trigger.push as Record<string, unknown>;
+
+  assertEquals(push.branches, ["\\!release\\+candidate"]);
+});
+
 Deno.test("create scaffolder serializes interpolated YAML scalars", () => {
   const files = buildScaffold({
     targetDirectory: "true",
@@ -271,6 +294,14 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   assertStringIncludes(
     readme?.content ?? "",
     "jsr:@hooksmith/cli@0 stream",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    "octosmith_pid=$!",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    "wait -n -p completed_pid",
   );
   assertStringIncludes(
     readme?.content ?? "",
@@ -410,6 +441,31 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
 
   assertStringIncludes(readme?.content ?? "", "Event streaming with Hooksmith");
   assertStringIncludes(readme?.content ?? "", "local FIFO");
+});
+
+Deno.test("create scaffolder does not create invalid target directories", async () => {
+  const root = await Deno.makeTempDir();
+  const target = join(root, "control-*");
+
+  try {
+    await assertRejects(
+      () =>
+        writeScaffold({
+          targetDirectory: target,
+          organization: "acme",
+          collectionManagement: "explicit",
+          defaultBranch: "main",
+          workflows: false,
+          eventStreaming: false,
+        }),
+      Error,
+      "must not contain wildcard characters",
+    );
+
+    await assertRejects(() => Deno.stat(target), Deno.errors.NotFound);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("create scaffolder does not overwrite non-empty targets", async () => {
