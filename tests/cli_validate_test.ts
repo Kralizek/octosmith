@@ -165,6 +165,138 @@ Deno.test("validate rejects literal scoped repositories without a template", asy
   }
 });
 
+Deno.test("validate rejects overlaps that require combined metadata", async () => {
+  const root = await Deno.makeTempDir();
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        '    names: ["*"]',
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/team.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  teams:",
+        "    - platform",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/property.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  properties:",
+        "    tier: backend",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    console.error = (...values: unknown[]) =>
+      errors.push(values.map(String).join(" "));
+
+    assertEquals(await main(["validate", "--path", root]), 1);
+    assertStringIncludes(errors.join("\n"), "templates can overlap");
+  } finally {
+    console.error = originalError;
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate accepts literal scope when metadata could satisfy template", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/team.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "  teams:",
+        "    - platform",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    assertEquals(await main(["validate", "--path", root]), 0);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate allows incompatible metadata selectors", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        '    names: ["*"]',
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/public.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  visibility: public",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/private.yml",
+      [
+        "kind: repository",
+        "match:",
+        "  visibility: private",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    assertEquals(await main(["validate", "--path", root]), 0);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 async function validConfiguration(includeManagedFile = true): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
