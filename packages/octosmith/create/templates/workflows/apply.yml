@@ -1,0 +1,25 @@
+name: OctoSmith apply
+
+on:
+  push:
+    branches:
+      - @@DEFAULT_BRANCH@@
+
+permissions:
+  contents: read
+
+concurrency:
+  group: octosmith-apply
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: Kralizek/octosmith@v0
+        with:
+          mode: apply
+          path: .
+          github-token: ${{ secrets.OCTOSMITH_TOKEN }}
