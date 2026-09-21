@@ -284,7 +284,17 @@ jobs:
         run: deno task check
 
       - name: Validate packages
-        run: deno publish --dry-run
+        run: |
+          set -euo pipefail
+          deno publish --dry-run
+
+          while IFS= read -r member; do
+            (
+              cd "$member"
+              deno publish --dry-run
+              deno pack --dry-run
+            )
+          done < <(jq -r '.workspace[]' deno.json)
 
       - name: Pack release assets
         env:
