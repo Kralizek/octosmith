@@ -109,7 +109,11 @@ export function buildScaffold(
           options.eventStreaming
             ? streamingApplyWorkflowTemplate
             : applyWorkflowTemplate,
-          { "@@DEFAULT_BRANCH@@": yamlScalar(options.defaultBranch) },
+          {
+            "@@DEFAULT_BRANCH@@": yamlScalar(
+              githubBranchPatternLiteral(options.defaultBranch),
+            ),
+          },
         ),
       },
     );
@@ -121,9 +125,10 @@ export function buildScaffold(
 export async function writeScaffold(
   options: ScaffoldOptions,
 ): Promise<void> {
+  const files = buildScaffold(options);
   await ensureTargetDirectoryIsAvailable(options.targetDirectory);
 
-  for (const file of buildScaffold(options)) {
+  for (const file of files) {
     const path = join(options.targetDirectory, file.path);
     await Deno.mkdir(dirname(path), { recursive: true });
     await Deno.writeTextFile(path, file.content);
@@ -279,6 +284,10 @@ function renderTemplate(
     /@@[A-Z0-9_]+@@/g,
     (token) => replacements[token] ?? token,
   );
+}
+
+function githubBranchPatternLiteral(branch: string): string {
+  return branch.replace(/[\\*?+\[\]!(){}|@]/g, (character) => "\\" + character);
 }
 
 function yamlScalar(value: string): string {
