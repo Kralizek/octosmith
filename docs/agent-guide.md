@@ -63,8 +63,8 @@ planning behavior belongs in the engine.
 
 ### Scaffolder
 
-Generated files are templates under `packages/octosmith/create/templates`.
-Keep generated workflows thin; substantial shell logic should live in generated
+Generated files are templates under `packages/octosmith/create/templates`. Keep
+generated workflows thin; substantial shell logic should live in generated
 script files rather than large YAML blocks.
 
 ### Release workflow
