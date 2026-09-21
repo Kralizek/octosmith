@@ -26,6 +26,8 @@ jobs:
 
       - name: Apply with event streaming
         shell: bash
+        env:
+          OCTOSMITH_GITHUB_TOKEN: ${{ secrets.OCTOSMITH_TOKEN }}
         run: |
           set -euo pipefail
 
@@ -42,12 +44,13 @@ jobs:
           }
           trap cleanup EXIT
 
-          env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli@0 stream \
+          env -u GITHUB_TOKEN -u OCTOSMITH_GITHUB_TOKEN \
+            deno run -A jsr:@hooksmith/cli@0 stream \
             --config ./hooksmith.config.ts \
             < "$events_pipe" &
           hooksmith_pid=$!
 
-          GITHUB_TOKEN="${{ secrets.OCTOSMITH_TOKEN }}" \
+          GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN" \
             deno run -A jsr:@octosmith/cli@0 apply \
               --path . \
               --events-output "$events_pipe" &
