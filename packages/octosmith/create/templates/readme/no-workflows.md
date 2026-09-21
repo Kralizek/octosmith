@@ -1,5 +1,5 @@
 ## Operating model
 
 No workflows were generated because scaffolding used `--no-workflows`. Run
-OctoSmith manually or add trusted validation/plan/apply workflows before relying
+Octosmith manually or add trusted validation/plan/apply workflows before relying
 on this repository for automation.
