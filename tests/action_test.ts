@@ -71,6 +71,22 @@ Deno.test("action wrapper supports offline validate", async () => {
   ]);
 });
 
+Deno.test("action wrapper defaults whitespace-only format to text", async () => {
+  const result = await runActionWrapper({
+    OCTOSMITH_MODE: "plan",
+    OCTOSMITH_FORMAT: "   ",
+  });
+
+  assertEquals(result.code, 0);
+  assertEquals(result.args.slice(-5), [
+    "plan",
+    "--path",
+    ".",
+    "--format",
+    "text",
+  ]);
+});
+
 Deno.test("action wrapper applies optional input defaults", async () => {
   const result = await runActionWrapper({
     OCTOSMITH_MODE: "plan",
