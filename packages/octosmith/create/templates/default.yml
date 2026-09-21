@@ -1,0 +1,5 @@
+kind: repository
+match:
+  names:
+    - @@REPOSITORY_NAME@@
+repository: {}
