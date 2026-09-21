@@ -295,7 +295,7 @@ for (
           "",
         ].join("\n"),
       );
-      let sourceValue = source;
+      let sourceValue: string = source;
       if (source.startsWith("..")) {
         outsideFile = await Deno.makeTempFile({
           dir: join(root, ".."),
