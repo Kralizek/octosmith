@@ -1,11 +1,11 @@
 import {
   buildPlan,
-  loadConfigurationDirectory,
-  resolveDesiredState,
   type CurrentState,
+  loadConfigurationDirectory,
   type LoadedConfiguration,
   type RepositoryMetadata,
   type RepositoryTemplate,
+  resolveDesiredState,
 } from "../mod.ts";
 
 /**
@@ -16,7 +16,9 @@ import {
  * local files, and exercises static planner invariants against an empty current
  * state.
  */
-export async function validateConfigurationDirectory(root: string): Promise<void> {
+export async function validateConfigurationDirectory(
+  root: string,
+): Promise<void> {
   const loaded = await loadConfigurationDirectory(root);
 
   for (const [name, template] of Object.entries(loaded.templates)) {
