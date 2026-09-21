@@ -222,7 +222,9 @@ function globPatternsCanOverlap(...patterns: readonly string[]): boolean {
     }
     visited.add(key);
 
-    if (positions.every((position, index) => position === patterns[index].length)) {
+    if (
+      positions.every((position, index) => position === patterns[index].length)
+    ) {
       return true;
     }
 
@@ -276,7 +278,8 @@ function tokensCanMatchSameCharacter(
   ...tokens: readonly (string | null)[]
 ): boolean {
   const literals = tokens.filter((token): token is string => token !== null);
-  return literals.length === 0 || literals.every((token) => token === literals[0]);
+  return literals.length === 0 ||
+    literals.every((token) => token === literals[0]);
 }
 
 function repositoryForTemplate(
