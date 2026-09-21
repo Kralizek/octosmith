@@ -121,6 +121,7 @@ Deno.test("generated scaffold validates as OctoSmith configuration", async () =>
     );
 
     assertStringIncludes(validateWorkflow, "pull_request:");
+    assertStringIncludes(validateWorkflow, "persist-credentials: false");
     assertStringIncludes(validateWorkflow, "uses: Kralizek/octosmith@v0");
     assertStringIncludes(validateWorkflow, "mode: validate");
     assertEquals(validateWorkflow.includes("OCTOSMITH_TOKEN"), false);
@@ -224,6 +225,10 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   );
   assertStringIncludes(hooksmith?.content ?? "", "listeners: [logEvent()]");
 
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    "persist-credentials: false",
+  );
   assertStringIncludes(applyWorkflow?.content ?? "", "mkfifo");
   assertStringIncludes(
     applyWorkflow?.content ?? "",
