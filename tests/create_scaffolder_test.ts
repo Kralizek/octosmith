@@ -245,6 +245,10 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   );
   assertStringIncludes(
     readme?.content ?? "",
+    "jsr:@hooksmith/cli@0 stream",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
     'GITHUB_TOKEN="$OCTOSMITH_TOKEN"',
   );
   assertStringIncludes(
@@ -306,7 +310,7 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   assertStringIncludes(applyWorkflow?.content ?? "", "mkfifo");
   assertStringIncludes(
     applyWorkflow?.content ?? "",
-    "jsr:@hooksmith/cli stream",
+    "jsr:@hooksmith/cli@0 stream",
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
@@ -318,7 +322,7 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
-    "env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli stream",
+    "env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli@0 stream",
   );
   assertEquals(
     (applyWorkflow?.content ?? "").includes("OCTOSMITH_GITHUB_TOKEN"),
