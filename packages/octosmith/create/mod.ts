@@ -1,5 +1,17 @@
 import { basename, dirname, join } from "@std/path";
 import type { CollectionManagementMode } from "../types.ts";
+import configurationTemplate from "./templates/octosmith.yml" with { type: "text" };
+import repositoryTemplate from "./templates/default.yml" with { type: "text" };
+import gitignoreTemplate from "./templates/gitignore" with { type: "text" };
+import hooksmithTemplate from "./templates/hooksmith.config.ts" with { type: "text" };
+import validateWorkflowTemplate from "./templates/workflows/validate.yml" with { type: "text" };
+import applyWorkflowTemplate from "./templates/workflows/apply.yml" with { type: "text" };
+import streamingApplyWorkflowTemplate from "./templates/workflows/apply-streaming.yml" with { type: "text" };
+import readmeTemplate from "./templates/README.md" with { type: "text" };
+import workflowsReadmeTemplate from "./templates/readme/workflows.md" with { type: "text" };
+import noWorkflowsReadmeTemplate from "./templates/readme/no-workflows.md" with { type: "text" };
+import eventStreamingReadmeTemplate from "./templates/readme/event-streaming.md" with { type: "text" };
+import manualEventStreamingReadmeTemplate from "./templates/readme/event-streaming-manual.md" with { type: "text" };
 
 export interface ScaffoldOptions {
   readonly targetDirectory: string;
@@ -19,43 +31,49 @@ export function buildScaffold(
   options: ScaffoldOptions,
 ): readonly ScaffoldFile[] {
   const repositoryName = inferRepositoryName(options.targetDirectory);
+  const common = {
+    "@@ORGANIZATION@@": yamlScalar(options.organization),
+    "@@REPOSITORY_NAME@@": yamlScalar(repositoryName),
+    "@@COLLECTION_MANAGEMENT@@": yamlScalar(options.collectionManagement),
+  };
 
   const files: ScaffoldFile[] = [
     {
       path: "octosmith.yml",
-      content: `version: 1
-organization: ${yamlScalar(options.organization)}
-repositories:
-  scope:
-    names:
-      - ${yamlScalar(repositoryName)}
-  settings:
-    collection_management: ${yamlScalar(options.collectionManagement)}
-`,
+      content: renderTemplate(configurationTemplate, common),
     },
     {
       path: "templates/default.yml",
-      content: `kind: repository
-match:
-  names:
-    - ${yamlScalar(repositoryName)}
-repository: {}
-`,
+      content: renderTemplate(repositoryTemplate, common),
     },
     {
       path: ".gitignore",
-      content: ".DS_Store\n",
+      content: gitignoreTemplate,
     },
     {
       path: "README.md",
-      content: buildReadme(options, repositoryName),
+      content: renderTemplate(readmeTemplate, {
+        "@@ORGANIZATION@@": options.organization,
+        "@@REPOSITORY_NAME_RAW@@": repositoryName,
+        "@@COLLECTION_MANAGEMENT_RAW@@": options.collectionManagement,
+        "@@WORKFLOW_DOCUMENTATION@@": (
+          options.workflows ? workflowsReadmeTemplate : noWorkflowsReadmeTemplate
+        ).trim(),
+        "@@EVENT_STREAMING_DOCUMENTATION@@": options.eventStreaming
+          ? (
+            options.workflows
+              ? eventStreamingReadmeTemplate
+              : manualEventStreamingReadmeTemplate
+          ).trim()
+          : "",
+      }),
     },
   ];
 
   if (options.eventStreaming) {
     files.push({
       path: "hooksmith.config.ts",
-      content: buildHooksmithConfiguration(),
+      content: hooksmithTemplate,
     });
   }
 
@@ -63,13 +81,15 @@ repository: {}
     files.push(
       {
         path: ".github/workflows/octosmith-validate.yml",
-        content: buildValidateWorkflow(),
+        content: validateWorkflowTemplate,
       },
       {
         path: ".github/workflows/octosmith-apply.yml",
-        content: buildApplyWorkflow(
-          options.defaultBranch,
-          options.eventStreaming,
+        content: renderTemplate(
+          options.eventStreaming
+            ? streamingApplyWorkflowTemplate
+            : applyWorkflowTemplate,
+          { "@@DEFAULT_BRANCH@@": yamlScalar(options.defaultBranch) },
         ),
       },
     );
@@ -237,264 +257,29 @@ async function ensureTargetDirectoryIsAvailable(path: string): Promise<void> {
   }
 }
 
-function buildValidateWorkflow(): string {
-  return `name: OctoSmith validate
-
-on:
-  pull_request:
-
-permissions:
-  contents: read
-
-jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: Kralizek/octosmith@v0
-        with:
-          mode: validate
-          path: .
-`;
-}
-
-function buildApplyWorkflow(
-  defaultBranch: string,
-  eventStreaming: boolean,
+function renderTemplate(
+  template: string,
+  replacements: Readonly<Record<string, string>>,
 ): string {
-  if (!eventStreaming) {
-    return `name: OctoSmith apply
+  let rendered = template;
 
-on:
-  push:
-    branches:
-      - ${yamlScalar(defaultBranch)}
-
-permissions:
-  contents: read
-
-concurrency:
-  group: octosmith-apply
-  cancel-in-progress: false
-
-jobs:
-  apply:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: Kralizek/octosmith@v0
-        with:
-          mode: apply
-          path: .
-          github-token: \${{ secrets.OCTOSMITH_TOKEN }}
-`;
+  for (const [token, value] of Object.entries(replacements)) {
+    rendered = rendered.replaceAll(token, value);
   }
 
-  return `name: OctoSmith apply
+  const unresolved = rendered.match(/@@[A-Z0-9_]+@@/g);
+  if (unresolved) {
+    throw new Error(
+      "Unresolved scaffold template placeholders: " +
+        [...new Set(unresolved)].join(", "),
+    );
+  }
 
-on:
-  push:
-    branches:
-      - ${yamlScalar(defaultBranch)}
-
-permissions:
-  contents: read
-
-concurrency:
-  group: octosmith-apply
-  cancel-in-progress: false
-
-jobs:
-  apply:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Apply with event streaming
-        shell: bash
-        env:
-          GITHUB_TOKEN: \${{ secrets.OCTOSMITH_TOKEN }}
-        run: |
-          set -euo pipefail
-
-          events_pipe="$RUNNER_TEMP/octosmith-events"
-          rm -f "$events_pipe"
-          mkfifo "$events_pipe"
-
-          hooksmith_pid=""
-          cleanup() {
-            rm -f "$events_pipe"
-            if [[ -n "$hooksmith_pid" ]] && kill -0 "$hooksmith_pid" 2>/dev/null; then
-              kill "$hooksmith_pid" 2>/dev/null || true
-            fi
-          }
-          trap cleanup EXIT
-
-          env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli stream \
-            --config ./hooksmith.config.ts \
-            < "$events_pipe" &
-          hooksmith_pid=$!
-
-          GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN" \
-            deno run -A jsr:@octosmith/cli@0 apply \
-              --path . \
-              --events-output "$events_pipe" &
-          octosmith_pid=$!
-
-          set +e
-          wait -n -p completed_pid "$hooksmith_pid" "$octosmith_pid"
-          first_status=$?
-          set -e
-
-          if [[ "$completed_pid" == "$hooksmith_pid" ]]; then
-            if [[ "$first_status" -ne 0 ]]; then
-              kill "$octosmith_pid" 2>/dev/null || true
-              wait "$octosmith_pid" 2>/dev/null || true
-              exit "$first_status"
-            fi
-
-            set +e
-            wait "$octosmith_pid"
-            octosmith_status=$?
-            set -e
-
-            exit "$octosmith_status"
-          fi
-
-          if [[ "$first_status" -ne 0 ]]; then
-            kill "$hooksmith_pid" 2>/dev/null || true
-            wait "$hooksmith_pid" 2>/dev/null || true
-            exit "$first_status"
-          fi
-
-          set +e
-          wait "$hooksmith_pid"
-          hooksmith_status=$?
-          set -e
-
-          exit "$hooksmith_status"
-`;
+  return rendered;
 }
 
-function buildHooksmithConfiguration(): string {
-  return `import type { Config } from "jsr:@hooksmith/core";
-import {
-  all,
-  eventType,
-  logEvent,
-  subjectKind,
-} from "jsr:@hooksmith/standard";
-
-export default {
-  routes: [{
-    name: "octosmith-applied-repositories",
-    when: all(
-      eventType("resource.applied"),
-      subjectKind("github.repository"),
-    ),
-    listeners: [logEvent()],
-  }],
-} satisfies Config;
-`;
-}
 function yamlScalar(value: string): string {
   return JSON.stringify(value);
-}
-function buildReadme(
-  options: ScaffoldOptions,
-  repositoryName: string,
-): string {
-  const workflowDocumentation = options.workflows
-    ? `## Operating model
-
-1. Open a pull request with configuration changes.
-2. The OctoSmith validate workflow checks the proposed configuration offline,
-   without organization credentials or GitHub API access.
-3. Review and merge the pull request.
-4. The OctoSmith apply workflow applies the desired state.
-
-Use \`octosmith plan\` separately when a trusted operator wants to inspect live
-GitHub drift before merge. Planning requires read access to the configured
-organization; validation does not.`
-    : `## Operating model
-
-No workflows were generated because scaffolding used \`--no-workflows\`. Run
-OctoSmith manually or add trusted validation/plan/apply workflows before relying
-on this repository for automation.`;
-
-  const eventStreamingDocumentation = options.eventStreaming
-    ? options.workflows
-      ? `## Event streaming with Hooksmith
-
-The apply workflow creates a local FIFO, starts \`hooksmith stream\` in the
-background using \`hooksmith.config.ts\`, runs the pinned 0.x
-\`jsr:@octosmith/cli@0\` package with \`--events-output\` pointed at that
-FIFO. Hooksmith runs without \`GITHUB_TOKEN\`; the organization credential is
-passed only to the OctoSmith subprocess. Hooksmith and OctoSmith run as
-supervised sibling processes: an early Hooksmith failure terminates OctoSmith,
-while a successful Hooksmith completion still waits for and propagates
-OctoSmith's final apply status. The direct CLI invocation is
-intentional here because both processes must share one shell for supervision.
-Events therefore reach Hooksmith as each repository finishes.
-
-The generated Hooksmith configuration handles \`resource.applied\` events for
-\`github.repository\` subjects and logs each applied repository. Extend that
-configuration with additional routes/listeners when you want notifications or
-other reactions.`
-      : `## Event streaming with Hooksmith
-
-\`hooksmith.config.ts\` was generated because scaffolding used
-\`--event-streaming\`, but no workflows were generated. To stream manually,
-create a FIFO, run \`hooksmith stream\` against the generated configuration in
-the background, run OctoSmith with \`--events-output\` pointing at the FIFO,
-and wait for Hooksmith to finish.`
-    : "";
-
-  return `# OctoSmith control repository
-
-This repository declares the desired GitHub state for **${options.organization}**.
-
-## Bootstrap
-
-After scaffolding, initialize and push this directory as the organization's
-OctoSmith control repository. Keep it private if its plans may reveal private
-repository configuration.
-
-Create an \`OCTOSMITH_TOKEN\` Actions secret containing a fine-grained personal
-access token with the permissions required by apply. The pull-request validation
-workflow does not use this secret. For renewable credentials, replace the static
-secret in the generated workflows with a GitHub App token minted at workflow
-runtime.
-
-${workflowDocumentation}
-
-The generated configuration initially scopes OctoSmith to \`${repositoryName}\`
-only and uses \`${options.collectionManagement}\` collection management. Expand
-the scope and templates deliberately as you adopt more repositories.
-
-${eventStreamingDocumentation}
-
-## Local usage
-
-Validation is offline and does not require \`GITHUB_TOKEN\`:
-
-\`\`\`sh
-deno run -A jsr:@octosmith/cli validate --path .
-\`\`\`
-
-Set \`GITHUB_TOKEN\` before running plan or apply locally:
-
-\`\`\`sh
-deno run -A jsr:@octosmith/cli plan --path .
-deno run -A jsr:@octosmith/cli apply --path .
-\`\`\`
-`;
 }
 if (import.meta.main) {
   const options = parseScaffoldArguments(Deno.args);
