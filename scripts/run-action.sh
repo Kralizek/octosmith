@@ -16,9 +16,9 @@ verbose="$(trim "${OCTOSMITH_VERBOSE:-false}")"
 events_output="$(trim "${OCTOSMITH_EVENTS_OUTPUT:-}")"
 
 case "$mode" in
-  plan|apply) ;;
+  validate|plan|apply) ;;
   *)
-    echo "::error::mode must be either 'plan' or 'apply'." >&2
+    echo "::error::mode must be 'validate', 'plan', or 'apply'." >&2
     exit 1
     ;;
 esac
