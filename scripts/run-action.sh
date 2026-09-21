@@ -67,6 +67,10 @@ if [[ "$mode" == "validate" ]]; then
     echo "::error::events-output is not supported for validate." >&2
     exit 1
   fi
+
+  deno run --config "$GITHUB_ACTION_PATH/deno.json" -A \
+    "$GITHUB_ACTION_PATH/scripts/validate-file-sources.ts" \
+    "$path"
 fi
 
 args=("$mode")
@@ -83,4 +87,6 @@ if [[ -n "$events_output" ]]; then
   args+=(--events-output "$events_output")
 fi
 
-deno run --config "$GITHUB_ACTION_PATH/deno.json" -A   "$GITHUB_ACTION_PATH/packages/cli/mod.ts"   "${args[@]}"
+deno run --config "$GITHUB_ACTION_PATH/deno.json" -A \
+  "$GITHUB_ACTION_PATH/packages/cli/mod.ts" \
+  "${args[@]}"
