@@ -116,7 +116,10 @@ Deno.test("validate rejects overlapping repository templates", async () => {
       errors.push(values.map(String).join(" "));
 
     assertEquals(await main(["validate", "--path", root]), 1);
-    assertStringIncludes(errors.join("\n"), "templates can overlap within configured scope");
+    assertStringIncludes(
+      errors.join("\n"),
+      "templates can overlap within configured scope",
+    );
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
