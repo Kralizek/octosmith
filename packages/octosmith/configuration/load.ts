@@ -9,6 +9,8 @@ import templateSchema from "./schemas/template.schema.json" with {
   type: "json",
 };
 
+const MAX_CONFIGURATION_FILE_SIZE = 10 * 1024 * 1024;
+
 const validator = new Ajv2020({ allErrors: true, strict: false });
 const validateConfiguration = validator.compile(configurationSchema);
 const validateTemplate = validator.compile(templateSchema);
@@ -53,6 +55,20 @@ async function loadYaml<T>(
   path: string,
   validate: ValidateFunction,
 ): Promise<T> {
+  const info = await Deno.lstat(path);
+  if (!info.isFile) {
+    throw new Error("Configuration file must be a regular file: " + path);
+  }
+
+  if (info.size > MAX_CONFIGURATION_FILE_SIZE) {
+    throw new Error(
+      "Configuration file exceeds the maximum size of " +
+        MAX_CONFIGURATION_FILE_SIZE +
+        " bytes: " +
+        path,
+    );
+  }
+
   const value = parse(await Deno.readTextFile(path));
 
   if (!validate(value)) {
