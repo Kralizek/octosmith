@@ -274,6 +274,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: octosmith-apply
+  cancel-in-progress: false
+
 jobs:
   apply:
     runs-on: ubuntu-latest
@@ -328,14 +332,15 @@ jobs:
           }
           trap cleanup EXIT
 
-          deno run -A jsr:@hooksmith/cli stream \
+          env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli stream \
             --config ./hooksmith.config.ts \
             < "$events_pipe" &
           hooksmith_pid=$!
 
-          deno run -A jsr:@octosmith/cli@0 apply \
-            --path . \
-            --events-output "$events_pipe" &
+          GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN" \
+            deno run -A jsr:@octosmith/cli@0 apply \
+              --path . \
+              --events-output "$events_pipe" &
           octosmith_pid=$!
 
           set +e
@@ -426,9 +431,11 @@ on this repository for automation.`;
 The apply workflow creates a local FIFO, starts \`hooksmith stream\` in the
 background using \`hooksmith.config.ts\`, runs the pinned 0.x
 \`jsr:@octosmith/cli@0\` package with \`--events-output\` pointed at that
-FIFO. Hooksmith and OctoSmith run as supervised sibling processes: an early
-Hooksmith failure terminates OctoSmith, while a successful Hooksmith completion
-still waits for and propagates OctoSmith's final apply status. The direct CLI invocation is
+FIFO. Hooksmith runs without `GITHUB_TOKEN`; the organization credential is
+passed only to the OctoSmith subprocess. Hooksmith and OctoSmith run as
+supervised sibling processes: an early Hooksmith failure terminates OctoSmith,
+while a successful Hooksmith completion still waits for and propagates
+OctoSmith's final apply status. The direct CLI invocation is
 intentional here because both processes must share one shell for supervision.
 Events therefore reach Hooksmith as each repository finishes.
 
