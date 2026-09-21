@@ -25,19 +25,22 @@ GITHUB_TOKEN="$OCTOSMITH_TOKEN" \
     --events-output "$events_pipe"
 octosmith_status=$?
 
+if [ "$octosmith_status" -ne 0 ]; then
+  kill "$hooksmith_pid" 2>/dev/null || true
+  wait "$hooksmith_pid" 2>/dev/null || true
+  rm -f "$events_pipe"
+  exit "$octosmith_status"
+fi
+
 wait "$hooksmith_pid"
 hooksmith_status=$?
 set -e
 
 rm -f "$events_pipe"
-
-if [ "$octosmith_status" -ne 0 ]; then
-  exit "$octosmith_status"
-fi
-
 exit "$hooksmith_status"
 ```
 
 Hooksmith receives neither `GITHUB_TOKEN` nor `OCTOSMITH_TOKEN`; the token is
-injected only into the OctoSmith subprocess. The shell preserves the apply
-failure status, or the Hooksmith failure when apply succeeds.
+injected only into the OctoSmith subprocess. If apply fails before opening the
+FIFO, the shell terminates and reaps Hooksmith before returning the apply
+failure. Otherwise it returns the Hooksmith status.
