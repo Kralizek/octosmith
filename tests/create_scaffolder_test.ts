@@ -135,6 +135,29 @@ Deno.test("generated scaffold validates as OctoSmith configuration", async () =>
   }
 });
 
+Deno.test("create scaffolder preserves placeholder-like branch names", () => {
+  const files = buildScaffold({
+    targetDirectory: "control",
+    organization: "acme",
+    collectionManagement: "explicit",
+    defaultBranch: "@@RELEASE@@",
+    workflows: true,
+    eventStreaming: false,
+  });
+
+  const applyWorkflowFile = files.find((file) =>
+    file.path === ".github/workflows/octosmith-apply.yml"
+  );
+  const applyWorkflow = parse(applyWorkflowFile?.content ?? "") as Record<
+    string,
+    unknown
+  >;
+  const trigger = applyWorkflow.on as Record<string, unknown>;
+  const push = trigger.push as Record<string, unknown>;
+
+  assertEquals(push.branches, ["@@RELEASE@@"]);
+});
+
 Deno.test("create scaffolder serializes interpolated YAML scalars", () => {
   const files = buildScaffold({
     targetDirectory: "true",
@@ -196,6 +219,14 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   assertStringIncludes(
     readme?.content ?? "",
     "Set `GITHUB_TOKEN` before running plan or apply locally",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    "env -u GITHUB_TOKEN -u OCTOSMITH_TOKEN",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    'GITHUB_TOKEN="$OCTOSMITH_TOKEN"',
   );
 });
 
