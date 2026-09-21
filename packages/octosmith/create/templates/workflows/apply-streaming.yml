@@ -31,23 +31,40 @@ jobs:
         run: |
           set -euo pipefail
 
-          events_pipe="$RUNNER_TEMP/octosmith-events"
-          rm -f "$events_pipe"
+          stream_dir="$RUNNER_TEMP/octosmith-hooksmith"
+          events_pipe="$stream_dir/events"
+          hooksmith_container="octosmith-hooksmith-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+          rm -rf "$stream_dir"
+          mkdir -p "$stream_dir"
+          cp ./hooksmith.config.ts "$stream_dir/hooksmith.config.ts"
           mkfifo "$events_pipe"
 
           hooksmith_pid=""
-          cleanup() {
-            rm -f "$events_pipe"
+          stop_hooksmith() {
+            docker rm -f "$hooksmith_container" >/dev/null 2>&1 || true
             if [[ -n "$hooksmith_pid" ]] && kill -0 "$hooksmith_pid" 2>/dev/null; then
               kill "$hooksmith_pid" 2>/dev/null || true
             fi
+            if [[ -n "$hooksmith_pid" ]]; then
+              wait "$hooksmith_pid" 2>/dev/null || true
+            fi
+          }
+
+          cleanup() {
+            stop_hooksmith
+            rm -rf "$stream_dir"
           }
           trap cleanup EXIT
 
           env -u GITHUB_TOKEN -u OCTOSMITH_GITHUB_TOKEN \
-            deno run -A jsr:@hooksmith/cli@0 stream \
-            --config ./hooksmith.config.ts \
-            < "$events_pipe" &
+            docker run --rm --name "$hooksmith_container" -i \
+              --mount type=bind,src="$stream_dir",dst=/hooksmith,readonly \
+              --workdir /hooksmith \
+              denoland/deno:2.x \
+              run -A jsr:@hooksmith/cli@0 stream \
+                --config ./hooksmith.config.ts \
+                < "$events_pipe" &
           hooksmith_pid=$!
 
           GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN" \
@@ -77,8 +94,7 @@ jobs:
           fi
 
           if [[ "$first_status" -ne 0 ]]; then
-            kill "$hooksmith_pid" 2>/dev/null || true
-            wait "$hooksmith_pid" 2>/dev/null || true
+            stop_hooksmith
             exit "$first_status"
           fi
 
