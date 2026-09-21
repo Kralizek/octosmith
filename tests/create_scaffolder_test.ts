@@ -231,6 +231,14 @@ Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
   );
   assertStringIncludes(
     applyWorkflow?.content ?? "",
+    "group: octosmith-apply",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
+    "cancel-in-progress: false",
+  );
+  assertStringIncludes(
+    applyWorkflow?.content ?? "",
     "env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli stream",
   );
   assertStringIncludes(
