@@ -4,6 +4,8 @@ import { Command } from "@cliffy/command";
 import {
   loadConfigurationDirectory,
   renderReport,
+  type Report,
+  type RepositoryReport,
   validateConfigurationDirectory,
   type Report,
   type RepositoryReport,
