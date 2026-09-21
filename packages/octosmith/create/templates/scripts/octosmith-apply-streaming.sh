@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+stream_dir="$RUNNER_TEMP/octosmith-hooksmith"
+events_pipe="$stream_dir/events"
+hooksmith_container="octosmith-hooksmith-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+rm -rf "$stream_dir"
+mkdir -p "$stream_dir"
+cp ./hooksmith.config.ts "$stream_dir/hooksmith.config.ts"
+mkfifo "$events_pipe"
+
+hooksmith_pid=""
+octosmith_pid=""
+
+stop_hooksmith() {
+  docker rm -f "$hooksmith_container" >/dev/null 2>&1 || true
+  if [[ -n "$hooksmith_pid" ]] && kill -0 "$hooksmith_pid" 2>/dev/null; then
+    kill "$hooksmith_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$hooksmith_pid" ]]; then
+    wait "$hooksmith_pid" 2>/dev/null || true
+  fi
+}
+
+cleanup() {
+  if [[ -n "$octosmith_pid" ]] && kill -0 "$octosmith_pid" 2>/dev/null; then
+    kill "$octosmith_pid" 2>/dev/null || true
+  fi
+  if [[ -n "$octosmith_pid" ]]; then
+    wait "$octosmith_pid" 2>/dev/null || true
+  fi
+  stop_hooksmith
+  rm -rf "$stream_dir"
+}
+trap cleanup EXIT
+
+env -u GITHUB_TOKEN -u OCTOSMITH_GITHUB_TOKEN \
+  docker run --rm --name "$hooksmith_container" -i \
+    --mount type=bind,src="$stream_dir",dst=/hooksmith,readonly \
+    --workdir /hooksmith \
+    denoland/deno:2.x \
+    run -A jsr:@hooksmith/cli@0 stream \
+      --config ./hooksmith.config.ts \
+      < "$events_pipe" &
+hooksmith_pid=$!
+
+GITHUB_TOKEN="$OCTOSMITH_GITHUB_TOKEN" \
+  deno run -A jsr:@octosmith/cli@0 apply \
+    --path . \
+    --events-output "$events_pipe" &
+octosmith_pid=$!
+
+set +e
+wait -n -p completed_pid "$hooksmith_pid" "$octosmith_pid"
+first_status=$?
+set -e
+
+if [[ "$completed_pid" == "$hooksmith_pid" ]]; then
+  if [[ "$first_status" -ne 0 ]]; then
+    kill "$octosmith_pid" 2>/dev/null || true
+    wait "$octosmith_pid" 2>/dev/null || true
+    exit "$first_status"
+  fi
+
+  set +e
+  wait "$octosmith_pid"
+  octosmith_status=$?
+  set -e
+
+  exit "$octosmith_status"
+fi
+
+if [[ "$first_status" -ne 0 ]]; then
+  stop_hooksmith
+  exit "$first_status"
+fi
+
+set +e
+wait "$hooksmith_pid"
+hooksmith_status=$?
+set -e
+
+exit "$hooksmith_status"
