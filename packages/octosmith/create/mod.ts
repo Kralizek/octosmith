@@ -386,30 +386,31 @@ function buildReadme(
     ? `## Operating model
 
 1. Open a pull request with configuration changes.
-2. The base-controlled OctoSmith plan workflow checks out the proposed
-   configuration without persisting checkout credentials and shows the expected
-   changes.
+2. The OctoSmith validate workflow checks the proposed configuration offline,
+   without organization credentials or GitHub API access.
 3. Review and merge the pull request.
 4. The OctoSmith apply workflow applies the desired state.
 
-The plan workflow uses \`pull_request_target\` so the secret-bearing workflow
-definition always comes from the base branch. It checks out the pull request
-head only as configuration data; do not add steps that execute code from that
-checkout while \`OCTOSMITH_TOKEN\` is available.`
+Use \`octosmith plan\` separately when a trusted operator wants to inspect live
+GitHub drift before merge. Planning requires read access to the configured
+organization; validation does not.`
     : `## Operating model
 
 No workflows were generated because scaffolding used \`--no-workflows\`. Run
-OctoSmith manually or add trusted plan/apply workflows before relying on this
-repository for automation.`;
+OctoSmith manually or add trusted validation/plan/apply workflows before relying
+on this repository for automation.`;
 
   const eventStreamingDocumentation = options.eventStreaming
     ? options.workflows
       ? `## Event streaming with Hooksmith
 
 The apply workflow creates a local FIFO, starts \`hooksmith stream\` in the
-background using \`hooksmith.config.ts\`, runs OctoSmith with
-\`--events-output\` pointed at that FIFO, and waits for Hooksmith before the
-workflow exits. Events therefore reach Hooksmith as each repository finishes.
+background using \`hooksmith.config.ts\`, runs the pinned 0.x
+\`jsr:@octosmith/cli@0\` package with \`--events-output\` pointed at that
+FIFO, and waits for Hooksmith before the workflow exits. The direct CLI
+invocation is intentional here: the producer and FIFO consumer must share one
+shell so the workflow can wait for the Hooksmith child process. Events therefore
+reach Hooksmith as each repository finishes.
 
 The generated Hooksmith configuration handles \`resource.applied\` events for
 \`github.repository\` subjects and logs each applied repository. Extend that
@@ -435,10 +436,10 @@ OctoSmith control repository. Keep it private if its plans may reveal private
 repository configuration.
 
 Create an \`OCTOSMITH_TOKEN\` Actions secret containing a fine-grained personal
-access token with read access for resources inspected by plan and corresponding
-write permissions for resources managed by apply. For renewable credentials,
-replace the static secret in the generated workflows with a GitHub App token
-minted at workflow runtime.
+access token with the permissions required by apply. The pull-request validation
+workflow does not use this secret. For renewable credentials, replace the static
+secret in the generated workflows with a GitHub App token minted at workflow
+runtime.
 
 ${workflowDocumentation}
 
@@ -450,7 +451,13 @@ ${eventStreamingDocumentation}
 
 ## Local usage
 
-Set \`GITHUB_TOKEN\` before running either plan or apply locally:
+Validation is offline and does not require \`GITHUB_TOKEN\`:
+
+\`\`\`sh
+deno run -A jsr:@octosmith/cli validate --path .
+\`\`\`
+
+Set \`GITHUB_TOKEN\` before running plan or apply locally:
 
 \`\`\`sh
 deno run -A jsr:@octosmith/cli plan --path .
