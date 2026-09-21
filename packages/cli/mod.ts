@@ -1,3 +1,5 @@
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
+
 /**
  * OctoSmith command-line host for validating, planning, and applying GitHub
  * repository configuration.
@@ -5,7 +7,6 @@
  * @module
  */
 
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
 
 import { Command } from "@cliffy/command";
 import {
