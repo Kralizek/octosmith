@@ -223,9 +223,10 @@ function globPatternsIntersectionWitness(
   ...patterns: readonly string[]
 ): string | undefined {
   const initial = patterns.map(() => 0);
-  const queue: Array<{ readonly positions: number[]; readonly value: string }> = [
-    { positions: initial, value: "" },
-  ];
+  const queue: Array<{ readonly positions: number[]; readonly value: string }> =
+    [
+      { positions: initial, value: "" },
+    ];
   const visited = new Set<string>();
 
   while (queue.length > 0) {
