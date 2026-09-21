@@ -18,14 +18,26 @@ env -u GITHUB_TOKEN -u OCTOSMITH_TOKEN \
     < "$events_pipe" &
 hooksmith_pid=$!
 
+set +e
 GITHUB_TOKEN="$OCTOSMITH_TOKEN" \
   deno run -A jsr:@octosmith/cli@0 apply \
     --path . \
     --events-output "$events_pipe"
+octosmith_status=$?
 
 wait "$hooksmith_pid"
+hooksmith_status=$?
+set -e
+
 rm -f "$events_pipe"
+
+if [ "$octosmith_status" -ne 0 ]; then
+  exit "$octosmith_status"
+fi
+
+exit "$hooksmith_status"
 ```
 
 Hooksmith receives neither `GITHUB_TOKEN` nor `OCTOSMITH_TOKEN`; the token is
-injected only into the OctoSmith subprocess.
+injected only into the OctoSmith subprocess. The shell preserves the apply
+failure status, or the Hooksmith failure when apply succeeds.
