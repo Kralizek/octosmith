@@ -34,6 +34,7 @@ export interface RepositoryMetadata {
 export type RuntimeValueProvider = (name: string) => string;
 
 const MAX_CONFIGURATION_SOURCE_SIZE = 10 * 1024 * 1024;
+const MAX_CONFIGURATION_SOURCE_TOTAL_SIZE = 50 * 1024 * 1024;
 
 const BUILT_IN_PERMISSIONS = new Set<BuiltInRepositoryPermission>([
   "pull",
@@ -61,6 +62,7 @@ export async function resolveDesiredState(
   }
 
   const [[templateName, template]] = matches;
+  const readSource = createConfigurationSourceReader(loaded.root);
 
   return {
     repository: repository.name,
@@ -105,7 +107,7 @@ export async function resolveDesiredState(
           return {
             path,
             ensure: file.ensure,
-            content: await readConfigurationSource(loaded.root, file.source),
+            content: await readSource(file.source),
           } satisfies DesiredFile;
         }),
       ),
@@ -113,44 +115,73 @@ export async function resolveDesiredState(
   };
 }
 
-async function readConfigurationSource(
+function createConfigurationSourceReader(
   root: string,
-  source: string,
-): Promise<string> {
-  if (isAbsolute(source)) {
-    throw new Error(
-      "File source must be relative to the configuration root: " + source,
-    );
-  }
+): (source: string) => Promise<string> {
+  const cache = new Map<string, Promise<string>>();
+  let totalSize = 0;
 
-  const rootPath = await Deno.realPath(root);
-  const sourcePath = await Deno.realPath(resolve(rootPath, source));
-  const relativePath = relative(rootPath, sourcePath);
+  return async (source: string): Promise<string> => {
+    if (isAbsolute(source)) {
+      throw new Error(
+        "File source must be relative to the configuration root: " + source,
+      );
+    }
 
-  if (
-    relativePath === ".." ||
-    relativePath.startsWith("../") ||
-    relativePath.startsWith("..\\") ||
-    isAbsolute(relativePath)
-  ) {
-    throw new Error("File source escapes the configuration root: " + source);
-  }
+    const rootPath = await Deno.realPath(root);
+    const sourcePath = await Deno.realPath(resolve(rootPath, source));
+    const relativePath = relative(rootPath, sourcePath);
 
-  const info = await Deno.stat(sourcePath);
-  if (!info.isFile) {
-    throw new Error("File source must be a regular file: " + source);
-  }
+    if (
+      relativePath === ".." ||
+      relativePath.startsWith("../") ||
+      relativePath.startsWith("..\\") ||
+      isAbsolute(relativePath)
+    ) {
+      throw new Error("File source escapes the configuration root: " + source);
+    }
 
-  if (info.size > MAX_CONFIGURATION_SOURCE_SIZE) {
-    throw new Error(
-      "File source exceeds the maximum size of " +
-        MAX_CONFIGURATION_SOURCE_SIZE +
-        " bytes: " +
-        source,
-    );
-  }
+    const existing = cache.get(sourcePath);
+    if (existing !== undefined) {
+      return await existing;
+    }
 
-  return await Deno.readTextFile(sourcePath);
+    const pending = (async () => {
+      const info = await Deno.stat(sourcePath);
+      if (!info.isFile) {
+        throw new Error("File source must be a regular file: " + source);
+      }
+
+      if (info.size > MAX_CONFIGURATION_SOURCE_SIZE) {
+        throw new Error(
+          "File source exceeds the maximum size of " +
+            MAX_CONFIGURATION_SOURCE_SIZE +
+            " bytes: " +
+            source,
+        );
+      }
+
+      totalSize += info.size;
+      if (totalSize > MAX_CONFIGURATION_SOURCE_TOTAL_SIZE) {
+        throw new Error(
+          "Configuration file sources exceed the aggregate limit of " +
+            MAX_CONFIGURATION_SOURCE_TOTAL_SIZE +
+            " bytes",
+        );
+      }
+
+      return await Deno.readTextFile(sourcePath);
+    })();
+
+    cache.set(sourcePath, pending);
+
+    try {
+      return await pending;
+    } catch (error) {
+      cache.delete(sourcePath);
+      throw error;
+    }
+  };
 }
 
 export function matchesSelector(
