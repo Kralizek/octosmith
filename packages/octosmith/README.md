@@ -1,10 +1,10 @@
 # @octosmith/octosmith
 
-The OctoSmith library package contains the configuration model, desired/current
+The Octosmith library package contains the configuration model, desired/current
 state types, planner, reports, GitHub adapters, offline validation, and the
 control-repository scaffolder.
 
-Use this package when embedding OctoSmith or when you need the configuration
+Use this package when embedding Octosmith or when you need the configuration
 model directly. For day-to-day command-line usage, use
 [`@octosmith/cli`](../cli/README.md).
 
@@ -30,7 +30,7 @@ For deeper guidance, see the repository documentation for
 
 ## Configuration model
 
-An OctoSmith configuration directory has one root file and one or more
+An Octosmith configuration directory has one root file and one or more
 repository templates:
 
 ```text
@@ -157,7 +157,7 @@ secrets:
 ```
 
 Secret values are not stored in configuration or reports. Before mutating a
-repository, OctoSmith resolves the secret values required by that repository; if
+repository, Octosmith resolves the secret values required by that repository; if
 one is missing, that repository is not partially mutated first.
 
 Plan mode does not require secret values.
