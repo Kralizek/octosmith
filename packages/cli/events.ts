@@ -2,6 +2,7 @@ import type { EventDocument } from "@hooksmith/core";
 import type { ApplyItemReport, RepositoryReport } from "@octosmith/octosmith";
 import type { ApplyMode } from "./apply.ts";
 
+/** Describes repository event data. */
 export interface RepositoryEventData {
   readonly items: readonly ApplyItemReport[];
   readonly error?: string;
@@ -36,6 +37,7 @@ export function toRepositoryEvent(
   };
 }
 
+/** Describes event output. */
 export interface EventOutput {
   write(event: EventDocument): Promise<void>;
   close(): void;
