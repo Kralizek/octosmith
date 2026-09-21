@@ -105,6 +105,35 @@ Deno.test("action wrapper applies optional input defaults", async () => {
 for (
   const [name, env, message] of [
     [
+      "repository for validate",
+      { OCTOSMITH_MODE: "validate", OCTOSMITH_REPOSITORY: "api-service" },
+      "repository is not supported for validate",
+    ],
+    [
+      "verbose for validate",
+      { OCTOSMITH_MODE: "validate", OCTOSMITH_VERBOSE: "true" },
+      "verbose is not supported for validate",
+    ],
+    [
+      "events-output for validate",
+      {
+        OCTOSMITH_MODE: "validate",
+        OCTOSMITH_EVENTS_OUTPUT: "/tmp/octosmith-events",
+      },
+      "events-output is not supported for validate",
+    ],
+  ] as const
+) {
+  Deno.test(`action wrapper rejects ${name}`, async () => {
+    const result = await runActionWrapper(env);
+    assertEquals(result.code, 1);
+    assertStringIncludes(result.stderr, message);
+  });
+}
+
+for (
+  const [name, env, message] of [
+    [
       "mode",
       { OCTOSMITH_MODE: "invalid" },
       "mode must be 'validate', 'plan', or 'apply'",
