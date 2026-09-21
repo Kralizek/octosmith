@@ -1,24 +1,29 @@
 import type { DesiredSecret, SecretName, Variable } from "../types.ts";
 
+/** Describes custom property value. */
 export type CustomPropertyValue =
   | string
   | readonly string[]
   | null;
 
+/** Describes actions allowed actions. */
 export type ActionsAllowedActions = "all" | "local-only" | "selected";
 
+/** Describes current selected actions. */
 export interface CurrentSelectedActions {
   readonly githubOwnedAllowed: boolean;
   readonly verifiedAllowed: boolean;
   readonly patternsAllowed: readonly string[];
 }
 
+/** Describes desired selected actions. */
 export interface DesiredSelectedActions {
   readonly githubOwnedAllowed?: boolean;
   readonly verifiedAllowed?: boolean;
   readonly patternsAllowed?: readonly string[];
 }
 
+/** Describes subject claim template. */
 export type SubjectClaimTemplate =
   | {
     readonly source: "default";
@@ -31,16 +36,19 @@ export type SubjectClaimTemplate =
     readonly claims: readonly string[];
   };
 
+/** Describes current actions OIDC settings. */
 export interface CurrentActionsOidcSettings {
   readonly subjectClaimTemplate: SubjectClaimTemplate;
   readonly immutableSubject: boolean;
 }
 
+/** Describes desired actions OIDC settings. */
 export interface DesiredActionsOidcSettings {
   readonly subjectClaimTemplate?: SubjectClaimTemplate;
   readonly immutableSubject?: boolean;
 }
 
+/** Describes current actions settings. */
 export interface CurrentActionsSettings {
   readonly enabled: boolean;
   readonly allowedActions: ActionsAllowedActions;
@@ -49,6 +57,7 @@ export interface CurrentActionsSettings {
   readonly oidc: CurrentActionsOidcSettings;
 }
 
+/** Describes desired actions settings. */
 export interface DesiredActionsSettings {
   readonly enabled?: boolean;
   readonly allowedActions?: ActionsAllowedActions;
@@ -57,24 +66,29 @@ export interface DesiredActionsSettings {
   readonly oidc?: DesiredActionsOidcSettings;
 }
 
+/** Describes current actions. */
 export interface CurrentActions extends CurrentActionsSettings {
   readonly secrets: readonly SecretName[];
   readonly variables: readonly Variable[];
 }
 
+/** Describes desired actions. */
 export interface DesiredActions extends DesiredActionsSettings {
   readonly secrets?: readonly DesiredSecret[];
   readonly variables?: readonly Variable[];
 }
 
+/** Describes current dependabot. */
 export interface CurrentDependabot {
   readonly secrets: readonly SecretName[];
 }
 
+/** Describes desired dependabot. */
 export interface DesiredDependabot {
   readonly secrets?: readonly DesiredSecret[];
 }
 
+/** Describes copilot enabled tools. */
 export interface CopilotEnabledTools {
   readonly codeql: boolean;
   readonly copilotCodeReview: boolean;
@@ -82,10 +96,12 @@ export interface CopilotEnabledTools {
   readonly dependencyVulnerabilityChecks: boolean;
 }
 
+/** Describes current copilot MCP settings. */
 export interface CurrentCopilotMcpSettings {
   readonly configuration: unknown | null;
 }
 
+/** Describes current copilot internet access settings. */
 export interface CurrentCopilotInternetAccessSettings {
   readonly firewallEnabled: boolean;
   readonly recommendedAllowlistEnabled: boolean;
