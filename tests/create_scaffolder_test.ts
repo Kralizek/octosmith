@@ -135,6 +135,25 @@ Deno.test("generated scaffold validates as OctoSmith configuration", async () =>
   }
 });
 
+Deno.test("create scaffolder preserves placeholder-like replacement values", () => {
+  const files = buildScaffold({
+    targetDirectory: "control",
+    organization: "@@REPOSITORY_NAME@@",
+    collectionManagement: "explicit",
+    defaultBranch: "main",
+    workflows: false,
+    eventStreaming: false,
+  });
+
+  const configurationFile = files.find((file) => file.path === "octosmith.yml");
+  const configuration = parse(configurationFile?.content ?? "") as Record<
+    string,
+    unknown
+  >;
+
+  assertEquals(configuration.organization, "@@REPOSITORY_NAME@@");
+});
+
 Deno.test("create scaffolder preserves placeholder-like branch names", () => {
   const files = buildScaffold({
     targetDirectory: "control",
@@ -364,6 +383,36 @@ Deno.test("create scaffolder does not overwrite non-empty targets", async () => 
       "not empty",
     );
   } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("create scaffolder infers repository name for parent directory", async () => {
+  const previousWorkingDirectory = Deno.cwd();
+  const root = await Deno.makeTempDir();
+  const parent = join(root, "parent-control");
+  const child = join(parent, "child");
+
+  try {
+    await Deno.mkdir(child, { recursive: true });
+    Deno.chdir(child);
+
+    const files = buildScaffold({
+      targetDirectory: "..",
+      organization: "acme",
+      collectionManagement: "explicit",
+      defaultBranch: "main",
+      workflows: false,
+      eventStreaming: false,
+    });
+
+    const configuration = files.find((file) => file.path === "octosmith.yml");
+    assertStringIncludes(
+      configuration?.content ?? "",
+      'names:\n      - "parent-control"',
+    );
+  } finally {
+    Deno.chdir(previousWorkingDirectory);
     await Deno.remove(root, { recursive: true });
   }
 });
