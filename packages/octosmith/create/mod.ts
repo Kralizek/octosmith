@@ -1,5 +1,5 @@
 /**
- * Deno create entry point for scaffolding an OctoSmith control repository.
+ * Deno create entry point for scaffolding an Octosmith control repository.
  *
  * @module
  */
@@ -315,6 +315,6 @@ if (import.meta.main) {
   const options = parseScaffoldArguments(Deno.args);
   await writeScaffold(options);
   console.log(
-    "Created OctoSmith control repository in " + options.targetDirectory,
+    "Created Octosmith control repository in " + options.targetDirectory,
   );
 }
