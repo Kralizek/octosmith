@@ -431,7 +431,7 @@ on this repository for automation.`;
 The apply workflow creates a local FIFO, starts \`hooksmith stream\` in the
 background using \`hooksmith.config.ts\`, runs the pinned 0.x
 \`jsr:@octosmith/cli@0\` package with \`--events-output\` pointed at that
-FIFO. Hooksmith runs without `GITHUB_TOKEN`; the organization credential is
+FIFO. Hooksmith runs without \`GITHUB_TOKEN\`; the organization credential is
 passed only to the OctoSmith subprocess. Hooksmith and OctoSmith run as
 supervised sibling processes: an early Hooksmith failure terminates OctoSmith,
 while a successful Hooksmith completion still waits for and propagates
