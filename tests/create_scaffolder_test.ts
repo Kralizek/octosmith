@@ -228,6 +228,22 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
     readme?.content ?? "",
     'GITHUB_TOKEN="$OCTOSMITH_TOKEN"',
   );
+  assertStringIncludes(
+    readme?.content ?? "",
+    "octosmith_status=$?",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    "hooksmith_status=$?",
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    'exit "$octosmith_status"',
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    'exit "$hooksmith_status"',
+  );
 });
 
 Deno.test("event streaming generates Hooksmith FIFO orchestration", () => {
