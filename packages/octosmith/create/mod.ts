@@ -1,3 +1,9 @@
+/**
+ * Deno create entry point for scaffolding an OctoSmith control repository.
+ *
+ * @module
+ */
+
 import { basename, dirname, join, resolve } from "@std/path";
 import type { CollectionManagementMode } from "../types.ts";
 import configurationTemplate from "./templates/octosmith.yml" with {
