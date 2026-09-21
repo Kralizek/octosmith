@@ -8,6 +8,9 @@ changes, renders reports, and can emit per-repository resource events.
 For the configuration format and desired-state model, see
 [`@octosmith/octosmith`](../octosmith/README.md).
 
+For GitHub Actions, generated workflows, credentials, and event streaming, see
+the repository [automation guide](../../docs/automation.md).
+
 ## Install
 
 ```sh
