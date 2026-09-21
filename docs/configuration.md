@@ -70,8 +70,8 @@ settings and values, Dependabot secrets, rulesets, environments, and files.
 
 ### strict
 
-`strict` makes supported named collections authoritative. Undeclared members
-may be removed.
+`strict` makes supported named collections authoritative. Undeclared members may
+be removed.
 
 Files are an exception: strict mode never infers file deletion. Deletion is
 always explicit with `ensure: absent`.
