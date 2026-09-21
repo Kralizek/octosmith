@@ -344,9 +344,18 @@ jobs:
           set -e
 
           if [[ "$completed_pid" == "$hooksmith_pid" ]]; then
-            kill "$octosmith_pid" 2>/dev/null || true
-            wait "$octosmith_pid" 2>/dev/null || true
-            exit "$first_status"
+            if [[ "$first_status" -ne 0 ]]; then
+              kill "$octosmith_pid" 2>/dev/null || true
+              wait "$octosmith_pid" 2>/dev/null || true
+              exit "$first_status"
+            fi
+
+            set +e
+            wait "$octosmith_pid"
+            octosmith_status=$?
+            set -e
+
+            exit "$octosmith_status"
           fi
 
           if [[ "$first_status" -ne 0 ]]; then
@@ -417,9 +426,9 @@ on this repository for automation.`;
 The apply workflow creates a local FIFO, starts \`hooksmith stream\` in the
 background using \`hooksmith.config.ts\`, runs the pinned 0.x
 \`jsr:@octosmith/cli@0\` package with \`--events-output\` pointed at that
-FIFO. Hooksmith and OctoSmith run as supervised sibling processes: if either
-exits first with a failure, the workflow terminates the other instead of leaving
-a FIFO reader or writer blocked indefinitely. The direct CLI invocation is
+FIFO. Hooksmith and OctoSmith run as supervised sibling processes: an early
+Hooksmith failure terminates OctoSmith, while a successful Hooksmith completion
+still waits for and propagates OctoSmith's final apply status. The direct CLI invocation is
 intentional here because both processes must share one shell for supervision.
 Events therefore reach Hooksmith as each repository finishes.
 
