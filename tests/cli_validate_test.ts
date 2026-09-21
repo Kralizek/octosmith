@@ -116,7 +116,7 @@ Deno.test("validate rejects overlapping repository templates", async () => {
       errors.push(values.map(String).join(" "));
 
     assertEquals(await main(["validate", "--path", root]), 1);
-    assertStringIncludes(errors.join("\n"), "matches multiple templates");
+    assertStringIncludes(errors.join("\n"), "templates can overlap");
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
@@ -158,7 +158,7 @@ Deno.test("validate rejects literal scoped repositories without a template", asy
       errors.push(values.map(String).join(" "));
 
     assertEquals(await main(["validate", "--path", root]), 1);
-    assertStringIncludes(errors.join("\n"), "does not match any template");
+    assertStringIncludes(errors.join("\n"), "cannot match any configured template");
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
