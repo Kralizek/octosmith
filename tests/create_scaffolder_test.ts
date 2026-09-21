@@ -238,6 +238,14 @@ Deno.test("create scaffolder documents manual mode without workflows", () => {
   );
   assertStringIncludes(
     readme?.content ?? "",
+    'kill "$hooksmith_pid" 2>/dev/null || true',
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
+    'wait "$hooksmith_pid" 2>/dev/null || true',
+  );
+  assertStringIncludes(
+    readme?.content ?? "",
     'exit "$octosmith_status"',
   );
   assertStringIncludes(
