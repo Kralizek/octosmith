@@ -42,7 +42,7 @@ jobs:
           }
           trap cleanup EXIT
 
-          env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli stream \
+          env -u GITHUB_TOKEN deno run -A jsr:@hooksmith/cli@0 stream \
             --config ./hooksmith.config.ts \
             < "$events_pipe" &
           hooksmith_pid=$!
