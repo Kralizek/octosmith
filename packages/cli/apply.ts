@@ -22,8 +22,10 @@ import {
   type RepositoryDiscoveryResult,
 } from "@octosmith/octosmith";
 
+/** Describes apply mode. */
 export type ApplyMode = "plan" | "apply";
 
+/** Describes apply runtime. */
 export interface ApplyRuntime {
   discover(
     loaded: LoadedConfiguration,
@@ -37,6 +39,7 @@ export interface ApplyRuntime {
   apply(plan: Plan): Promise<ApplyPlanResult>;
 }
 
+/** Describes GitHub runtime options. */
 export interface GitHubRuntimeOptions {
   readonly token: string;
   readonly secretValue?: RuntimeValueProvider;
@@ -95,6 +98,7 @@ export function createGitHubRuntime(
   };
 }
 
+/** Describes apply options. */
 export interface ApplyOptions {
   readonly mode: ApplyMode;
   readonly repository?: string;
