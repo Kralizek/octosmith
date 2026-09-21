@@ -105,8 +105,8 @@ collections are interpreted.
 
 ### explicit
 
-`explicit` is the default. Only declared members are managed; undeclared
-members are preserved.
+`explicit` is the default. Only declared members are managed; undeclared members
+are preserved.
 
 ```yaml
 repositories:
