@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects, assertThrows } from "@std/assert";
-import { fromFileUrl, join } from "@std/path";
+import { fromFileUrl, join, relative } from "@std/path";
 import {
   buildPlan,
   loadConfigurationDirectory,
@@ -279,6 +279,7 @@ for (
 ) {
   Deno.test(`rejects ${name}`, async () => {
     const root = await Deno.makeTempDir();
+    let outsideFile: string | undefined;
 
     try {
       await Deno.mkdir(join(root, "templates"));
@@ -294,6 +295,16 @@ for (
           "",
         ].join("\n"),
       );
+      let sourceValue = source;
+      if (source.startsWith("..")) {
+        outsideFile = await Deno.makeTempFile({
+          dir: join(root, ".."),
+          prefix: "octosmith-outside-",
+        });
+        await Deno.writeTextFile(outsideFile, "outside");
+        sourceValue = relative(root, outsideFile);
+      }
+
       await Deno.writeTextFile(
         join(root, "templates", "sample.yml"),
         [
@@ -305,14 +316,10 @@ for (
           "  files:",
           "    README.md:",
           "      ensure: exact",
-          `      source: ${source}`,
+          `      source: ${sourceValue}`,
           "",
         ].join("\n"),
       );
-
-      if (source.startsWith("..")) {
-        await Deno.writeTextFile(join(root, "..", "outside.txt"), "outside");
-      }
 
       const loaded = await loadConfigurationDirectory(root);
 
@@ -328,9 +335,83 @@ for (
       );
     } finally {
       await Deno.remove(root, { recursive: true });
+      if (outsideFile !== undefined) {
+        await Deno.remove(outsideFile);
+      }
     }
   });
 }
+
+Deno.test("rejects aggregate configuration file sources larger than 50 MiB", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.mkdir(join(root, "files"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+
+    const fileEntries: string[] = [];
+    for (let index = 0; index < 6; index++) {
+      const source = `files/source-${index}.txt`;
+      const file = await Deno.open(join(root, source), {
+        create: true,
+        write: true,
+        truncate: true,
+      });
+      try {
+        await file.truncate(9 * 1024 * 1024);
+      } finally {
+        file.close();
+      }
+
+      fileEntries.push(
+        `    file-${index}.txt:`,
+        "      ensure: exact",
+        `      source: ${source}`,
+      );
+    }
+
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  files:",
+        ...fileEntries,
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    await assertRejects(
+      () =>
+        resolveDesiredState(
+          loaded,
+          { name: "sample", teams: [], properties: {} },
+          (value) => value,
+        ),
+      Error,
+      "aggregate limit",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 Deno.test("rejects configuration file sources larger than 10 MiB", async () => {
   const root = await Deno.makeTempDir();
