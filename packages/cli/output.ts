@@ -1,3 +1,4 @@
+/** Describes output format. */
 export type OutputFormat = "text" | "json";
 
 export function parseOutputFormat(value: string): OutputFormat {
