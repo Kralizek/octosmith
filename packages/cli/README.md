@@ -1,6 +1,6 @@
 # @octosmith/cli
 
-Command-line interface for OctoSmith.
+Command-line interface for Octosmith.
 
 The CLI validates configuration, compares desired state with GitHub, applies
 changes, renders reports, and can emit per-repository resource events.
