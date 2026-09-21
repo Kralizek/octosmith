@@ -2,7 +2,6 @@ import {
   buildPlan,
   type CurrentState,
   loadConfigurationDirectory,
-  matchesSelector,
   type PropertyValue,
   type RepositoryMetadata,
   type RepositorySelector,
