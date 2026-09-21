@@ -3,9 +3,10 @@
 `hooksmith.config.ts` was generated because scaffolding used
 `--event-streaming`, but no workflows were generated. For the same isolation
 model as the generated workflow, run Hooksmith in a container and keep the
-organization credential only on the host OctoSmith process:
+organization credential only on the host OctoSmith process. This recipe requires
+Bash 5.1 or newer because it uses `wait -n -p`:
 
-```sh
+```bash
 read -rsp "OctoSmith token: " OCTOSMITH_TOKEN
 echo
 
