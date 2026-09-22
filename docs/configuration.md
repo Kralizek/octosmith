@@ -1,6 +1,6 @@
 # Configuration
 
-An OctoSmith configuration directory contains one root configuration and one or
+An Octosmith configuration directory contains one root configuration and one or
 more repository templates.
 
 ```mermaid
@@ -149,6 +149,6 @@ offline validation.
 
 ## Validation expectations
 
-Configuration is schema-validated before repository discovery. OctoSmith also
+Configuration is schema-validated before repository discovery. Octosmith also
 checks that templates cannot overlap inside configured scope and that literal
 repository names in scope can resolve to a template.
