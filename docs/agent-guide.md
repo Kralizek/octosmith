@@ -83,6 +83,21 @@ Generated files are templates under `packages/octosmith/create/templates`. Keep
 generated workflows thin; substantial shell logic should live in generated
 script files rather than large YAML blocks.
 
+### JSON schemas
+
+The canonical JSON schemas live under `schemas/`. The copies under
+`packages/octosmith/configuration/schemas/` are package-local mirrors required
+by the published library.
+
+Do not edit the package copies directly. After changing a canonical schema, run:
+
+```sh
+deno task sync:schemas
+```
+
+`deno task check:schemas` and CI fail if the tracked package copies drift from
+the canonical schemas.
+
 ### Release workflow
 
 Shell-heavy workflow logic should live under `.github/workflows/scripts`.
