@@ -30,6 +30,7 @@ export interface RepositoryMutationSink {
   apply(repository: string, operation: Operation): Promise<void>;
 }
 
+/** Apply every operation in a plan through the configured mutation sink. */
 export async function applyPlan(
   sink: RepositoryMutationSink,
   plan: Plan,
