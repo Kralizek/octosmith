@@ -99,8 +99,8 @@ Shell-heavy workflow logic should live under `.github/workflows/scripts`.
 
 ## Public API documentation
 
-Every directly exported class, interface, type, enum, function, or variable under
-`packages/` must have JSDoc. CI enforces this with `deno task check:docs`.
+Every directly exported class, interface, type, enum, function, or variable
+under `packages/` must have JSDoc. CI enforces this with `deno task check:docs`.
 
 When adding a public declaration, document its purpose at the declaration rather
 than relying on a README to explain it.
