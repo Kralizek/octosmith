@@ -1,4 +1,4 @@
-/** Values shared across Octosmith's core concepts. */
+/** Values shared across OctoSmith's core concepts. */
 
 export type PropertyValue = string | boolean | readonly string[];
 
