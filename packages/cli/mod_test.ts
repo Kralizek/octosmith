@@ -1,7 +1,7 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
 import { main, usage, VERSION } from "./mod.ts";
 
-Deno.test("usage identifies Octosmith", () => {
+Deno.test("usage identifies OctoSmith", () => {
   assertStringIncludes(usage(), "octosmith");
   assertStringIncludes(usage(), "plan");
   assertStringIncludes(usage(), "apply");
