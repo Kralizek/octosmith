@@ -191,7 +191,7 @@ async function runActionWrapper(
     await Deno.writeTextFile(
       deno,
       `#!/usr/bin/env bash
-if [[ "${1:-}" == "eval" ]]; then
+if [[ "\${1:-}" == "eval" ]]; then
   printf '0.1.0\\n'
   exit 0
 fi
