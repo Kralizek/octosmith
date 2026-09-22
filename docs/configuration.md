@@ -3,14 +3,21 @@
 An Octosmith configuration directory contains one root configuration and one or
 more repository templates.
 
-```text
-configuration/
-├── octosmith.yml
-├── templates/
-│   ├── default.yml
-│   └── libraries.yml
-└── files/
-    └── ...
+```mermaid
+flowchart TD
+    root["configuration/"]
+    config["octosmith.yml"]
+    templates["templates/"]
+    default["default.yml"]
+    libraries["libraries.yml"]
+    files["files/"]
+    managed["..."]
+
+    root --> config
+    root --> templates
+    templates --> default
+    templates --> libraries
+    root --> files --> managed
 ```
 
 ## Root configuration
