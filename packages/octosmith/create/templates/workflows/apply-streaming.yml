@@ -1,4 +1,4 @@
-name: Octosmith apply
+name: OctoSmith apply
 
 on:
   push:
