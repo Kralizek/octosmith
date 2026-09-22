@@ -46,6 +46,7 @@ const BUILT_IN_PERMISSIONS = new Set<BuiltInRepositoryPermission>([
   "admin",
 ]);
 
+/** Resolve repository configuration into normalized desired state. */
 export async function resolveDesiredState(
   loaded: LoadedConfiguration,
   repository: RepositoryMetadata,
@@ -186,6 +187,7 @@ function createConfigurationSourceReader(
   };
 }
 
+/** Determine whether repository metadata matches a configured selector. */
 export function matchesSelector(
   selector: RepositoryTemplate["match"],
   repository: RepositoryMetadata,
