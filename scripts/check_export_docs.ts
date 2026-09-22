@@ -8,7 +8,7 @@ for (const root of roots) {
 }
 
 if (missing.length > 0) {
-  console.error("Exported type declarations must have JSDoc documentation:");
+  console.error("Exported declarations must have JSDoc documentation:");
   for (const item of missing) console.error(`- ${item}`);
   Deno.exit(1);
 }
