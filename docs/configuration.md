@@ -37,9 +37,10 @@ file at the corresponding schema:
 
 Repository templates can use the template schema in the same way.
 
-The package contains identical copies so runtime validation remains fully
-offline after JSR publication. The root `/schemas` files are the canonical
-consumer-facing source, and CI verifies that packaged copies do not drift.
+The published package contains generated copies so runtime validation remains
+fully offline after JSR publication. The root `/schemas` files are the only
+authored source; package-local copies are materialized during checks and release
+packaging.
 
 ## Root configuration
 
