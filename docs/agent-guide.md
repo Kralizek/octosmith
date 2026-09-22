@@ -33,7 +33,7 @@ Keep these boundaries intact unless the change explicitly intends to redesign
 them:
 
 1. `@octosmith/octosmith` must not depend on `@octosmith/cli`.
-2. Planning operates on OctoSmith state models, not raw GitHub REST payloads.
+2. Planning operates on Octosmith state models, not raw GitHub REST payloads.
 3. GitHub API calls belong in the GitHub integration layer.
 4. Hooksmith integration belongs at CLI/workflow level; the engine remains
    Hooksmith-agnostic.
@@ -99,8 +99,8 @@ Shell-heavy workflow logic should live under `.github/workflows/scripts`.
 
 ## Public API documentation
 
-Every exported class, interface, type, or enum under `packages/` must have
-JSDoc. CI enforces this with `deno task check:docs`.
+Every directly exported class, interface, type, enum, function, or variable under
+`packages/` must have JSDoc. CI enforces this with `deno task check:docs`.
 
 When adding a public declaration, document its purpose at the declaration rather
 than relying on a README to explain it.
