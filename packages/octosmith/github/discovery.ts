@@ -40,6 +40,7 @@ interface CandidateDiscoveryResult {
 
 const PAGE_SIZE = 100;
 
+/** Discover repositories in configured scope, optionally targeting one repository. */
 export async function discoverRepositories(
   client: GitHubClient,
   loaded: LoadedConfiguration,
