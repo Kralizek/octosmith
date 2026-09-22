@@ -8,6 +8,7 @@ export interface RepositoryEventData {
   readonly error?: string;
 }
 
+/** Convert a repository report into a resource event. */
 export function toRepositoryEvent(
   organization: string,
   mode: ApplyMode,
@@ -43,6 +44,7 @@ export interface EventOutput {
   close(): void;
 }
 
+/** Open a writable destination for NDJSON resource events. */
 export async function openEventOutput(path: string): Promise<EventOutput> {
   const file = await Deno.open(path, {
     write: true,
