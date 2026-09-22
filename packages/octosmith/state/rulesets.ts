@@ -231,7 +231,7 @@ export type DesiredRulesetRule = DesiredRefRule | DesiredPushRule;
 /**
  * A sparse ownership declaration for a ruleset.
  *
- * Only fields present here are owned by Octosmith. A planner may require more
+ * Only fields present here are owned by OctoSmith. A planner may require more
  * information if the ruleset does not exist and must be created.
  */
 export interface DesiredRuleset {
