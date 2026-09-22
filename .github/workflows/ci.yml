@@ -21,6 +21,9 @@ jobs:
           deno-version: v2.x
           cache: true
 
+      - name: Synchronize package schemas
+        run: bash .github/workflows/scripts/sync-schemas.sh
+
       - name: Check
         run: deno task check
 
