@@ -5,15 +5,26 @@ repository.
 
 ## Repository layout
 
-```text
-packages/
-  octosmith/   reusable engine and scaffolder
-  cli/         command-line host
-docs/          consumer and repository documentation
-examples/      configuration examples
-tests/         cross-package and integration-oriented tests
-scripts/       repository validation helpers
-.github/       CI, release workflow, and Action metadata
+```mermaid
+flowchart TD
+    repo["Repository"]
+    packages["packages/"]
+    engine["octosmith/<br/>reusable engine + scaffolder"]
+    cli["cli/<br/>command-line host"]
+    docs["docs/<br/>consumer + repository documentation"]
+    examples["examples/<br/>configuration examples"]
+    tests["tests/<br/>cross-package + integration tests"]
+    scripts["scripts/<br/>repository validation helpers"]
+    github[".github/<br/>CI + release + Action metadata"]
+
+    repo --> packages
+    packages --> engine
+    packages --> cli
+    repo --> docs
+    repo --> examples
+    repo --> tests
+    repo --> scripts
+    repo --> github
 ```
 
 ## Architectural boundaries
