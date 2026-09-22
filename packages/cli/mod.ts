@@ -1,7 +1,7 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net
 
 /**
- * Octosmith command-line host for validating, planning, and applying GitHub
+ * OctoSmith command-line host for validating, planning, and applying GitHub
  * repository configuration.
  *
  * @module
@@ -21,7 +21,7 @@ import type { ApplyRuntime } from "./apply.ts";
 import { apply, createGitHubRuntime } from "./apply.ts";
 import cliMetadata from "./deno.json" with { type: "json" };
 
-/** The Octosmith CLI version. */
+/** The OctoSmith CLI version. */
 export const VERSION = cliMetadata.version;
 
 /** Describes cli execution options. */
@@ -42,7 +42,7 @@ function createCli(
     .name("octosmith")
     .description("Declaratively apply GitHub repository configuration.")
     .version(VERSION)
-    .versionOption("-v, --version", "Print the Octosmith CLI version.")
+    .versionOption("-v, --version", "Print the OctoSmith CLI version.")
     .noExit()
     .action(function () {
       this.showHelp();
@@ -210,7 +210,7 @@ export function usage(): string {
   return createCli().getHelp();
 }
 
-/** Run the Octosmith CLI. */
+/** Run the OctoSmith CLI. */
 export async function main(
   args: string[],
   options: CliExecutionOptions = {},
