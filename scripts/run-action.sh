@@ -19,7 +19,7 @@ deno_args=(--quiet --minimum-dependency-age 0)
 if [[ -n "${OCTOSMITH_CLI_ENTRYPOINT:-}" ]]; then
   cli="$OCTOSMITH_CLI_ENTRYPOINT"
 else
-  version="$(jq -r '.version' "$GITHUB_ACTION_PATH/packages/cli/deno.json")"
+  version="$(deno eval --allow-read="$GITHUB_ACTION_PATH/packages/cli/deno.json" 'const manifest = JSON.parse(await Deno.readTextFile(Deno.args[0])); console.log(manifest.version);' "$GITHUB_ACTION_PATH/packages/cli/deno.json")"
   cli="jsr:@octosmith/cli@${version}"
 fi
 
