@@ -1,7 +1,7 @@
-# OctoSmith documentation
+# Octosmith documentation
 
 This directory contains the in-repository documentation for people and agents
-working with OctoSmith.
+working with Octosmith.
 
 ## Consumer documentation
 
