@@ -46,9 +46,10 @@ them:
 
 ### Configuration syntax
 
-The canonical JSON schemas are under root `schemas/`. Package-local files under
-`packages/octosmith/configuration/schemas/` are offline runtime copies and must
-remain identical. Run `deno task check:schemas` after schema changes.
+The canonical JSON schemas live under root `schemas/`. Package-local files under
+`packages/octosmith/configuration/schemas/` are packaging/runtime copies.
+CI and release workflows overwrite those copies from the root schemas via
+`.github/workflows/scripts/sync-schemas.sh` before validation and packaging.
 
 Usually touches:
 
