@@ -205,13 +205,10 @@ printf '%s\\n' "$@" > "$OCTOSMITH_TEST_ARGS"
       env: {
         ...env,
         GITHUB_ACTION_PATH: Deno.cwd(),
-        ...(options.releasedCli
-          ? {}
-          : {
-            OCTOSMITH_CLI_ENTRYPOINT:
-              env.OCTOSMITH_CLI_ENTRYPOINT ??
-                `${Deno.cwd()}/packages/cli/mod.ts`,
-          }),
+        ...(options.releasedCli ? {} : {
+          OCTOSMITH_CLI_ENTRYPOINT: env.OCTOSMITH_CLI_ENTRYPOINT ??
+            `${Deno.cwd()}/packages/cli/mod.ts`,
+        }),
         OCTOSMITH_TEST_ARGS: capture,
         PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
       },
