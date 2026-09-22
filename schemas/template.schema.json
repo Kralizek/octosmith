@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/template.schema.json",
-  "title": "OctoSmith template",
+  "title": "Octosmith template",
   "type": "object",
   "additionalProperties": false,
   "required": [
