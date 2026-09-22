@@ -1,6 +1,7 @@
 /** Describes output format. */
 export type OutputFormat = "text" | "json";
 
+/** Parse a CLI output format value. */
 export function parseOutputFormat(value: string): OutputFormat {
   switch (value) {
     case "text":
@@ -13,6 +14,7 @@ export function parseOutputFormat(value: string): OutputFormat {
   }
 }
 
+/** Render a value using the selected CLI output format. */
 export function renderOutput<T>(
   format: OutputFormat,
   value: T,
