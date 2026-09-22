@@ -56,6 +56,7 @@ export interface ScaffoldFile {
   readonly content: string;
 }
 
+/** Build the files for a new Octosmith control repository. */
 export function buildScaffold(
   options: ScaffoldOptions,
 ): readonly ScaffoldFile[] {
@@ -140,6 +141,7 @@ export function buildScaffold(
   return files;
 }
 
+/** Write a generated Octosmith control repository to disk. */
 export async function writeScaffold(
   options: ScaffoldOptions,
 ): Promise<void> {
@@ -153,6 +155,7 @@ export async function writeScaffold(
   }
 }
 
+/** Parse command-line arguments for the Octosmith scaffolder. */
 export function parseScaffoldArguments(
   args: readonly string[],
   promptOrganization: () => string | null = () =>
