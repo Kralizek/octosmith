@@ -22,9 +22,10 @@ Deno.test("action metadata delegates to the CLI package", async () => {
   );
 
   const script = await Deno.readTextFile("scripts/run-action.sh");
-  assertStringIncludes(script, "$GITHUB_ACTION_PATH/packages/cli/mod.ts");
+  assertStringIncludes(script, "jsr:@octosmith/cli@");
+  assertStringIncludes(script, "packages/cli/deno.json");
+  assertStringIncludes(script, "OCTOSMITH_CLI_ENTRYPOINT");
   assertEquals(script.includes("$GITHUB_ACTION_PATH/action/mod.ts"), false);
-  assertEquals(script.includes("jsr:@octosmith/cli"), false);
 });
 
 Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
@@ -40,8 +41,9 @@ Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
   assertEquals(result.code, 0);
   assertEquals(result.args, [
     "run",
-    "--config",
-    `${Deno.cwd()}/deno.json`,
+    "--quiet",
+    "--minimum-dependency-age",
+    "0",
     "-A",
     `${Deno.cwd()}/packages/cli/mod.ts`,
     "apply",
@@ -181,6 +183,8 @@ printf '%s\\n' "$@" > "$OCTOSMITH_TEST_ARGS"
       env: {
         ...env,
         GITHUB_ACTION_PATH: Deno.cwd(),
+        OCTOSMITH_CLI_ENTRYPOINT:
+          env.OCTOSMITH_CLI_ENTRYPOINT ?? `${Deno.cwd()}/packages/cli/mod.ts`,
         OCTOSMITH_TEST_ARGS: capture,
         PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
       },
