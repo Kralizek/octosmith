@@ -5,6 +5,7 @@ import type {
   RepositoryReport,
 } from "./types.ts";
 
+/** Build a repository report for a planned change set. */
 export function reportPlannedRepository(
   template: string,
   plan: Plan,
@@ -22,6 +23,7 @@ export function reportPlannedRepository(
   };
 }
 
+/** Build a repository report for an applied change set. */
 export function reportAppliedRepository(
   template: string,
   repository: string,
@@ -77,6 +79,7 @@ export function reportAppliedRepository(
   };
 }
 
+/** Build a repository report for a failed repository operation. */
 export function reportFailedRepository(
   repository: string,
   error: unknown,
