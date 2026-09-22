@@ -22,6 +22,7 @@ export interface LoadedConfiguration {
   readonly templates: Readonly<Record<string, RepositoryTemplate>>;
 }
 
+/** Load and validate an Octosmith configuration directory. */
 export async function loadConfigurationDirectory(
   root: string,
 ): Promise<LoadedConfiguration> {
