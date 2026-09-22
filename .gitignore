@@ -9,3 +9,6 @@
 # https://docs.deno.com/runtime/reference/cli/coverage/
 coverage/
 *.lcov
+
+# Generated package-local schema copies
+packages/octosmith/configuration/schemas/
