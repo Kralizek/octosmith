@@ -22,7 +22,8 @@ flowchart TD
 
 ## JSON Schemas
 
-The canonical schemas live at the repository root under [`/schemas`](../schemas/):
+The canonical schemas live at the repository root under
+[`/schemas`](../schemas/):
 
 - `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/octosmith.schema.json`
 - `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/template.schema.json`
