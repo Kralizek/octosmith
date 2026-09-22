@@ -2,11 +2,13 @@ import type { EventDocument } from "@hooksmith/core";
 import type { ApplyItemReport, RepositoryReport } from "@octosmith/octosmith";
 import type { ApplyMode } from "./apply.ts";
 
+/** Describes repository event data. */
 export interface RepositoryEventData {
   readonly items: readonly ApplyItemReport[];
   readonly error?: string;
 }
 
+/** Convert a repository report into a resource event. */
 export function toRepositoryEvent(
   organization: string,
   mode: ApplyMode,
@@ -36,11 +38,13 @@ export function toRepositoryEvent(
   };
 }
 
+/** Describes event output. */
 export interface EventOutput {
   write(event: EventDocument): Promise<void>;
   close(): void;
 }
 
+/** Open a writable destination for NDJSON resource events. */
 export async function openEventOutput(path: string): Promise<EventOutput> {
   const file = await Deno.open(path, {
     write: true,

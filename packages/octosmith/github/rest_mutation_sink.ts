@@ -12,14 +12,17 @@ import type {
 import type { GitHubClient } from "./client.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 
+/** Describes secret value provider. */
 export type SecretValueProvider = (name: string) => string;
 
+/** Describes GitHub repository mutation sink options. */
 export interface GitHubRepositoryMutationSinkOptions {
   readonly client: GitHubClient;
   readonly owner: string;
   readonly secretValue: SecretValueProvider;
 }
 
+/** Describes GitHub repository mutation sink. */
 export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #client: GitHubClient;
   readonly #owner: string;
@@ -223,7 +226,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           this.repo(repository) + "/contents/" + encodePath(operation.path),
           {
             body: {
-              message: "OctoSmith: remove " + operation.path,
+              message: "Octosmith: remove " + operation.path,
               sha: operation.sha,
             },
           },
@@ -500,7 +503,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       this.repo(repository) + "/contents/" + encodePath(path),
       {
         body: {
-          message: "OctoSmith: apply " + path,
+          message: "Octosmith: apply " + path,
           content: encodeBase64(content),
           ...(sha !== undefined && { sha }),
         },

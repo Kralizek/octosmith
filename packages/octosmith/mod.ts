@@ -1,5 +1,5 @@
 /**
- * OctoSmith domain models, planning, reporting, and GitHub integration.
+ * Octosmith domain models, planning, reporting, and GitHub integration.
  *
  * @module
  */
@@ -11,5 +11,5 @@ export * from "./state/mod.ts";
 export * from "./types.ts";
 export * from "./github/mod.ts";
 
-/** The apply modes supported by OctoSmith. */
+/** The apply modes supported by Octosmith. */
 export type ApplyMode = "plan" | "apply";

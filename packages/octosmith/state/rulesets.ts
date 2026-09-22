@@ -6,27 +6,32 @@ import type {
   RulesetTarget,
 } from "../types.ts";
 
+/** Describes ruleset bypass actor. */
 export interface RulesetBypassActor {
   readonly actorType: RulesetBypassActorType;
   readonly actorId?: number;
   readonly bypassMode: RulesetBypassMode;
 }
 
+/** Describes ref name condition. */
 export interface RefNameCondition {
   readonly include: readonly string[];
   readonly exclude: readonly string[];
 }
 
+/** Describes ref ruleset conditions. */
 export interface RefRulesetConditions {
   readonly refName: RefNameCondition;
 }
 
+/** Describes pattern operator. */
 export type PatternOperator =
   | "starts-with"
   | "ends-with"
   | "contains"
   | "regex";
 
+/** Describes pattern parameters. */
 export interface PatternParameters {
   readonly name?: string;
   readonly negate?: boolean;
@@ -34,11 +39,13 @@ export interface PatternParameters {
   readonly pattern: string;
 }
 
+/** Describes required status check. */
 export interface RequiredStatusCheck {
   readonly context: string;
   readonly integrationId?: number;
 }
 
+/** Describes required workflow. */
 export interface RequiredWorkflow {
   readonly path: string;
   readonly repositoryId: number;
@@ -46,6 +53,7 @@ export interface RequiredWorkflow {
   readonly sha?: string;
 }
 
+/** Describes code scanning tool. */
 export interface CodeScanningTool {
   readonly tool: string;
   readonly alertsThreshold:
@@ -61,6 +69,7 @@ export interface CodeScanningTool {
     | "all";
 }
 
+/** Describes pull request dismissal actor. */
 export interface PullRequestDismissalActor {
   readonly id: number;
   readonly type:
@@ -70,12 +79,14 @@ export interface PullRequestDismissalActor {
     | "repository-role";
 }
 
+/** Describes required reviewer. */
 export interface RequiredReviewer {
   readonly reviewerTeamId: number;
   readonly filePatterns: readonly string[];
   readonly minimumApprovals: number;
 }
 
+/** Describes current ref rule. */
 export type CurrentRefRule =
   | { readonly type: "creation" }
   | {
@@ -150,6 +161,7 @@ export type CurrentRefRule =
   }
   | { readonly type: "license-compliance-scanning" };
 
+/** Describes current push rule. */
 export type CurrentPushRule =
   | {
     readonly type: "file-path-restriction";
@@ -168,6 +180,7 @@ export type CurrentPushRule =
     readonly maxFileSizeMb: number;
   };
 
+/** Describes ref ruleset definition. */
 export interface RefRulesetDefinition {
   readonly name: string;
   readonly target: "branch" | "tag";
@@ -177,6 +190,7 @@ export interface RefRulesetDefinition {
   readonly rules: readonly CurrentRefRule[];
 }
 
+/** Describes push ruleset definition. */
 export interface PushRulesetDefinition {
   readonly name: string;
   readonly target: "push";
@@ -185,8 +199,10 @@ export interface PushRulesetDefinition {
   readonly rules: readonly CurrentPushRule[];
 }
 
+/** Describes ruleset definition. */
 export type RulesetDefinition = RefRulesetDefinition | PushRulesetDefinition;
 
+/** Describes current ruleset. */
 export type CurrentRuleset =
   | (RefRulesetDefinition & { readonly id: number })
   | (PushRulesetDefinition & { readonly id: number });
@@ -199,20 +215,23 @@ type SparseRule<Rule extends { readonly type: string }> =
   & Pick<Rule, "type">
   & DeepPartial<Omit<Rule, "type">>;
 
+/** Describes desired ref rule. */
 export type DesiredRefRule = CurrentRefRule extends infer Rule
   ? Rule extends { readonly type: string } ? SparseRule<Rule> : never
   : never;
 
+/** Describes desired push rule. */
 export type DesiredPushRule = CurrentPushRule extends infer Rule
   ? Rule extends { readonly type: string } ? SparseRule<Rule> : never
   : never;
 
+/** Describes desired ruleset rule. */
 export type DesiredRulesetRule = DesiredRefRule | DesiredPushRule;
 
 /**
  * A sparse ownership declaration for a ruleset.
  *
- * Only fields present here are owned by OctoSmith. A planner may require more
+ * Only fields present here are owned by Octosmith. A planner may require more
  * information if the ruleset does not exist and must be created.
  */
 export interface DesiredRuleset {

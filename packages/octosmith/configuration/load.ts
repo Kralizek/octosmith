@@ -15,12 +15,14 @@ const validator = new Ajv2020({ allErrors: true, strict: false });
 const validateConfiguration = validator.compile(configurationSchema);
 const validateTemplate = validator.compile(templateSchema);
 
+/** Describes loaded configuration. */
 export interface LoadedConfiguration {
   readonly root: string;
   readonly configuration: Configuration;
   readonly templates: Readonly<Record<string, RepositoryTemplate>>;
 }
 
+/** Load and validate an Octosmith configuration directory. */
 export async function loadConfigurationDirectory(
   root: string,
 ): Promise<LoadedConfiguration> {

@@ -46,6 +46,8 @@ jobs:
 
       - name: Smoke test local Action
         uses: ./
+        env:
+          OCTOSMITH_CLI_ENTRYPOINT: ${{ github.workspace }}/packages/cli/mod.ts
         with:
           mode: plan
           path: ${{ runner.temp }}/octosmith-action-smoke

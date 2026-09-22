@@ -1,22 +1,27 @@
 import type { Operation, Plan } from "../mod.ts";
 
+/** Describes apply operation status. */
 export type ApplyOperationStatus = "applied" | "failed" | "skipped";
 
+/** Describes apply operation result. */
 export interface ApplyOperationResult {
   readonly operation: Operation;
   readonly status: ApplyOperationStatus;
   readonly error?: string;
 }
 
+/** Describes apply plan result. */
 export interface ApplyPlanResult {
   readonly repository: string;
   readonly operations: readonly ApplyOperationResult[];
 }
 
+/** Describes apply plan options. */
 export interface ApplyPlanOptions {
   readonly continueOnError?: boolean;
 }
 
+/** Describes repository mutation sink. */
 export interface RepositoryMutationSink {
   prepare?(
     repository: string,
@@ -25,6 +30,7 @@ export interface RepositoryMutationSink {
   apply(repository: string, operation: Operation): Promise<void>;
 }
 
+/** Apply every operation in a plan through the configured mutation sink. */
 export async function applyPlan(
   sink: RepositoryMutationSink,
   plan: Plan,

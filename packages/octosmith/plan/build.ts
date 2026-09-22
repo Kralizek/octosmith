@@ -31,6 +31,7 @@ import type {
 } from "../state/types.ts";
 import type { ApplyEvaluation, Operation, Plan } from "./types.ts";
 
+/** Build the operations required to move current state to desired state. */
 export function buildPlan(
   current: CurrentState,
   desired: DesiredState,
@@ -479,6 +480,7 @@ function planFiles(
   }
 }
 
+/** Build apply evaluations for the operations in a plan. */
 export function buildApplyEvaluations(
   desired: DesiredState,
   operations: readonly Operation[],
@@ -779,6 +781,7 @@ function operationEvaluation(operation: Operation): ApplyEvaluation {
   }
 }
 
+/** Build repository-setting operations for current and desired state. */
 export function diffRepositorySettings(
   current: CurrentRepositorySettings,
   desired: DesiredRepositorySettings,

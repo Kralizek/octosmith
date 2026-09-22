@@ -11,6 +11,7 @@ import type {
   Variable,
 } from "../mod.ts";
 
+/** Describes repository state source. */
 export interface RepositoryStateSource {
   getRepositorySettings(repository: string): Promise<CurrentRepositorySettings>;
 

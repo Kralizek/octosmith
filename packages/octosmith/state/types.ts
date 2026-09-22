@@ -19,6 +19,7 @@ import type {
 } from "./repository.ts";
 import type { CurrentRuleset, DesiredRuleset } from "./rulesets.ts";
 
+/** Describes current state. */
 export interface CurrentState {
   readonly repository: string;
   readonly settings: CurrentRepositorySettings;
@@ -32,6 +33,7 @@ export interface CurrentState {
   readonly files: readonly CurrentFile[];
 }
 
+/** Describes desired state. */
 export interface DesiredState {
   readonly repository: string;
   readonly template: string;
@@ -46,18 +48,21 @@ export interface DesiredState {
   readonly files?: readonly DesiredFile[];
 }
 
+/** Describes desired environment. */
 export interface DesiredEnvironment {
   readonly name: string;
   readonly secrets?: readonly DesiredSecret[];
   readonly variables?: readonly Variable[];
 }
 
+/** Describes current file. */
 export interface CurrentFile {
   readonly path: string;
   readonly content: string;
   readonly sha: string;
 }
 
+/** Describes desired file. */
 export type DesiredFile =
   | {
     readonly path: string;

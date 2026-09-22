@@ -15,16 +15,34 @@ Deno.test("action metadata delegates to the CLI package", async () => {
     true,
   );
 
-  const runStep = steps.find((step) => step.name === "Run OctoSmith");
+  const runStep = steps.find((step) => step.name === "Run Octosmith");
   assertStringIncludes(
     String(runStep?.run ?? ""),
     "$GITHUB_ACTION_PATH/scripts/run-action.sh",
   );
 
   const script = await Deno.readTextFile("scripts/run-action.sh");
-  assertStringIncludes(script, "$GITHUB_ACTION_PATH/packages/cli/mod.ts");
+  assertStringIncludes(script, "jsr:@octosmith/cli@");
+  assertStringIncludes(script, "packages/cli/deno.json");
+  assertStringIncludes(script, "OCTOSMITH_CLI_ENTRYPOINT");
   assertEquals(script.includes("$GITHUB_ACTION_PATH/action/mod.ts"), false);
-  assertEquals(script.includes("jsr:@octosmith/cli"), false);
+});
+
+Deno.test("action wrapper resolves the released CLI version", async () => {
+  const result = await runActionWrapper(
+    { OCTOSMITH_MODE: "validate" },
+    { releasedCli: true },
+  );
+
+  assertEquals(result.code, 0);
+  assertEquals(result.args.slice(0, 6), [
+    "run",
+    "--quiet",
+    "--minimum-dependency-age",
+    "0",
+    "-A",
+    "jsr:@octosmith/cli@0.1.0",
+  ]);
 });
 
 Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
@@ -40,8 +58,9 @@ Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
   assertEquals(result.code, 0);
   assertEquals(result.args, [
     "run",
-    "--config",
-    `${Deno.cwd()}/deno.json`,
+    "--quiet",
+    "--minimum-dependency-age",
+    "0",
     "-A",
     `${Deno.cwd()}/packages/cli/mod.ts`,
     "apply",
@@ -159,6 +178,7 @@ for (
 
 async function runActionWrapper(
   env: Record<string, string>,
+  options: { releasedCli?: boolean } = {},
 ): Promise<{ code: number; args: string[]; stderr: string }> {
   const root = await Deno.makeTempDir();
 
@@ -171,6 +191,10 @@ async function runActionWrapper(
     await Deno.writeTextFile(
       deno,
       `#!/usr/bin/env bash
+if [[ "\${1:-}" == "eval" ]]; then
+  printf '0.1.0\\n'
+  exit 0
+fi
 printf '%s\\n' "$@" > "$OCTOSMITH_TEST_ARGS"
 `,
     );
@@ -181,6 +205,10 @@ printf '%s\\n' "$@" > "$OCTOSMITH_TEST_ARGS"
       env: {
         ...env,
         GITHUB_ACTION_PATH: Deno.cwd(),
+        ...(options.releasedCli ? {} : {
+          OCTOSMITH_CLI_ENTRYPOINT: env.OCTOSMITH_CLI_ENTRYPOINT ??
+            `${Deno.cwd()}/packages/cli/mod.ts`,
+        }),
         OCTOSMITH_TEST_ARGS: capture,
         PATH: `${bin}:${Deno.env.get("PATH") ?? ""}`,
       },

@@ -1,6 +1,7 @@
 import type { CurrentState, DesiredState } from "../mod.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
 
+/** Read the current GitHub state needed for the supplied desired state. */
 export async function readCurrentState(
   source: RepositoryStateSource,
   desired: DesiredState,

@@ -24,6 +24,7 @@ import type {
 } from "../state/types.ts";
 import type { LoadedConfiguration } from "./load.ts";
 
+/** Describes repository metadata. */
 export interface RepositoryMetadata {
   readonly name: string;
   readonly teams: readonly string[];
@@ -31,6 +32,7 @@ export interface RepositoryMetadata {
   readonly properties: Readonly<Record<string, PropertyValue>>;
 }
 
+/** Describes runtime value provider. */
 export type RuntimeValueProvider = (name: string) => string;
 
 const MAX_CONFIGURATION_SOURCE_SIZE = 10 * 1024 * 1024;
@@ -44,6 +46,7 @@ const BUILT_IN_PERMISSIONS = new Set<BuiltInRepositoryPermission>([
   "admin",
 ]);
 
+/** Resolve repository configuration into normalized desired state. */
 export async function resolveDesiredState(
   loaded: LoadedConfiguration,
   repository: RepositoryMetadata,
@@ -184,6 +187,7 @@ function createConfigurationSourceReader(
   };
 }
 
+/** Determine whether repository metadata matches a configured selector. */
 export function matchesSelector(
   selector: RepositoryTemplate["match"],
   repository: RepositoryMetadata,

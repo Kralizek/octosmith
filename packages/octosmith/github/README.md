@@ -1,6 +1,6 @@
 # @octosmith/octosmith
 
-GitHub REST adapter for OctoSmith.
+GitHub REST adapter for Octosmith.
 
 Use `applyPlan` to execute a repository plan. Before the first operation, the
 GitHub sink resolves and snapshots all required repository and environment

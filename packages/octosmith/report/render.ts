@@ -1,15 +1,17 @@
 import type { ApplyItemReport, Report, RepositoryReport } from "./types.ts";
 
+/** Describes render report options. */
 export interface RenderReportOptions {
   readonly verbose?: boolean;
 }
 
+/** Render a structured Octosmith report as human-readable text. */
 export function renderReport(
   report: Report,
   options: RenderReportOptions = {},
 ): string {
   const lines = [
-    "OctoSmith report for " + report.organization,
+    "Octosmith report for " + report.organization,
     "",
   ];
 

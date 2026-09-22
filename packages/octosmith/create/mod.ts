@@ -1,3 +1,9 @@
+/**
+ * Deno create entry point for scaffolding an Octosmith control repository.
+ *
+ * @module
+ */
+
 import { basename, dirname, join, resolve } from "@std/path";
 import type { CollectionManagementMode } from "../types.ts";
 import configurationTemplate from "./templates/octosmith.yml" with {
@@ -34,6 +40,7 @@ import manualEventStreamingReadmeTemplate from "./templates/readme/event-streami
   type: "text",
 };
 
+/** Describes scaffold options. */
 export interface ScaffoldOptions {
   readonly targetDirectory: string;
   readonly organization: string;
@@ -43,11 +50,13 @@ export interface ScaffoldOptions {
   readonly eventStreaming: boolean;
 }
 
+/** Describes scaffold file. */
 export interface ScaffoldFile {
   readonly path: string;
   readonly content: string;
 }
 
+/** Build the files for a new Octosmith control repository. */
 export function buildScaffold(
   options: ScaffoldOptions,
 ): readonly ScaffoldFile[] {
@@ -132,6 +141,7 @@ export function buildScaffold(
   return files;
 }
 
+/** Write a generated Octosmith control repository to disk. */
 export async function writeScaffold(
   options: ScaffoldOptions,
 ): Promise<void> {
@@ -145,6 +155,7 @@ export async function writeScaffold(
   }
 }
 
+/** Parse command-line arguments for the Octosmith scaffolder. */
 export function parseScaffoldArguments(
   args: readonly string[],
   promptOrganization: () => string | null = () =>
@@ -307,6 +318,6 @@ if (import.meta.main) {
   const options = parseScaffoldArguments(Deno.args);
   await writeScaffold(options);
   console.log(
-    "Created OctoSmith control repository in " + options.targetDirectory,
+    "Created Octosmith control repository in " + options.targetDirectory,
   );
 }

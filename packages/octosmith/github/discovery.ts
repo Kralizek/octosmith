@@ -21,11 +21,13 @@ interface RepositoryPropertiesResponse {
   }[];
 }
 
+/** Describes repository discovery failure. */
 export interface RepositoryDiscoveryFailure {
   readonly repository: string;
   readonly error: unknown;
 }
 
+/** Describes repository discovery result. */
 export interface RepositoryDiscoveryResult {
   readonly repositories: readonly RepositoryMetadata[];
   readonly failures: readonly RepositoryDiscoveryFailure[];
@@ -38,6 +40,7 @@ interface CandidateDiscoveryResult {
 
 const PAGE_SIZE = 100;
 
+/** Discover repositories in configured scope, optionally targeting one repository. */
 export async function discoverRepositories(
   client: GitHubClient,
   loaded: LoadedConfiguration,

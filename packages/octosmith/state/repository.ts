@@ -8,6 +8,7 @@ import type {
   SquashMergeCommitTitle,
 } from "../types.ts";
 
+/** Describes current security and analysis. */
 export interface CurrentSecurityAndAnalysis {
   readonly advancedSecurity?: SecurityFeatureStatus;
   readonly codeSecurity?: SecurityFeatureStatus;
@@ -16,6 +17,7 @@ export interface CurrentSecurityAndAnalysis {
   readonly secretScanningAiDetection?: SecurityFeatureStatus;
 }
 
+/** Describes desired security and analysis. */
 export interface DesiredSecurityAndAnalysis {
   readonly advancedSecurity?: SecurityFeatureStatus;
   readonly codeSecurity?: SecurityFeatureStatus;
@@ -24,6 +26,7 @@ export interface DesiredSecurityAndAnalysis {
   readonly secretScanningAiDetection?: SecurityFeatureStatus;
 }
 
+/** Describes current merge settings. */
 export interface CurrentMergeSettings {
   readonly allowSquashMerge: boolean;
   readonly allowMergeCommit: boolean;
@@ -37,6 +40,7 @@ export interface CurrentMergeSettings {
   readonly mergeCommitMessage: MergeCommitMessage;
 }
 
+/** Describes desired merge settings. */
 export interface DesiredMergeSettings {
   readonly allowSquashMerge?: boolean;
   readonly allowMergeCommit?: boolean;
@@ -50,6 +54,7 @@ export interface DesiredMergeSettings {
   readonly mergeCommitMessage?: MergeCommitMessage;
 }
 
+/** Describes current repository settings. */
 export interface CurrentRepositorySettings {
   readonly name: string;
   readonly description: string | null;
@@ -71,6 +76,7 @@ export interface CurrentRepositorySettings {
   readonly securityAndAnalysis: CurrentSecurityAndAnalysis;
 }
 
+/** Describes desired repository settings. */
 export interface DesiredRepositorySettings {
   readonly description?: string | null;
   readonly website?: string | null;

@@ -1,11 +1,11 @@
-# OctoSmith control repository
+# Octosmith control repository
 
 This repository declares the desired GitHub state for **@@ORGANIZATION@@**.
 
 ## Bootstrap
 
 After scaffolding, initialize and push this directory as the organization's
-OctoSmith control repository. Keep it private if its plans may reveal private
+Octosmith control repository. Keep it private if its plans may reveal private
 repository configuration.
 
 Create an `OCTOSMITH_TOKEN` Actions secret containing a fine-grained personal
@@ -16,7 +16,7 @@ runtime.
 
 @@WORKFLOW_DOCUMENTATION@@
 
-The generated configuration initially scopes OctoSmith to
+The generated configuration initially scopes Octosmith to
 `@@REPOSITORY_NAME_RAW@@` only and uses `@@COLLECTION_MANAGEMENT_RAW@@`
 collection management. Expand the scope and templates deliberately as you adopt
 more repositories.
