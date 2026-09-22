@@ -49,6 +49,7 @@ export interface GitHubRuntimeOptions {
   readonly traceGroup?: (name: string) => void;
 }
 
+/** Create the GitHub-backed runtime used by plan and apply commands. */
 export function createGitHubRuntime(
   options: GitHubRuntimeOptions,
 ): ApplyRuntime {
@@ -108,6 +109,7 @@ export interface ApplyOptions {
   ) => void | Promise<void>;
 }
 
+/** Plan or apply repository configuration and emit each repository result. */
 export async function apply(
   runtime: ApplyRuntime,
   loaded: LoadedConfiguration,
