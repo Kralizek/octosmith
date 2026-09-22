@@ -1,8 +1,8 @@
-# OctoSmith
+# Octosmith
 
 Declarative desired-state management for GitHub repositories.
 
-OctoSmith lets an organization describe which repositories it manages, assign
+Octosmith lets an organization describe which repositories it manages, assign
 each repository to a template, inspect the changes required to reach that
 desired state, and apply those changes through the CLI or GitHub Actions.
 
@@ -53,9 +53,9 @@ For non-interactive scaffolding, options after Deno's `--` separator include:
 - `--no-workflows`
 - `--event-streaming`
 
-## How OctoSmith works
+## How Octosmith works
 
-OctoSmith follows the same pipeline whether it runs locally or in GitHub
+Octosmith follows the same pipeline whether it runs locally or in GitHub
 Actions:
 
 1. Load and validate the configuration directory.
@@ -65,14 +65,14 @@ Actions:
 5. Build a plan from current state to desired state.
 6. Report the plan or apply its operations.
 
-The default collection-management mode is `explicit`: OctoSmith manages only
+The default collection-management mode is `explicit`: Octosmith manages only
 members explicitly declared by configuration. `strict` makes supported named
 collections authoritative and can remove undeclared members.
 
 See the [library package README](packages/octosmith/README.md) for the
 configuration model and programmatic API.
 
-## Run OctoSmith
+## Run Octosmith
 
 ### CLI
 
@@ -115,8 +115,8 @@ The CLI can emit one NDJSON resource event per repository while planning or
 applying. The output path can be a normal file, FIFO, or another writable path.
 
 The scaffolder's `--event-streaming` option generates a Hooksmith example that
-streams live `resource.applied` events while OctoSmith is running. Hooksmith is
-an optional consumer; the OctoSmith library itself does not depend on Hooksmith
+streams live `resource.applied` events while Octosmith is running. Hooksmith is
+an optional consumer; the Octosmith library itself does not depend on Hooksmith
 for apply behavior.
 
 ## Documentation
@@ -144,5 +144,5 @@ environments, teams, and managed files.
 
 ## Versioning
 
-OctoSmith is currently on the 0.x release line. The public surface is usable,
+Octosmith is currently on the 0.x release line. The public surface is usable,
 but configuration and APIs may still evolve before 1.0.
