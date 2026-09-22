@@ -16,17 +16,26 @@ deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme
 
 The generated repository starts deliberately small:
 
-```text
-github-config/
-├── .github/
-│   └── workflows/
-│       ├── octosmith-apply.yml
-│       └── octosmith-validate.yml
-├── templates/
-│   └── default.yml
-├── octosmith.yml
-├── README.md
-└── .gitignore
+```mermaid
+flowchart TD
+    root["github-config/"]
+    github[".github/"]
+    workflows["workflows/"]
+    validate["octosmith-validate.yml"]
+    apply["octosmith-apply.yml"]
+    templates["templates/"]
+    default["default.yml"]
+    config["octosmith.yml"]
+    readme["README.md"]
+    gitignore[".gitignore"]
+
+    root --> github --> workflows
+    workflows --> validate
+    workflows --> apply
+    root --> templates --> default
+    root --> config
+    root --> readme
+    root --> gitignore
 ```
 
 Edit `octosmith.yml` to define the repositories in scope, then edit or add
