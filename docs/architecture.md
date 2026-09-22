@@ -1,6 +1,6 @@
 # Architecture
 
-OctoSmith separates configuration and planning from command-line hosting and
+Octosmith separates configuration and planning from command-line hosting and
 GitHub transport concerns.
 
 ## Packages
