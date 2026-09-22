@@ -102,6 +102,9 @@ jobs:
             }
           '
 
+      - name: Synchronize package schemas
+        run: bash .github/workflows/scripts/sync-schemas.sh
+
       - name: Create release commit
         if: steps.version.outputs.resume != 'true'
         env:
@@ -222,6 +225,9 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "major_tag=v$major" >> "$GITHUB_OUTPUT"
           echo "minor_tag=v$major.$minor" >> "$GITHUB_OUTPUT"
+
+      - name: Synchronize package schemas
+        run: bash .github/workflows/scripts/sync-schemas.sh
 
       - name: Check
         run: deno task check
