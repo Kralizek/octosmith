@@ -47,14 +47,14 @@ them:
 ### Configuration syntax
 
 The canonical JSON schemas live under root `schemas/`. Package-local files under
-`packages/octosmith/configuration/schemas/` are packaging/runtime copies. CI and
-release workflows overwrite those copies from the root schemas via
-`.github/workflows/scripts/sync-schemas.sh` before validation and packaging.
+`packages/octosmith/configuration/schemas/` are generated packaging/runtime
+artifacts. They are ignored by Git and materialized from the root schemas by
+`deno task sync:schemas` before validation and packaging.
 
 Usually touches:
 
 - `packages/octosmith/configuration/`
-- canonical JSON schemas under `schemas/` and their packaged copies
+- canonical JSON schemas under `schemas/`
 - normalization / desired-state resolution
 - validation tests
 - docs/configuration.md
@@ -85,18 +85,13 @@ script files rather than large YAML blocks.
 
 ### JSON schemas
 
-The canonical JSON schemas live under `schemas/`. The copies under
-`packages/octosmith/configuration/schemas/` are package-local mirrors required
-by the published library.
+The canonical JSON schemas live under `schemas/`. The package-local copies
+under `packages/octosmith/configuration/schemas/` are generated and ignored by
+Git; they exist only because the published library imports schemas relative to
+its package root.
 
-Do not edit the package copies directly. After changing a canonical schema, run:
-
-```sh
-deno task sync:schemas
-```
-
-`deno task check:schemas` and CI fail if the tracked package copies drift from
-the canonical schemas.
+Do not edit generated copies. `deno task check` runs `sync:schemas` first, and
+the release workflow synchronizes again before package validation and publish.
 
 ### Release workflow
 
