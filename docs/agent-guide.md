@@ -85,10 +85,10 @@ script files rather than large YAML blocks.
 
 ### JSON schemas
 
-The canonical JSON schemas live under `schemas/`. The package-local copies
-under `packages/octosmith/configuration/schemas/` are generated and ignored by
-Git; they exist only because the published library imports schemas relative to
-its package root.
+The canonical JSON schemas live under `schemas/`. The package-local copies under
+`packages/octosmith/configuration/schemas/` are generated and ignored by Git;
+they exist only because the published library imports schemas relative to its
+package root.
 
 Do not edit generated copies. `deno task check` runs `sync:schemas` first, and
 the release workflow synchronizes again before package validation and publish.
