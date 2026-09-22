@@ -15,6 +15,14 @@ format="$(trim "${OCTOSMITH_FORMAT:-text}")"
 verbose="$(trim "${OCTOSMITH_VERBOSE:-false}")"
 events_output="$(trim "${OCTOSMITH_EVENTS_OUTPUT:-}")"
 
+deno_args=(--quiet --minimum-dependency-age 0)
+if [[ -n "${OCTOSMITH_CLI_ENTRYPOINT:-}" ]]; then
+  cli="$OCTOSMITH_CLI_ENTRYPOINT"
+else
+  version="$(jq -r '.version' "$GITHUB_ACTION_PATH/packages/cli/deno.json")"
+  cli="jsr:@octosmith/cli@${version}"
+fi
+
 if [[ -z "$format" ]]; then
   format="text"
 fi
@@ -83,4 +91,4 @@ if [[ -n "$events_output" ]]; then
   args+=(--events-output "$events_output")
 fi
 
-deno run --config "$GITHUB_ACTION_PATH/deno.json" -A   "$GITHUB_ACTION_PATH/packages/cli/mod.ts"   "${args[@]}"
+deno run "${deno_args[@]}" -A "$cli" "${args[@]}"
