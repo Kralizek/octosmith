@@ -1,6 +1,6 @@
 const roots = ["packages"];
 const declaration =
-  /^\s*export\s+(?:default\s+)?(?:(?:declare\s+)?(?:abstract\s+)?class|(?:const\s+)?enum|interface|type)\s+[A-Za-z_$][\w$]*/;
+  /^\s*export\s+(?:default\s+)?(?:declare\s+)?(?:(?:abstract\s+)?class|(?:const\s+)?enum|interface|type|(?:async\s+)?function|const|let|var)\s+[A-Za-z_$][\w$]*/;
 const missing: string[] = [];
 
 for (const root of roots) {
