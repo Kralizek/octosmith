@@ -5,6 +5,7 @@ export interface RenderReportOptions {
   readonly verbose?: boolean;
 }
 
+/** Render a structured Octosmith report as human-readable text. */
 export function renderReport(
   report: Report,
   options: RenderReportOptions = {},
