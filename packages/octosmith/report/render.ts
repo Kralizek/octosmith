@@ -10,7 +10,7 @@ export function renderReport(
   options: RenderReportOptions = {},
 ): string {
   const lines = [
-    "Octosmith report for " + report.organization,
+    "OctoSmith report for " + report.organization,
     "",
   ];
 
