@@ -33,24 +33,21 @@ The library must not depend on the CLI.
 
 ## Execution flow
 
-```text
-configuration
-    ↓
-load + validate
-    ↓
-discover repositories
-    ↓
-resolve one template per repository
-    ↓
-read current GitHub state
-    ↓
-build plan
-    ↓
-report ───────────────┐
-    ↓                  │
-apply operations       │
-    ↓                  │
-repository report ◄────┘
+```mermaid
+flowchart TD
+    configuration["Configuration"]
+    load["Load + validate"]
+    discover["Discover repositories"]
+    resolve["Resolve one template per repository"]
+    current["Read current GitHub state"]
+    plan["Build plan"]
+    report["Plan report"]
+    apply["Apply operations"]
+    repositoryReport["Repository report"]
+
+    configuration --> load --> discover --> resolve --> current --> plan
+    plan --> report
+    plan --> apply --> repositoryReport
 ```
 
 Plan and apply share discovery, state loading, desired-state resolution, and
