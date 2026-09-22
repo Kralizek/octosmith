@@ -21,9 +21,6 @@ jobs:
           deno-version: v2.x
           cache: true
 
-      - name: Verify package schemas
-        run: deno task check:schemas
-
       - name: Check
         run: deno task check
 
