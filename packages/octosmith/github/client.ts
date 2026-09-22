@@ -1,14 +1,14 @@
-/** Describes git hub query value. */
+/** Describes GitHub query value. */
 export type GitHubQueryValue = string | number | boolean | undefined;
 
-/** Describes git hub request options. */
+/** Describes GitHub request options. */
 export interface GitHubRequestOptions {
   readonly query?: Readonly<Record<string, GitHubQueryValue>>;
   readonly body?: unknown;
   readonly allowNotFound?: boolean;
 }
 
-/** Describes git hub client. */
+/** Describes GitHub client. */
 export interface GitHubClient {
   request<T>(
     method: string,
@@ -22,14 +22,14 @@ export interface GitHubClient {
   ): Promise<T>;
 }
 
-/** Describes git hub response trace. */
+/** Describes GitHub response trace. */
 export interface GitHubResponseTrace {
   readonly method: string;
   readonly path: string;
   readonly status: number;
 }
 
-/** Describes fetch git hub client options. */
+/** Describes fetch GitHub client options. */
 export interface FetchGitHubClientOptions {
   readonly token: string;
   readonly baseUrl?: string;
@@ -38,7 +38,7 @@ export interface FetchGitHubClientOptions {
   readonly trace?: (entry: GitHubResponseTrace) => void;
 }
 
-/** Describes fetch git hub client. */
+/** Describes fetch GitHub client. */
 export class FetchGitHubClient implements GitHubClient {
   readonly #token: string;
   readonly #baseUrl: string;

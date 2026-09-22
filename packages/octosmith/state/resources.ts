@@ -6,7 +6,7 @@ export type CustomPropertyValue =
   | readonly string[]
   | null;
 
-/** Describes actions allowed actions. */
+/** Describes allowed GitHub Actions setting. */
 export type ActionsAllowedActions = "all" | "local-only" | "selected";
 
 /** Describes current selected actions. */

@@ -5,7 +5,7 @@ export type PropertyValue = string | boolean | readonly string[];
 /** Describes collection management mode. */
 export type CollectionManagementMode = "explicit" | "strict";
 
-/** Describes built in repository permission. */
+/** Describes built-in repository permission. */
 export type BuiltInRepositoryPermission =
   | "pull"
   | "triage"

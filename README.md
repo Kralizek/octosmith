@@ -100,6 +100,7 @@ targeted runs, output formats, exit behavior, and event output.
 The repository also ships a GitHub Action:
 
 ```yaml
+- uses: actions/checkout@v7
 - uses: Kralizek/octosmith@v0
   with:
     mode: apply

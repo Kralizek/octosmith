@@ -50,7 +50,7 @@ interface RepositoryResponse {
   >;
 }
 
-/** Describes git hub repository state source. */
+/** Describes GitHub repository state source. */
 export class GitHubRepositoryStateSource implements RepositoryStateSource {
   constructor(
     readonly client: GitHubClient,

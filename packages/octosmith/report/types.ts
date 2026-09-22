@@ -41,7 +41,7 @@ export interface ApplyItemReport {
   readonly error?: string;
 }
 
-/** Describes applied operation like. */
+/** Describes applied operation result. */
 export interface AppliedOperationLike {
   readonly operation: Operation;
   readonly status: "applied" | "failed" | "skipped";

@@ -84,7 +84,7 @@ export interface UpdateActionsSettingsOperation {
   readonly settings: DesiredActionsSettings;
 }
 
-/** Describes update actions oidcsettings operation. */
+/** Describes update actions OIDC settings operation. */
 export interface UpdateActionsOidcSettingsOperation {
   readonly type: "update-actions-oidc";
   readonly settings: DesiredActionsOidcSettings;

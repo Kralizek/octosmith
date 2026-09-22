@@ -15,14 +15,14 @@ import type { RepositoryMutationSink } from "./apply.ts";
 /** Describes secret value provider. */
 export type SecretValueProvider = (name: string) => string;
 
-/** Describes git hub repository mutation sink options. */
+/** Describes GitHub repository mutation sink options. */
 export interface GitHubRepositoryMutationSinkOptions {
   readonly client: GitHubClient;
   readonly owner: string;
   readonly secretValue: SecretValueProvider;
 }
 
-/** Describes git hub repository mutation sink. */
+/** Describes GitHub repository mutation sink. */
 export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #client: GitHubClient;
   readonly #owner: string;
