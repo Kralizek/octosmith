@@ -129,10 +129,6 @@ jobs:
           deno task check
           deno publish --dry-run
 
-      - name: Push release commit
-        if: steps.version.outputs.resume != 'true'
-        run: git push origin HEAD:master
-
       - name: Create or reuse immutable version tag
         env:
           TAG: ${{ steps.version.outputs.tag }}
