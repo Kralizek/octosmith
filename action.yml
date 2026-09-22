@@ -1,9 +1,9 @@
-name: OctoSmith
-description: Validate, plan, or apply declarative GitHub configuration with OctoSmith
+name: Octosmith
+description: Validate, plan, or apply declarative GitHub configuration with Octosmith
 
 inputs:
   mode:
-    description: OctoSmith command to run (validate, plan, or apply)
+    description: Octosmith command to run (validate, plan, or apply)
     required: true
   path:
     description: Configuration directory
@@ -38,7 +38,7 @@ runs:
       with:
         deno-version: v2.x
 
-    - name: Run OctoSmith
+    - name: Run Octosmith
       shell: bash
       working-directory: ${{ github.workspace }}
       env:
