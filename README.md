@@ -107,8 +107,9 @@ The repository also ships a GitHub Action:
     github-token: ${{ secrets.OCTOSMITH_TOKEN }}
 ```
 
-Supported modes are `validate`, `plan`, and `apply`. The moving `v0` tag tracks
-the latest compatible 0.x Action release.
+Supported modes are `validate`, `plan`, and `apply`. The Action runs the exact
+published `@octosmith/cli` version associated with its release commit. The moving
+`v0` tag tracks the latest compatible 0.x Action release.
 
 ## Event streaming
 
