@@ -1,6 +1,6 @@
-# Example OctoSmith configuration
+# Example Octosmith configuration
 
-This directory is a design fixture for the initial OctoSmith configuration
+This directory is a design fixture for the initial Octosmith configuration
 model.
 
 The filesystem acts as the registry:
