@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/packages/octosmith/configuration/schemas/octosmith.schema.json",
+  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/octosmith.schema.json",
   "title": "Octosmith configuration",
   "type": "object",
   "additionalProperties": false,
