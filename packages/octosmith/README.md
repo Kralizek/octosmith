@@ -28,6 +28,10 @@ For deeper guidance, see the repository documentation for
 [configuration](../../docs/configuration.md) and
 [architecture](../../docs/architecture.md).
 
+Canonical JSON Schemas for configuration authors are published from the
+repository [`/schemas`](../../schemas/) directory. See the
+[configuration guide](../../docs/configuration.md) for editor integration.
+
 ## Configuration model
 
 An Octosmith configuration directory has one root file and one or more
