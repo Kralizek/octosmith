@@ -17,6 +17,10 @@ Supported modes are `validate`, `plan`, and `apply`.
 
 `validate` does not require GitHub credentials. `plan` and `apply` do.
 
+The Action resolves the exact `@octosmith/cli` version recorded in its release
+commit and runs that published JSR package. Moving Action tags such as `v0` and
+`v0.x` are updated only after the matching CLI package has been published.
+
 ## Credentials
 
 The credential is exposed to the CLI through `GITHUB_TOKEN`; it is not passed as
