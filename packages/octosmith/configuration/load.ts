@@ -1,4 +1,4 @@
-import { join } from "@std/path";
+import { extname, join, relative } from "@std/path";
 import { parse } from "@std/yaml";
 import { Ajv2020, type ValidateFunction } from "ajv/2020";
 import type { Configuration, RepositoryTemplate } from "./types.ts";
@@ -41,16 +41,22 @@ export async function loadConfigurationDirectory(
 
   const templates: Record<string, RepositoryTemplate> = {};
 
-  for await (const entry of Deno.readDir(templatesDirectory)) {
-    if (!entry.isFile || !/\.ya?ml$/i.test(entry.name)) {
-      continue;
-    }
-
-    const name = entry.name.replace(/\.ya?ml$/i, "");
-    templates[name] = await loadYaml<RepositoryTemplate>(
-      join(templatesDirectory, entry.name),
+  for await (const path of walkTemplateFiles(templatesDirectory)) {
+    const template = await loadYaml<RepositoryTemplate>(
+      path,
       validateTemplate,
     );
+    const relativePath = relative(templatesDirectory, path)
+      .replaceAll("\\", "/");
+    const extension = extname(relativePath);
+    const id = relativePath.slice(0, -extension.length);
+    const identity = template.kind + ":" + id;
+
+    if (templates[identity] !== undefined) {
+      throw new Error("Duplicate template identity: " + identity);
+    }
+
+    templates[identity] = template;
   }
 
   return {
@@ -126,4 +132,20 @@ function camelizeKey(key: string): string {
     /_([a-z])/g,
     (_, letter: string) => letter.toUpperCase(),
   );
+}
+
+
+async function* walkTemplateFiles(directory: string): AsyncGenerator<string> {
+  for await (const entry of Deno.readDir(directory)) {
+    const path = join(directory, entry.name);
+
+    if (entry.isDirectory) {
+      yield* walkTemplateFiles(path);
+      continue;
+    }
+
+    if (entry.isFile && /\.ya?ml$/i.test(entry.name)) {
+      yield path;
+    }
+  }
 }
