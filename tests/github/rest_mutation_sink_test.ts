@@ -847,11 +847,37 @@ Deno.test("pull-request file delivery creates a stable branch and labeled PR", a
   });
 
   const labels = client.requests.find((item) =>
-    item.method === "PUT" && item.path.endsWith("/issues/42/labels")
+    item.method === "POST" && item.path.endsWith("/issues/42/labels")
   );
   assertEquals(labels?.body, {
     labels: ["automation", "octosmith"],
   });
+});
+
+Deno.test("pull-request file delivery preserves existing labels when none are configured", async () => {
+  const client = new PullRequestFileClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  assertEquals(
+    client.requests.some((item) =>
+      item.path.endsWith("/issues/42/labels")
+    ),
+    false,
+  );
 });
 
 Deno.test("pull-request file delivery reuses its stable branch and open PR", async () => {
@@ -906,7 +932,7 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
     false,
   );
   const labels = client.requests.find((item) =>
-    item.method === "PUT" && item.path.endsWith("/issues/42/labels")
+    item.method === "POST" && item.path.endsWith("/issues/42/labels")
   );
   assertEquals(labels?.body, { labels: [] });
 });
