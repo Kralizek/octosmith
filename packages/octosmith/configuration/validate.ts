@@ -25,7 +25,12 @@ export async function validateConfigurationDirectory(
 
   const scope = loaded.configuration.repositories.scope;
   assertTemplatesDoNotOverlap(scope, loaded.templates);
-  assertScopeCanMatchTemplate(scope, loaded.templates);
+  if (
+    loaded.configuration.repositories.settings?.unmatchedRepositories !==
+      "ignore"
+  ) {
+    assertScopeCanMatchTemplate(scope, loaded.templates);
+  }
 
   for (const [name, template] of Object.entries(loaded.templates)) {
     const inScope = selectorsCanOverlap(scope, template.match);
