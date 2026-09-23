@@ -93,6 +93,7 @@ Deno.test("validate rejects overlapping repository templates", async () => {
     await Deno.writeTextFile(
       root + "/templates/wildcard.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         '  names: ["*"]',
@@ -103,6 +104,7 @@ Deno.test("validate rejects overlapping repository templates", async () => {
     await Deno.writeTextFile(
       root + "/templates/sample.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -148,6 +150,7 @@ Deno.test("validate rejects literal scoped repositories without a template", asy
     await Deno.writeTextFile(
       root + "/templates/other.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -192,6 +195,7 @@ Deno.test("validate rejects overlaps that require combined metadata", async () =
     await Deno.writeTextFile(
       root + "/templates/team.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  teams:",
@@ -203,6 +207,7 @@ Deno.test("validate rejects overlaps that require combined metadata", async () =
     await Deno.writeTextFile(
       root + "/templates/property.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  properties:",
@@ -243,6 +248,7 @@ Deno.test("validate accepts literal scope when metadata could satisfy template",
     await Deno.writeTextFile(
       root + "/templates/team.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -279,6 +285,7 @@ Deno.test("validate allows incompatible metadata selectors", async () => {
     await Deno.writeTextFile(
       root + "/templates/public.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  visibility: public",
@@ -289,6 +296,7 @@ Deno.test("validate allows incompatible metadata selectors", async () => {
     await Deno.writeTextFile(
       root + "/templates/private.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  visibility: private",
@@ -323,6 +331,7 @@ Deno.test("validate allows template overlap outside configured scope", async () 
     await Deno.writeTextFile(
       root + "/templates/api.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -334,6 +343,7 @@ Deno.test("validate allows template overlap outside configured scope", async () 
     await Deno.writeTextFile(
       root + "/templates/web.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -345,6 +355,7 @@ Deno.test("validate allows template overlap outside configured scope", async () 
     await Deno.writeTextFile(
       root + "/templates/all-web.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -382,6 +393,7 @@ Deno.test("validate rejects scope metadata incompatible with all templates", asy
     await Deno.writeTextFile(
       root + "/templates/frontend.yml",
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  properties:",
@@ -430,6 +442,7 @@ async function validConfiguration(includeManagedFile = true): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/default.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",

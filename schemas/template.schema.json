@@ -5,13 +5,21 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "version",
     "kind",
     "match",
     "repository"
   ],
   "properties": {
+    "version": {
+      "const": 1
+    },
     "kind": {
       "const": "repository"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
     },
     "match": {
       "$ref": "#/$defs/selector"

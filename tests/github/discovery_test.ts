@@ -391,6 +391,7 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
       { scope: {} },
       {
         code: {
+          version: 1,
           kind: "repository",
           match: {
             teams: ["platform"],

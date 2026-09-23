@@ -28,19 +28,21 @@ Deno.test("loads example configuration and templates", async () => {
   });
 
   assertEquals(Object.keys(loaded.templates).sort(), [
-    "code",
-    "config",
-    "infrastructure",
-    "issues",
-    "shared-library",
+    "repository:code",
+    "repository:config",
+    "repository:infrastructure",
+    "repository:issues",
+    "repository:shared-library",
   ]);
 
   assertEquals(
-    loaded.templates.code.repository?.settings?.deleteBranchOnMerge,
+    loaded.templates["repository:code"].repository?.settings
+      ?.deleteBranchOnMerge,
     true,
   );
   assertEquals(
-    loaded.templates.code.repository.rulesets?.[0].conditions?.refName?.include,
+    loaded.templates["repository:code"].repository.rulesets?.[0].conditions
+      ?.refName?.include,
     ["~DEFAULT_BRANCH"],
   );
 });
@@ -80,6 +82,184 @@ for (
   );
 }
 
+Deno.test("loads nested templates with kind-scoped path identities", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates", "team-a"), { recursive: true });
+    await Deno.mkdir(join(root, "templates", "team-b"), { recursive: true });
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - '*'",
+        "",
+      ].join("\n"),
+    );
+
+    for (const team of ["team-a", "team-b"]) {
+      await Deno.writeTextFile(
+        join(root, "templates", team, "backend.yml"),
+        [
+          "version: 1",
+          "kind: repository",
+          "name: Backend services",
+          "match:",
+          "  names:",
+          "    - " + team + "-backend",
+          "repository: {}",
+          "",
+        ].join("\n"),
+      );
+    }
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    assertEquals(Object.keys(loaded.templates).sort(), [
+      "repository:team-a/backend",
+      "repository:team-b/backend",
+    ]);
+    assertEquals(
+      loaded.templates["repository:team-a/backend"].name,
+      "Backend services",
+    );
+
+    const desired = await resolveDesiredState(
+      loaded,
+      { name: "team-a-backend", teams: [], properties: {} },
+      (name) => name,
+    );
+    assertEquals(desired.template, "repository:team-a/backend");
+    assertEquals(desired.templateName, "Backend services");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("rejects nameless YAML template files", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", ".yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "Template filename must include a name before the YAML extension",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("rejects colliding template identities across yaml extensions", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+
+    const source = [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  names:",
+      "    - sample",
+      "repository: {}",
+      "",
+    ].join("\n");
+
+    await Deno.writeTextFile(join(root, "templates", "a.yml"), source);
+    await Deno.writeTextFile(join(root, "templates", "a.yaml"), source);
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "Duplicate template identity: repository:a",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template version is required", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "version",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("normalizes read and write team permission aliases", async () => {
   const root = await Deno.makeTempDir();
 
@@ -100,6 +280,7 @@ Deno.test("normalizes read and write team permission aliases", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -156,6 +337,7 @@ Deno.test("preserves inherited object keys as custom team permissions", async ()
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -331,6 +513,7 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "code.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  properties:",
@@ -356,15 +539,21 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     assertEquals(loaded.configuration.repositories.scope.properties, {
       repository_type: "code",
     });
-    assertEquals(loaded.templates.code.match.properties, {
+    assertEquals(loaded.templates["repository:code"].match.properties, {
       repository_type: "code",
     });
-    assertEquals(loaded.templates.code.repository?.customProperties, {
-      deployment_region: "eu-north-1",
-    });
-    assertEquals(Object.keys(loaded.templates.code.repository.files ?? {}), [
-      ".github/workflows/release_candidate.yml",
-    ]);
+    assertEquals(
+      loaded.templates["repository:code"].repository?.customProperties,
+      {
+        deployment_region: "eu-north-1",
+      },
+    );
+    assertEquals(
+      Object.keys(loaded.templates["repository:code"].repository.files ?? {}),
+      [
+        ".github/workflows/release_candidate.yml",
+      ],
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -441,6 +630,7 @@ for (
       await Deno.writeTextFile(
         join(root, "templates", "sample.yml"),
         [
+          "version: 1",
           "kind: repository",
           "match:",
           "  names:",
@@ -518,6 +708,7 @@ Deno.test("rejects aggregate configuration file sources larger than 50 MiB", asy
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -567,6 +758,7 @@ Deno.test("rejects configuration file sources larger than 10 MiB", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -631,6 +823,7 @@ Deno.test("rejects symlinked configuration file sources escaping root", async ()
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -684,6 +877,7 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -762,6 +956,7 @@ Deno.test("resolves variable and secret binding forms", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -857,6 +1052,7 @@ Deno.test("preserves omitted environment members in desired state", async () => 
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -942,6 +1138,7 @@ for (
       await Deno.writeTextFile(
         join(root, "templates", "sample.yml"),
         [
+          "version: 1",
           "kind: repository",
           "match:",
           "  names:",

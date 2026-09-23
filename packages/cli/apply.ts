@@ -149,11 +149,13 @@ export async function apply(
     }
 
     let template: string | undefined;
+    let templateName: string | undefined;
     let result: import("@octosmith/octosmith").RepositoryReport;
 
     try {
       const desired = await resolveDesiredState(loaded, repository, values);
       template = desired.template;
+      templateName = desired.templateName;
       const current = await runtime.read(desired);
       const plan = buildPlan(current, desired);
       const evaluations = buildApplyEvaluations(
@@ -166,6 +168,7 @@ export async function apply(
           desired.template,
           plan,
           evaluations,
+          desired.templateName,
         );
       } else {
         const applied = await runtime.apply(plan);
@@ -174,10 +177,16 @@ export async function apply(
           desired.repository,
           evaluations,
           applied.operations,
+          desired.templateName,
         );
       }
     } catch (error) {
-      result = reportFailedRepository(repository.name, error, template);
+      result = reportFailedRepository(
+        repository.name,
+        error,
+        template,
+        templateName,
+      );
     }
 
     await addResult(result);

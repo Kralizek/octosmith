@@ -8,6 +8,7 @@ const configuration = {
   repositories: { scope: { names: ["sample"] } },
 };
 const template = {
+  version: 1,
   kind: "repository",
   match: { names: ["*"] },
   repository: {},
@@ -71,7 +72,7 @@ Deno.test("configuration rejects unsupported template kind", async () => {
 Deno.test("configuration rejects repository template without repository body", async () => {
   await withConfiguration(
     configuration,
-    { kind: "repository", match: { names: ["*"] } },
+    { version: 1, kind: "repository", match: { names: ["*"] } },
     (root) =>
       assertRejects(
         () => loadConfigurationDirectory(root),
@@ -85,6 +86,7 @@ Deno.test("configuration accepts Actions and Dependabot value blocks", async () 
   await withConfiguration(
     configuration,
     {
+      version: 1,
       kind: "repository",
       match: { names: ["*"] },
       repository: {
@@ -137,7 +139,12 @@ Deno.test("configuration rejects unsupported versions", async () => {
 Deno.test("configuration rejects misspelled template selectors", async () => {
   await withConfiguration(
     configuration,
-    { kind: "repository", match: { nmaes: ["sample"] }, repository: {} },
+    {
+      version: 1,
+      kind: "repository",
+      match: { nmaes: ["sample"] },
+      repository: {},
+    },
     async (root) => {
       const error = await assertRejects(
         () => loadConfigurationDirectory(root),

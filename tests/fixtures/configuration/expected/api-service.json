@@ -1,6 +1,6 @@
 {
   "repository": "api-service",
-  "template": "code",
+  "template": "repository:code",
   "settings": {
     "hasProjects": false,
     "hasDiscussions": false,

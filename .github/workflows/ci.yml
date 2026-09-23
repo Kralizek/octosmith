@@ -37,6 +37,7 @@ jobs:
                 - octosmith
           YAML
           cat > "$RUNNER_TEMP/octosmith-action-smoke/templates/default.yml" <<'YAML'
+          version: 1
           kind: repository
           match:
             names:

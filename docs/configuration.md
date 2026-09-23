@@ -75,7 +75,13 @@ Each repository in scope that is managed must resolve to exactly one template.
 When `repositories.settings.unmatched_repositories` is `ignore`, repositories
 without a matching template are left unmanaged.
 
+Templates are discovered recursively under `templates/`. Their canonical
+identity is `<kind>:<relative-path-without-extension>`, so
+`templates/team-a/backend.yml` is `repository:team-a/backend`. The optional
+`name` field is display-only and does not participate in identity.
+
 ```yaml
+version: 1
 kind: repository
 
 match:

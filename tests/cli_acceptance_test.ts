@@ -128,7 +128,7 @@ Deno.test("CLI targets one in-scope repository without enumerating the organizat
     );
     assertEquals(mutations(requests), []);
     const rendered = output.join("\n");
-    assertStringIncludes(rendered, "sample [code] — planned");
+    assertStringIncludes(rendered, "sample [repository:code] — planned");
     assertStringIncludes(
       rendered,
       "Summary: 0 unchanged, 1 planned, 0 applied, 0 partially-applied, 0 failed",
@@ -347,7 +347,7 @@ Deno.test("CLI isolates exact-name discovery failures", async () => {
 
     const rendered = output.join("\n");
     assertStringIncludes(rendered, "missing — failed");
-    assertStringIncludes(rendered, "sample [code] — planned");
+    assertStringIncludes(rendered, "sample [repository:code] — planned");
     assertEquals(mutations(requests), []);
   } finally {
     if (previous === undefined) {
@@ -383,7 +383,10 @@ Deno.test("CLI apply replans from fresh GitHub state", async () => {
       ),
       0,
     );
-    assertStringIncludes(output.join("\n"), "sample [code] — planned");
+    assertStringIncludes(
+      output.join("\n"),
+      "sample [repository:code] — planned",
+    );
     assertEquals(mutations(requests), []);
 
     state.hasIssues = false;
@@ -398,7 +401,10 @@ Deno.test("CLI apply replans from fresh GitHub state", async () => {
       0,
     );
     assertEquals(mutations(requests), []);
-    assertStringIncludes(output.join("\n"), "sample [code] — unchanged");
+    assertStringIncludes(
+      output.join("\n"),
+      "sample [repository:code] — unchanged",
+    );
   } finally {
     if (previous === undefined) {
       Deno.env.delete("DESIRED");
@@ -504,7 +510,10 @@ Deno.test("partial apply skips later operations and continues with the next repo
     );
 
     const rendered = output.join("\n");
-    assertStringIncludes(rendered, "✗ sample [code] — partially-applied");
+    assertStringIncludes(
+      rendered,
+      "✗ sample [repository:code] — partially-applied",
+    );
     assertStringIncludes(
       rendered,
       "✓ Repository settings — hasIssues: false",
@@ -514,7 +523,7 @@ Deno.test("partial apply skips later operations and continues with the next repo
       "✗ Actions variable DESIRED — update",
     );
     assertStringIncludes(rendered, "· File managed.txt — create");
-    assertStringIncludes(rendered, "✓ z-next [code] — applied");
+    assertStringIncludes(rendered, "✓ z-next [repository:code] — applied");
     assertStringIncludes(
       rendered,
       "Summary: 0 unchanged, 0 planned, 1 applied, 1 partially-applied, 0 failed",
@@ -796,6 +805,7 @@ async function safetyConfigurationDirectory(
     await Deno.writeTextFile(
       root + "/templates/" + name + ".yml",
       JSON.stringify({
+        version: 1,
         kind: "repository",
         match: value.match,
         repository,
@@ -1217,7 +1227,7 @@ Deno.test("CLI streams one Hooksmith event per repository and preserves stdout r
     assertEquals(events[1].metadata, {
       producer: "octosmith",
       status: "planned",
-      template: "code",
+      template: "repository:code",
     });
     assertEquals(Array.isArray(events[1].data.items), true);
   } finally {
@@ -1380,6 +1390,7 @@ async function configurationDirectory(
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",
@@ -1525,6 +1536,7 @@ async function secretConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",
@@ -1556,6 +1568,7 @@ async function partialConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",

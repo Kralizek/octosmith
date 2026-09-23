@@ -263,6 +263,7 @@ async function configurationDirectory(
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",
@@ -296,6 +297,7 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",

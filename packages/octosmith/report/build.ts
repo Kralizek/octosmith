@@ -10,10 +10,12 @@ export function reportPlannedRepository(
   template: string,
   plan: Plan,
   evaluations: readonly ApplyEvaluation[],
+  templateName?: string,
 ): RepositoryReport {
   return {
     repository: plan.repository,
     template,
+    ...(templateName !== undefined && { templateName }),
     status: plan.operations.length === 0 ? "unchanged" : "planned",
     items: evaluations.map((evaluation) => ({
       type: evaluation.type,
@@ -29,6 +31,7 @@ export function reportAppliedRepository(
   repository: string,
   evaluations: readonly ApplyEvaluation[],
   operations: readonly AppliedOperationLike[],
+  templateName?: string,
 ): RepositoryReport {
   const applied = operations.filter((item) => item.status === "applied").length;
   const failed = operations.some((item) => item.status === "failed");
@@ -70,6 +73,7 @@ export function reportAppliedRepository(
   return {
     repository,
     template,
+    ...(templateName !== undefined && { templateName }),
     status: failed
       ? applied > 0 ? "partially-applied" : "failed"
       : operations.length === 0
@@ -84,10 +88,12 @@ export function reportFailedRepository(
   repository: string,
   error: unknown,
   template?: string,
+  templateName?: string,
 ): RepositoryReport {
   return {
     repository,
     ...(template !== undefined && { template }),
+    ...(templateName !== undefined && { templateName }),
     status: "failed",
     items: [],
     error: error instanceof Error ? error.message : String(error),

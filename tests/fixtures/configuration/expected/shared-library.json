@@ -1,6 +1,6 @@
 {
   "repository": "shared-library",
-  "template": "shared-library",
+  "template": "repository:shared-library",
   "settings": {
     "hasProjects": false,
     "hasDiscussions": false,
