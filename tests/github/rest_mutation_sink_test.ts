@@ -667,6 +667,7 @@ Deno.test("managed file delivery rejects stale update and delete SHAs", async ()
 
 class PullRequestFileClient implements GitHubClient {
   readonly requests: RecordedRequest[] = [];
+  defaultBranch = "main";
   branchExists = false;
   branchSha = "old-branch-sha";
   pullExists = false;
@@ -772,9 +773,9 @@ class PullRequestFileClient implements GitHubClient {
     _query: Readonly<Record<string, GitHubQueryValue>> = {},
   ): Promise<T> {
     if (path === "/repos/acme/sample") {
-      return Promise.resolve({ default_branch: "main" } as T);
+      return Promise.resolve({ default_branch: this.defaultBranch } as T);
     }
-    if (path.endsWith("/git/ref/heads/main")) {
+    if (path.endsWith("/git/ref/heads/" + this.defaultBranch)) {
       return Promise.resolve({ object: { sha: "base-sha" } } as T);
     }
     if (path.endsWith("/git/commits/base-sha")) {
@@ -943,6 +944,44 @@ Deno.test("pull-request file delivery retries concurrent branch creation", async
       item.method === "PATCH" &&
       item.path.endsWith("/git/refs/heads/octosmith/reconcile")
     ),
+  );
+});
+
+Deno.test("pull-request file delivery rejects default-branch reconciliation", async () => {
+  const client = new PullRequestFileClient();
+  client.defaultBranch = "octosmith/reconcile";
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "create-file",
+        file: {
+          path: "README.md",
+          ensure: "exact",
+          content: "managed",
+        },
+      }),
+    Error,
+    "Managed file pull-request branch must not match default branch",
+  );
+
+  assertEquals(
+    client.requests.some((item) =>
+      item.method === "POST" && item.path.endsWith("/git/commits")
+    ),
+    false,
+  );
+  assertEquals(
+    client.requests.some((item) =>
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ),
+    false,
   );
 });
 

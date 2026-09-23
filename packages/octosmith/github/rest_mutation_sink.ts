@@ -626,6 +626,12 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     const branch = this.#fileChanges.branchPrefix + "reconcile";
+    if (branch === defaultBranch) {
+      throw new Error(
+        "Managed file pull-request branch must not match default branch: " +
+          branch,
+      );
+    }
     const branchRef = "heads/" + encodePath(branch);
     const branchReadPath = repositoryPath + "/git/ref/" + branchRef;
     const branchWritePath = repositoryPath + "/git/refs/" + branchRef;
@@ -664,7 +670,6 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
             baseSha,
             existingBranch.object.sha,
           );
-          continue;
         }
       }
 
