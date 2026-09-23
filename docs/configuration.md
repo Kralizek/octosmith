@@ -91,6 +91,10 @@ repository:
 Templates can manage repository settings, teams, custom properties, Actions
 settings and values, Dependabot secrets, rulesets, environments, and files.
 
+Team permissions accept GitHub's built-in permission names. The user-facing
+aliases `read` and `write` are normalized to GitHub's REST API values
+`pull` and `push` respectively; custom repository-role names are preserved.
+
 ## Collection management
 
 ### explicit
