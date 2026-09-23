@@ -556,6 +556,14 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       readonly tree: { readonly sha: string };
     }>(repositoryPath + "/git/commits/" + baseSha);
 
+    for (const operation of operations) {
+      await this.validateFileOperation(
+        repositoryPath,
+        defaultBranch,
+        operation,
+      );
+    }
+
     const tree: Array<Record<string, unknown>> = [];
     for (const operation of operations) {
       if (operation.type === "delete-file") {
@@ -623,10 +631,12 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     const branch = this.#fileChanges.branchPrefix + "reconcile";
-    const branchPath = repositoryPath + "/git/refs/heads/" + encodePath(branch);
+    const branchRef = "heads/" + encodePath(branch);
+    const branchReadPath = repositoryPath + "/git/ref/" + branchRef;
+    const branchWritePath = repositoryPath + "/git/refs/" + branchRef;
     const existingBranch = await this.#client.request<
       { readonly object: { readonly sha: string } } | undefined
-    >("GET", branchPath, { allowNotFound: true });
+    >("GET", branchReadPath, { allowNotFound: true });
 
     if (existingBranch === undefined) {
       await this.#client.request("POST", repositoryPath + "/git/refs", {
@@ -636,7 +646,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         },
       });
     } else {
-      await this.#client.request("PATCH", branchPath, {
+      await this.#client.request("PATCH", branchWritePath, {
         body: { sha: nextCommit.sha, force: true },
       });
     }
@@ -683,6 +693,42 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         "POST",
         repositoryPath + "/issues/" + pullNumber + "/labels",
         { body: { labels: this.#fileChanges.labels } },
+      );
+    }
+  }
+
+  async validateFileOperation(
+    repositoryPath: string,
+    defaultBranch: string,
+    operation: FileOperation,
+  ): Promise<void> {
+    const path = operation.type === "delete-file"
+      ? operation.path
+      : operation.file.path;
+    const current = await this.#client.request<
+      { readonly sha: string } | undefined
+    >(
+      "GET",
+      repositoryPath + "/contents/" + encodePath(path),
+      {
+        query: { ref: defaultBranch },
+        allowNotFound: true,
+      },
+    );
+
+    if (operation.type === "create-file") {
+      if (current !== undefined) {
+        throw new Error(
+          "Managed file changed since planning: " + path +
+            " was created concurrently",
+        );
+      }
+      return;
+    }
+
+    if (current === undefined || current.sha !== operation.sha) {
+      throw new Error(
+        "Managed file changed since planning: " + path,
       );
     }
   }
