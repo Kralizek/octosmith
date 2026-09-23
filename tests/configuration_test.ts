@@ -140,6 +140,46 @@ Deno.test("loads nested templates with kind-scoped path identities", async () =>
   }
 });
 
+Deno.test("rejects nameless YAML template files", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", ".yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "Template filename must include a name before the YAML extension",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("rejects colliding template identities across yaml extensions", async () => {
   const root = await Deno.makeTempDir();
 
