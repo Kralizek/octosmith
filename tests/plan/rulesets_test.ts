@@ -847,6 +847,41 @@ Deno.test("new pull-request rules reject null dismissal restriction", () => {
   );
 });
 
+Deno.test("new pull-request rules reject null dismissal restriction fields", () => {
+  for (
+    const dismissalRestriction of [
+      { enabled: null, allowedActors: [] },
+      { enabled: false, allowedActors: null },
+    ]
+  ) {
+    assertThrows(
+      () =>
+        buildPlan(
+          currentState(),
+          {
+            repository: "sample",
+            template: "code",
+            rulesets: [{
+              name: "branch",
+              target: "branch",
+              enforcement: "active",
+              conditions: {
+                refName: { include: ["~DEFAULT_BRANCH"] },
+              },
+              rules: [{
+                type: "pull-request",
+                allowedMergeMethods: ["squash"],
+                dismissalRestriction,
+              }],
+            }],
+          } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
+        ),
+      Error,
+      "requires complete dismissalRestriction",
+    );
+  }
+});
+
 Deno.test("ruleset creation rejects duplicate rule types", () => {
   assertThrows(
     () =>
