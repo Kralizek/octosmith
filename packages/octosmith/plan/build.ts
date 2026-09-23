@@ -1226,6 +1226,7 @@ function materializeRule(
         );
       }
       const dismissalRestriction = {
+        ...restriction,
         enabled: restriction?.enabled ?? false,
         allowedActors: restriction?.allowedActors ?? [],
       };
@@ -1244,6 +1245,7 @@ function materializeRule(
       );
 
       return {
+        ...rule,
         type: "pull-request",
         allowedMergeMethods: rule.allowedMergeMethods!,
         dismissStaleReviewsOnPush: rule.dismissStaleReviewsOnPush ?? false,
