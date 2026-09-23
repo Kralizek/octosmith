@@ -172,7 +172,9 @@ Deno.test("apply reports discovery failures without stopping other repositories"
 });
 
 Deno.test("apply ignores unmatched repositories when configured", async () => {
-  const root = await configurationDirectory({ unmatchedRepositories: "ignore" });
+  const root = await configurationDirectory({
+    unmatchedRepositories: "ignore",
+  });
   try {
     const runtime = new FakeRuntime([
       metadata("unmatched"),
