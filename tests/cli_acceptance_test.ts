@@ -383,7 +383,10 @@ Deno.test("CLI apply replans from fresh GitHub state", async () => {
       ),
       0,
     );
-    assertStringIncludes(output.join("\n"), "sample [repository:code] — planned");
+    assertStringIncludes(
+      output.join("\n"),
+      "sample [repository:code] — planned",
+    );
     assertEquals(mutations(requests), []);
 
     state.hasIssues = false;
@@ -398,7 +401,10 @@ Deno.test("CLI apply replans from fresh GitHub state", async () => {
       0,
     );
     assertEquals(mutations(requests), []);
-    assertStringIncludes(output.join("\n"), "sample [repository:code] — unchanged");
+    assertStringIncludes(
+      output.join("\n"),
+      "sample [repository:code] — unchanged",
+    );
   } finally {
     if (previous === undefined) {
       Deno.env.delete("DESIRED");
@@ -504,7 +510,10 @@ Deno.test("partial apply skips later operations and continues with the next repo
     );
 
     const rendered = output.join("\n");
-    assertStringIncludes(rendered, "✗ sample [repository:code] — partially-applied");
+    assertStringIncludes(
+      rendered,
+      "✗ sample [repository:code] — partially-applied",
+    );
     assertStringIncludes(
       rendered,
       "✓ Repository settings — hasIssues: false",
