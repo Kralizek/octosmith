@@ -1,6 +1,6 @@
 {
   "repository": "config-repository",
-  "template": "config",
+  "template": "repository:config",
   "settings": {
     "hasProjects": false,
     "hasDiscussions": false,
