@@ -719,7 +719,7 @@ class PullRequestFileClient implements GitHubClient {
           new GitHubRequestError(
             422,
             "Unprocessable Entity",
-            "Reference already exists",
+            JSON.stringify({ message: "Reference already exists" }),
           ),
         );
       }
@@ -737,7 +737,7 @@ class PullRequestFileClient implements GitHubClient {
           new GitHubRequestError(
             422,
             "Unprocessable Entity",
-            "Update is not a fast forward",
+            JSON.stringify({ message: "Update is not a fast forward" }),
           ),
         );
       }
@@ -753,7 +753,10 @@ class PullRequestFileClient implements GitHubClient {
           new GitHubRequestError(
             422,
             "Unprocessable Entity",
-            "A pull request already exists",
+            JSON.stringify({
+              message: "Validation Failed",
+              errors: [{ message: "A pull request already exists" }],
+            }),
           ),
         );
       }

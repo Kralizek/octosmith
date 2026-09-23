@@ -38,11 +38,17 @@ export interface FetchGitHubClientOptions {
   readonly trace?: (entry: GitHubResponseTrace) => void;
 }
 
+interface GitHubErrorBody {
+  readonly message?: string;
+  readonly errors?: readonly unknown[];
+}
+
 /** Describes a failed GitHub request. */
 export class GitHubRequestError extends Error {
   readonly status: number;
   readonly statusText: string;
   readonly body: string;
+  readonly details?: GitHubErrorBody;
 
   constructor(status: number, statusText: string, body: string) {
     super(
@@ -53,6 +59,7 @@ export class GitHubRequestError extends Error {
     this.status = status;
     this.statusText = statusText;
     this.body = body;
+    this.details = parseGitHubErrorBody(body);
   }
 }
 
@@ -140,5 +147,16 @@ export class FetchGitHubClient implements GitHubClient {
     const text = await response.text();
 
     return text ? JSON.parse(text) as T : undefined as T;
+  }
+}
+
+function parseGitHubErrorBody(body: string): GitHubErrorBody | undefined {
+  try {
+    const parsed = JSON.parse(body);
+    return typeof parsed === "object" && parsed !== null
+      ? parsed as GitHubErrorBody
+      : undefined;
+  } catch {
+    return undefined;
   }
 }

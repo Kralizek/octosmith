@@ -1245,11 +1245,18 @@ function renderFileChangeText(
 function isRetryableGitHubConflict(error: unknown): boolean {
   return error instanceof GitHubRequestError &&
     error.status === 422 &&
-    [
-      "Reference already exists",
-      "Update is not a fast forward",
-      "A pull request already exists",
-    ].some((message) => error.body.includes(message));
+    (
+      error.details?.message === "Reference already exists" ||
+      error.details?.message === "Update is not a fast forward" ||
+      error.details?.message === "Validation Failed" &&
+        (error.details.errors ?? []).some((item) =>
+          typeof item === "object" && item !== null &&
+          typeof Reflect.get(item, "message") === "string" &&
+          String(Reflect.get(item, "message")).startsWith(
+            "A pull request already exists",
+          )
+        )
+    );
 }
 
 function encodePath(path: string): string {
