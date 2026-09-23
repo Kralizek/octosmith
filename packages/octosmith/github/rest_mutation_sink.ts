@@ -755,11 +755,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       );
     }
 
-    await this.#client.request(
-      "PUT",
-      repositoryPath + "/issues/" + pullNumber + "/labels",
-      { body: { labels: this.#fileChanges.labels } },
-    );
+    if (this.#fileChanges.labels.length > 0) {
+      await this.#client.request(
+        "POST",
+        repositoryPath + "/issues/" + pullNumber + "/labels",
+        { body: { labels: this.#fileChanges.labels } },
+      );
+    }
   }
 
   async validateFileOperation(
