@@ -778,7 +778,7 @@ Deno.test("pull-request updates preserve unsupported fields", () => {
           enabled: false,
           allowedActors: [],
           futureNestedField: "keep",
-        },
+        } as never,
         requireCodeOwnerReview: false,
         requireLastPushApproval: false,
         requiredApprovingReviewCount: 0,
