@@ -1215,24 +1215,26 @@ function materializeRule(
     case "pull-request": {
       requireRuleFields(rule, ["allowedMergeMethods"]);
 
-      const restriction = rule.dismissalRestriction ?? {
-        enabled: false,
-        allowedActors: [],
-      };
+      const restriction = rule.dismissalRestriction;
       if (
-        restriction.enabled === undefined ||
-        restriction.allowedActors === undefined
+        restriction !== undefined &&
+        (restriction.enabled === undefined ||
+          restriction.allowedActors === undefined)
       ) {
         throw new Error(
           "Rule pull-request requires complete dismissalRestriction",
         );
       }
+      const dismissalRestriction = {
+        enabled: restriction?.enabled ?? false,
+        allowedActors: restriction?.allowedActors ?? [],
+      };
 
       const requiredReviewers = rule.requiredReviewers ?? [];
 
       assertCompleteObjects(
         "pull-request dismissal actor",
-        restriction.allowedActors,
+        dismissalRestriction.allowedActors,
         ["id", "type"],
       );
       assertCompleteObjects(
@@ -1245,7 +1247,7 @@ function materializeRule(
         type: "pull-request",
         allowedMergeMethods: rule.allowedMergeMethods!,
         dismissStaleReviewsOnPush: rule.dismissStaleReviewsOnPush ?? false,
-        dismissalRestriction: restriction,
+        dismissalRestriction,
         requireCodeOwnerReview: rule.requireCodeOwnerReview ?? false,
         requireLastPushApproval: rule.requireLastPushApproval ?? false,
         requiredApprovingReviewCount: rule.requiredApprovingReviewCount ?? 0,
