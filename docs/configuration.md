@@ -67,7 +67,13 @@ selectors support `*` and `?` glob patterns.
 
 Each repository in scope must resolve to exactly one template.
 
+Templates are discovered recursively under `templates/`. Their canonical identity is
+`<kind>:<relative-path-without-extension>`, so
+`templates/team-a/backend.yml` is `repository:team-a/backend`. The optional
+`name` field is display-only and does not participate in identity.
+
 ```yaml
+version: 1
 kind: repository
 
 match:
