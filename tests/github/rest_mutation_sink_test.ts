@@ -873,9 +873,7 @@ Deno.test("pull-request file delivery preserves existing labels when none are co
   });
 
   assertEquals(
-    client.requests.some((item) =>
-      item.path.endsWith("/issues/42/labels")
-    ),
+    client.requests.some((item) => item.path.endsWith("/issues/42/labels")),
     false,
   );
 });
