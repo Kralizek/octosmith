@@ -1,6 +1,6 @@
 {
   "repository": "issue-tracker",
-  "template": "issues",
+  "template": "repository:issues",
   "settings": {
     "hasProjects": false,
     "hasDiscussions": false,
