@@ -976,7 +976,7 @@ function fakeGitHub(
 }
 
 function fakeTeamGitHub(requests: CapturedRequest[]): typeof globalThis.fetch {
-  return async (input, init) => {
+  return (input, init) => {
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
