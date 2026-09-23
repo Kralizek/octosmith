@@ -134,7 +134,6 @@ function camelizeKey(key: string): string {
   );
 }
 
-
 async function* walkTemplateFiles(directory: string): AsyncGenerator<string> {
   for await (const entry of Deno.readDir(directory)) {
     const path = join(directory, entry.name);
