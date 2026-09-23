@@ -2,9 +2,9 @@ import sodium from "libsodium-wrappers";
 import { buildPlan } from "@octosmith/octosmith";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
-  GitHubRequestError,
   type GitHubClient,
   type GitHubQueryValue,
+  GitHubRequestError,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
 } from "@octosmith/octosmith";

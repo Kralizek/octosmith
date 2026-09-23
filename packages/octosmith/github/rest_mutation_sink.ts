@@ -10,7 +10,7 @@ import type {
   RulesetDefinition,
   Variable,
 } from "../mod.ts";
-import { GitHubRequestError, type GitHubClient } from "./client.ts";
+import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 
 /** Describes secret value provider. */
