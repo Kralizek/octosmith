@@ -796,6 +796,7 @@ async function safetyConfigurationDirectory(
     await Deno.writeTextFile(
       root + "/templates/" + name + ".yml",
       JSON.stringify({
+        version: 1,
         kind: "repository",
         match: value.match,
         repository,
@@ -1380,6 +1381,7 @@ async function configurationDirectory(
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",
@@ -1525,6 +1527,7 @@ async function secretConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",
@@ -1556,6 +1559,7 @@ async function partialConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",
