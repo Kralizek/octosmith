@@ -27,11 +27,11 @@ Deno.test("loads example configuration and templates", async () => {
   });
 
   assertEquals(Object.keys(loaded.templates).sort(), [
-    "code",
-    "config",
-    "infrastructure",
-    "issues",
-    "shared-library",
+    "repository:code",
+    "repository:config",
+    "repository:infrastructure",
+    "repository:issues",
+    "repository:shared-library",
   ]);
 
   assertEquals(
@@ -78,6 +78,95 @@ for (
     },
   );
 }
+
+Deno.test("loads nested templates with kind-scoped path identities", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates", "team-a"), { recursive: true });
+    await Deno.mkdir(join(root, "templates", "team-b"), { recursive: true });
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - '*'",
+        "",
+      ].join("\n"),
+    );
+
+    for (const team of ["team-a", "team-b"]) {
+      await Deno.writeTextFile(
+        join(root, "templates", team, "backend.yml"),
+        [
+          "version: 1",
+          "kind: repository",
+          "name: Backend services",
+          "match:",
+          "  names:",
+          "    - " + team + "-backend",
+          "repository: {}",
+          "",
+        ].join("\n"),
+      );
+    }
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    assertEquals(Object.keys(loaded.templates).sort(), [
+      "repository:team-a/backend",
+      "repository:team-b/backend",
+    ]);
+    assertEquals(
+      loaded.templates["repository:team-a/backend"].name,
+      "Backend services",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template version is required", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "version",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 Deno.test("fixture organization agrees with root configuration", async () => {
   const loaded = await loadConfigurationDirectory(CONFIGURATION_ROOT);
