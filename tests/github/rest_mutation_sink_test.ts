@@ -622,22 +622,24 @@ Deno.test("managed file delivery rejects concurrent creates", async () => {
 });
 
 Deno.test("managed file delivery rejects stale update and delete SHAs", async () => {
-  for (const operation of [
-    {
-      type: "update-file" as const,
-      sha: "planned-sha",
-      file: {
-        path: "README.md",
-        ensure: "exact" as const,
-        content: "managed",
+  for (
+    const operation of [
+      {
+        type: "update-file" as const,
+        sha: "planned-sha",
+        file: {
+          path: "README.md",
+          ensure: "exact" as const,
+          content: "managed",
+        },
       },
-    },
-    {
-      type: "delete-file" as const,
-      path: "README.md",
-      sha: "planned-sha",
-    },
-  ]) {
+      {
+        type: "delete-file" as const,
+        path: "README.md",
+        sha: "planned-sha",
+      },
+    ]
+  ) {
     const client = new ConcurrentFileClient({
       "README.md": { sha: "concurrent-sha" },
     });
