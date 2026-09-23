@@ -678,6 +678,78 @@ class StatefulRulesetClient implements GitHubClient {
   }
 }
 
+Deno.test("ruleset update preserves unknown dismissal restriction fields", async () => {
+  const client = new StatefulRulesetClient({
+    id: 1,
+    source_type: "Repository",
+    name: "protect",
+    target: "branch",
+    enforcement: "active",
+    bypass_actors: [],
+    conditions: {
+      ref_name: {
+        include: ["~DEFAULT_BRANCH"],
+        exclude: [],
+      },
+    },
+    rules: [{
+      type: "pull_request",
+      parameters: {
+        allowed_merge_methods: ["squash"],
+        dismiss_stale_reviews_on_push: false,
+        dismissal_restriction: {
+          enabled: false,
+          allowed_actors: [],
+          future_nested_field: "keep",
+        },
+        require_code_owner_review: false,
+        require_last_push_approval: false,
+        required_approving_review_count: 0,
+        required_review_thread_resolution: false,
+        required_reviewers: [],
+      },
+    }],
+  });
+  const source = new GitHubRepositoryStateSource(client, "acme");
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+  const desired = {
+    repository: "sample",
+    template: "code",
+    rulesets: [{
+      name: "protect",
+      rules: [{
+        type: "pull-request",
+        requiredReviewThreadResolution: true,
+      }],
+    }],
+  } as const;
+
+  const before = await source.getRulesets("sample");
+  const plan = buildPlan(currentState({ rulesets: before }), desired);
+  assertEquals(plan.operations.length, 1);
+
+  await sink.apply("sample", plan.operations[0]);
+
+  const restRule = (client.ruleset.rules as readonly {
+    parameters: Record<string, unknown>;
+  }[])[0];
+  assertEquals(restRule.parameters.dismissal_restriction, {
+    enabled: false,
+    allowed_actors: [],
+    future_nested_field: "keep",
+  });
+
+  const after = await source.getRulesets("sample");
+  assertEquals(buildPlan(currentState({ rulesets: after }), desired), {
+    repository: "sample",
+    operations: [],
+  });
+});
+
 Deno.test("ruleset sparse update converges through GitHub round trip", async () => {
   const client = new StatefulRulesetClient({
     id: 1,
