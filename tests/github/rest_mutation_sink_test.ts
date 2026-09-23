@@ -136,6 +136,14 @@ class MappingClient implements GitHubClient {
   ): Promise<T> {
     this.requests.push({ method, path, body: options.body });
 
+    if (
+      method === "GET" &&
+      path.endsWith("/contents/README.md") &&
+      options.allowNotFound
+    ) {
+      return Promise.resolve(undefined as T);
+    }
+
     if (method === "GET") {
       return this.get(path, options.query);
     }
@@ -573,7 +581,13 @@ class PullRequestFileClient implements GitHubClient {
 
     if (method === "GET") {
       if (
-        path.endsWith("/git/refs/heads/octosmith/reconcile") &&
+        path.endsWith("/contents/README.md") &&
+        options.allowNotFound
+      ) {
+        return Promise.resolve(undefined as T);
+      }
+      if (
+        path.endsWith("/git/ref/heads/octosmith/reconcile") &&
         options.allowNotFound &&
         !this.branchExists
       ) {
@@ -615,7 +629,7 @@ class PullRequestFileClient implements GitHubClient {
     if (path.endsWith("/git/commits/base-sha")) {
       return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
     }
-    if (path.endsWith("/git/refs/heads/octosmith/reconcile")) {
+    if (path.endsWith("/git/ref/heads/octosmith/reconcile")) {
       return Promise.resolve({ object: { sha: "old-branch-sha" } } as T);
     }
     if (path.endsWith("/pulls")) {
@@ -702,7 +716,7 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
     if (path.endsWith("/git/commits/base-sha")) {
       return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
     }
-    if (path.endsWith("/git/refs/heads/octosmith/reconcile")) {
+    if (path.endsWith("/git/ref/heads/octosmith/reconcile")) {
       return Promise.resolve({ object: { sha: "old-branch-sha" } } as T);
     }
     if (path.endsWith("/pulls")) {
