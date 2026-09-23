@@ -12,3 +12,5 @@ coverage/
 
 # Generated package-local schema copies
 packages/octosmith/configuration/schemas/
+
+.env
