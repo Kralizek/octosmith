@@ -930,9 +930,7 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
     false,
   );
   assertEquals(
-    client.requests.some((item) =>
-      item.path.endsWith("/issues/42/labels")
-    ),
+    client.requests.some((item) => item.path.endsWith("/issues/42/labels")),
     false,
   );
 });
