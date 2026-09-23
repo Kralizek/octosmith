@@ -29,6 +29,16 @@ class EnvironmentClient implements GitHubClient {
       return this.get(path, options.query);
     }
 
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      return Promise.resolve({ sha: "blob-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      return Promise.resolve({ sha: "tree-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/commits")) {
+      return Promise.resolve({ sha: "commit-sha" } as T);
+    }
+
     return Promise.resolve(undefined as T);
   }
 
@@ -179,6 +189,16 @@ class MappingClient implements GitHubClient {
         use_default: true,
         use_immutable_subject: false,
       } as T);
+    }
+
+    if (path === "/repos/acme/sample") {
+      return Promise.resolve({ default_branch: "main" } as T);
+    }
+    if (path.endsWith("/git/ref/heads/main")) {
+      return Promise.resolve({ object: { sha: "base-sha" } } as T);
+    }
+    if (path.endsWith("/git/commits/base-sha")) {
+      return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
     }
 
     throw new Error("Unexpected GET " + path);
@@ -478,7 +498,7 @@ Deno.test("organization OIDC templates do not collapse to GitHub defaults", asyn
   });
 });
 
-Deno.test("managed file uploads preserve UTF-8 content through base64", async () => {
+Deno.test("managed file uploads use one Git commit with UTF-8 blobs", async () => {
   const client = new MappingClient();
   const sink = new GitHubRepositoryMutationSink({
     client,
@@ -486,7 +506,16 @@ Deno.test("managed file uploads preserve UTF-8 content through base64", async ()
     secretValue: () => "unused",
   });
 
-  await sink.apply("sample", {
+  const prepared = sink.prepare("sample", [{
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "ciao 👋",
+    },
+  }]);
+
+  await prepared.apply("sample", {
     type: "create-file",
     file: {
       path: "README.md",
@@ -495,14 +524,29 @@ Deno.test("managed file uploads preserve UTF-8 content through base64", async ()
     },
   });
 
-  const request = client.requests.find((item) =>
-    item.method === "PUT" && item.path.endsWith("/contents/README.md")
+  const blob = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/blobs")
   );
-  const body = request?.body as { content: string };
-  const binary = atob(body.content);
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  assertEquals(blob?.body, {
+    content: "ciao 👋",
+    encoding: "utf-8",
+  });
 
-  assertEquals(new TextDecoder().decode(bytes), "ciao 👋");
+  const commit = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commit?.body, {
+    message: "Octosmith: reconcile managed files",
+    tree: "tree-sha",
+    parents: ["base-sha"],
+  });
+
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/main")
+    ),
+  );
 });
 
 class SecretClient implements GitHubClient {
