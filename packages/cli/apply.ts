@@ -6,8 +6,8 @@ import {
   type Plan,
   reportAppliedRepository,
   reportFailedRepository,
-  reportPlannedRepository,
   matchesSelector,
+  reportPlannedRepository,
   resolveDesiredState,
   type RuntimeValueProvider,
 } from "@octosmith/octosmith";
@@ -136,9 +136,9 @@ export async function apply(
   }
 
   for (const repository of discovery.repositories) {
-    const matchingTemplates = Object.values(loaded.templates).filter((template) =>
-      matchesSelector(template.match, repository)
-    );
+    const matchingTemplates = Object.values(loaded.templates).filter((
+      template,
+    ) => matchesSelector(template.match, repository));
 
     if (
       matchingTemplates.length === 0 &&
