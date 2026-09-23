@@ -171,6 +171,25 @@ Deno.test("apply reports discovery failures without stopping other repositories"
   }
 });
 
+Deno.test("apply ignores unmatched repositories when configured", async () => {
+  const root = await configurationDirectory({ unmatchedRepositories: "ignore" });
+  try {
+    const runtime = new FakeRuntime([
+      metadata("unmatched"),
+      metadata("sample"),
+    ]);
+    const results = await applyResults(runtime, root, "plan");
+
+    assertEquals(
+      results.map((item) => [item.repository, item.status]),
+      [["sample", "planned"]],
+    );
+    assertEquals(runtime.applied, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("apply invokes completion callback exactly once when callback fails", async () => {
   const root = await configurationDirectory();
   try {
@@ -216,7 +235,9 @@ Deno.test("apply isolates repository failures", async () => {
   }
 });
 
-async function configurationDirectory(): Promise<string> {
+async function configurationDirectory(
+  settings?: { readonly unmatchedRepositories?: "error" | "ignore" },
+): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
 
@@ -225,7 +246,14 @@ async function configurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'repositories: { scope: { names: ["*"] } }',
+      "repositories:",
+      '  scope: { names: ["*"] }',
+      ...(settings?.unmatchedRepositories !== undefined
+        ? [
+          "  settings:",
+          "    unmatched_repositories: " + settings.unmatchedRepositories,
+        ]
+        : []),
       "",
     ].join("\n"),
   );
