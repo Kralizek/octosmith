@@ -77,6 +77,7 @@ export async function resolveDesiredState(
   return {
     repository: repository.name,
     template: templateName,
+    ...(template.name !== undefined && { templateName: template.name }),
     collections:
       loaded.configuration.repositories.settings?.collectionManagement ??
         "explicit",
