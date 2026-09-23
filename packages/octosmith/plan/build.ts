@@ -1213,25 +1213,23 @@ function materializeRule(
       return rule as CurrentRefRule;
 
     case "pull-request": {
-      requireRuleFields(rule, [
-        "allowedMergeMethods",
-        "dismissStaleReviewsOnPush",
-        "dismissalRestriction",
-        "requireCodeOwnerReview",
-        "requireLastPushApproval",
-        "requiredApprovingReviewCount",
-        "requiredReviewThreadResolution",
-        "requiredReviewers",
-      ]);
-      const restriction = rule.dismissalRestriction;
+      requireRuleFields(rule, ["allowedMergeMethods"]);
+
+      const restriction = rule.dismissalRestriction ?? {
+        enabled: false,
+        allowedActors: [],
+      };
       if (
-        restriction?.enabled === undefined ||
+        restriction.enabled === undefined ||
         restriction.allowedActors === undefined
       ) {
         throw new Error(
           "Rule pull-request requires complete dismissalRestriction",
         );
       }
+
+      const requiredReviewers = rule.requiredReviewers ?? [];
+
       assertCompleteObjects(
         "pull-request dismissal actor",
         restriction.allowedActors,
@@ -1239,10 +1237,22 @@ function materializeRule(
       );
       assertCompleteObjects(
         "pull-request required reviewer",
-        rule.requiredReviewers ?? [],
+        requiredReviewers,
         ["reviewerTeamId", "filePatterns", "minimumApprovals"],
       );
-      return rule as CurrentRefRule;
+
+      return {
+        type: "pull-request",
+        allowedMergeMethods: rule.allowedMergeMethods!,
+        dismissStaleReviewsOnPush: rule.dismissStaleReviewsOnPush ?? false,
+        dismissalRestriction: restriction,
+        requireCodeOwnerReview: rule.requireCodeOwnerReview ?? false,
+        requireLastPushApproval: rule.requireLastPushApproval ?? false,
+        requiredApprovingReviewCount: rule.requiredApprovingReviewCount ?? 0,
+        requiredReviewThreadResolution:
+          rule.requiredReviewThreadResolution ?? false,
+        requiredReviewers,
+      };
     }
 
     case "required-status-checks":
