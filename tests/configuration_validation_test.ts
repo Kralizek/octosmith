@@ -139,7 +139,12 @@ Deno.test("configuration rejects unsupported versions", async () => {
 Deno.test("configuration rejects misspelled template selectors", async () => {
   await withConfiguration(
     configuration,
-    { version: 1, kind: "repository", match: { nmaes: ["sample"] }, repository: {} },
+    {
+      version: 1,
+      kind: "repository",
+      match: { nmaes: ["sample"] },
+      repository: {},
+    },
     async (root) => {
       const error = await assertRejects(
         () => loadConfigurationDirectory(root),
