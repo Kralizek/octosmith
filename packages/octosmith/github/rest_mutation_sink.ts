@@ -33,6 +33,7 @@ type FileOperation = Extract<
 interface PreparedFileChanges {
   readonly operations: readonly FileOperation[];
   applied: boolean;
+  error?: unknown;
 }
 
 type EffectiveFileChanges =
@@ -249,16 +250,24 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       case "create-file":
       case "update-file":
       case "delete-file":
-        if (
-          this.#preparedFileChanges !== undefined &&
-          !this.#preparedFileChanges.applied
-        ) {
-          this.#preparedFileChanges.applied = true;
-          await this.applyFileChanges(
-            repository,
-            this.#preparedFileChanges.operations,
-          );
-        } else if (this.#preparedFileChanges === undefined) {
+        if (this.#preparedFileChanges !== undefined) {
+          if (this.#preparedFileChanges.error !== undefined) {
+            throw this.#preparedFileChanges.error;
+          }
+
+          if (!this.#preparedFileChanges.applied) {
+            try {
+              await this.applyFileChanges(
+                repository,
+                this.#preparedFileChanges.operations,
+              );
+              this.#preparedFileChanges.applied = true;
+            } catch (error) {
+              this.#preparedFileChanges.error = error;
+              throw error;
+            }
+          }
+        } else {
           await this.applyFileChanges(repository, [operation]);
         }
         return;
