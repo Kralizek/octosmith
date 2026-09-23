@@ -559,6 +559,193 @@ Deno.test("managed file uploads use one Git commit with UTF-8 blobs", async () =
   );
 });
 
+class PullRequestFileClient implements GitHubClient {
+  readonly requests: RecordedRequest[] = [];
+  branchExists = false;
+  pullNumber = 42;
+
+  request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
+  ): Promise<T> {
+    this.requests.push({ method, path, body: options.body });
+
+    if (method === "GET") {
+      if (
+        path.endsWith("/git/refs/heads/octosmith/reconcile") &&
+        options.allowNotFound &&
+        !this.branchExists
+      ) {
+        return Promise.resolve(undefined as T);
+      }
+      return this.get(path, options.query);
+    }
+
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      return Promise.resolve({ sha: "blob-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      return Promise.resolve({ sha: "tree-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/commits")) {
+      return Promise.resolve({ sha: "commit-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/refs")) {
+      this.branchExists = true;
+      return Promise.resolve(undefined as T);
+    }
+    if (method === "POST" && path.endsWith("/pulls")) {
+      return Promise.resolve({ number: this.pullNumber } as T);
+    }
+
+    return Promise.resolve(undefined as T);
+  }
+
+  get<T>(
+    path: string,
+    _query: Readonly<Record<string, GitHubQueryValue>> = {},
+  ): Promise<T> {
+    if (path === "/repos/acme/sample") {
+      return Promise.resolve({ default_branch: "main" } as T);
+    }
+    if (path.endsWith("/git/ref/heads/main")) {
+      return Promise.resolve({ object: { sha: "base-sha" } } as T);
+    }
+    if (path.endsWith("/git/commits/base-sha")) {
+      return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
+    }
+    if (path.endsWith("/git/refs/heads/octosmith/reconcile")) {
+      return Promise.resolve({ object: { sha: "old-branch-sha" } } as T);
+    }
+    if (path.endsWith("/pulls")) {
+      return Promise.resolve([] as T);
+    }
+
+    throw new Error("Unexpected GET " + path);
+  }
+}
+
+Deno.test("pull-request file delivery creates a stable branch and labeled PR", async () => {
+  const client = new PullRequestFileClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: {
+      mode: "pull_request",
+      commit: { message: "Sync {organization}/{repository}" },
+      pullRequest: {
+        branchPrefix: "octosmith/",
+        title: "Reconcile {repository}",
+        labels: ["automation", "octosmith"],
+      },
+    },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  const commit = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commit?.body, {
+    message: "Sync acme/sample",
+    tree: "tree-sha",
+    parents: ["base-sha"],
+  });
+
+  const ref = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/refs")
+  );
+  assertEquals(ref?.body, {
+    ref: "refs/heads/octosmith/reconcile",
+    sha: "commit-sha",
+  });
+
+  const pull = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/pulls")
+  );
+  assertEquals(pull?.body, {
+    title: "Reconcile sample",
+    head: "octosmith/reconcile",
+    base: "main",
+  });
+
+  const labels = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/issues/42/labels")
+  );
+  assertEquals(labels?.body, {
+    labels: ["automation", "octosmith"],
+  });
+});
+
+Deno.test("pull-request file delivery reuses its stable branch and open PR", async () => {
+  const client = new PullRequestFileClient();
+  client.branchExists = true;
+  client.get = function <T>(
+    path: string,
+    _query: Readonly<Record<string, GitHubQueryValue>> = {},
+  ): Promise<T> {
+    if (path === "/repos/acme/sample") {
+      return Promise.resolve({ default_branch: "main" } as T);
+    }
+    if (path.endsWith("/git/ref/heads/main")) {
+      return Promise.resolve({ object: { sha: "base-sha" } } as T);
+    }
+    if (path.endsWith("/git/commits/base-sha")) {
+      return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
+    }
+    if (path.endsWith("/git/refs/heads/octosmith/reconcile")) {
+      return Promise.resolve({ object: { sha: "old-branch-sha" } } as T);
+    }
+    if (path.endsWith("/pulls")) {
+      return Promise.resolve([{ number: 42 }] as T);
+    }
+    throw new Error("Unexpected GET " + path);
+  };
+
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ),
+  );
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" && item.path.endsWith("/pulls/42")
+    ),
+  );
+  assertEquals(
+    client.requests.some((item) =>
+      item.method === "POST" && item.path.endsWith("/pulls")
+    ),
+    false,
+  );
+});
+
 class SecretClient implements GitHubClient {
   readonly requests: RecordedRequest[] = [];
 
