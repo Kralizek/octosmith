@@ -46,7 +46,9 @@ export function renderReport(
 }
 
 function renderRepository(repository: RepositoryReport): string {
-  const template = repository.template ? " [" + repository.template + "]" : "";
+  const template = repository.template
+    ? " [" + (repository.templateName ?? repository.template) + "]"
+    : "";
 
   return statusSymbol(repository.status) + " " +
     repository.repository + template + " — " + repository.status;
