@@ -785,7 +785,7 @@ Deno.test("pull-request updates preserve unsupported fields", () => {
         requiredReviewThreadResolution: true,
         requiredReviewers: [],
         futureTopLevelField: "keep",
-      }],
+      } as unknown as import("../../packages/octosmith/mod.ts").DesiredRulesetRule],
     },
   }]);
 });
