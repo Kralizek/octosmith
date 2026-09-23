@@ -10,10 +10,12 @@ export function reportPlannedRepository(
   template: string,
   plan: Plan,
   evaluations: readonly ApplyEvaluation[],
+  templateName?: string,
 ): RepositoryReport {
   return {
     repository: plan.repository,
     template,
+    ...(templateName !== undefined && { templateName }),
     status: plan.operations.length === 0 ? "unchanged" : "planned",
     items: evaluations.map((evaluation) => ({
       type: evaluation.type,
@@ -23,6 +25,14 @@ export function reportPlannedRepository(
   };
 }
 
+/** Build a repository report for an applied change set. */
+export function reportAppliedRepository(
+  template: string,
+  repository: string,
+  evaluations: readonly ApplyEvaluation[],
+  operations: readonly AppliedOperationLike[],
+  templateName?: string,
+): RepositoryReport {
 /** Build a repository report for an applied change set. */
 export function reportAppliedRepository(
   template: string,
@@ -70,6 +80,7 @@ export function reportAppliedRepository(
   return {
     repository,
     template,
+    ...(templateName !== undefined && { templateName }),
     status: failed
       ? applied > 0 ? "partially-applied" : "failed"
       : operations.length === 0
