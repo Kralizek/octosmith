@@ -1,6 +1,6 @@
 import sodium from "libsodium-wrappers";
 import { buildPlan } from "@octosmith/octosmith";
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   type GitHubClient,
   type GitHubQueryValue,
@@ -565,6 +565,101 @@ Deno.test("managed file uploads use one Git commit with UTF-8 blobs", async () =
       item.path.endsWith("/git/refs/heads/main")
     ),
   );
+});
+
+class ConcurrentFileClient extends MappingClient {
+  constructor(
+    readonly current: Readonly<Record<string, { readonly sha: string }>>,
+  ) {
+    super();
+  }
+
+  override request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
+  ): Promise<T> {
+    if (method === "GET" && path.includes("/contents/")) {
+      this.requests.push({ method, path, body: options.body });
+      const filePath = decodeURIComponent(path.split("/contents/")[1]);
+      return Promise.resolve(this.current[filePath] as T);
+    }
+
+    return super.request(method, path, options);
+  }
+}
+
+Deno.test("managed file delivery rejects concurrent creates", async () => {
+  const client = new ConcurrentFileClient({
+    "README.md": { sha: "concurrent-sha" },
+  });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "create-file",
+        file: {
+          path: "README.md",
+          ensure: "exact",
+          content: "managed",
+        },
+      }),
+    Error,
+    "was created concurrently",
+  );
+
+  assertEquals(
+    client.requests.some((item) =>
+      item.method === "POST" && item.path.endsWith("/git/trees")
+    ),
+    false,
+  );
+});
+
+Deno.test("managed file delivery rejects stale update and delete SHAs", async () => {
+  for (const operation of [
+    {
+      type: "update-file" as const,
+      sha: "planned-sha",
+      file: {
+        path: "README.md",
+        ensure: "exact" as const,
+        content: "managed",
+      },
+    },
+    {
+      type: "delete-file" as const,
+      path: "README.md",
+      sha: "planned-sha",
+    },
+  ]) {
+    const client = new ConcurrentFileClient({
+      "README.md": { sha: "concurrent-sha" },
+    });
+    const sink = new GitHubRepositoryMutationSink({
+      client,
+      owner: "acme",
+      secretValue: () => "unused",
+    });
+
+    await assertRejects(
+      () => sink.apply("sample", operation),
+      Error,
+      "Managed file changed since planning: README.md",
+    );
+
+    assertEquals(
+      client.requests.some((item) =>
+        item.method === "POST" && item.path.endsWith("/git/trees")
+      ),
+      false,
+    );
+  }
 });
 
 class PullRequestFileClient implements GitHubClient {
