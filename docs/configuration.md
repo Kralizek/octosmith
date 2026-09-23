@@ -160,3 +160,35 @@ offline validation.
 Configuration is schema-validated before repository discovery. Octosmith also
 checks that templates cannot overlap inside configured scope and that literal
 repository names in scope can resolve to a template.
+
+
+## File change delivery
+
+Managed repository files are delivered through pull requests by default. Omitting
+`repositories.file_changes` is equivalent to:
+
+```yaml
+repositories:
+  file_changes:
+    mode: pull_request
+```
+
+When `file_changes` is present, `mode` is required. An empty object is invalid.
+Pull-request settings are only valid in `pull_request` mode.
+
+```yaml
+repositories:
+  file_changes:
+    mode: pull_request
+    commit:
+      message: "Octosmith: reconcile {repository}"
+    pull_request:
+      branch_prefix: "octosmith/"
+      title: "Octosmith: reconcile {repository}"
+      labels:
+        - automation
+```
+
+Use `mode: direct` to opt into writing one reconciliation commit directly to
+the default branch. Commit messages and pull-request titles support
+`{organization}` and `{repository}` placeholders.
