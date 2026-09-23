@@ -49,6 +49,13 @@ export async function loadConfigurationDirectory(
     const relativePath = relative(templatesDirectory, path)
       .replaceAll("\\", "/");
     const extension = extname(relativePath);
+    if (extension.length === 0) {
+      throw new Error(
+        "Template filename must include a name before the YAML extension: " +
+          relativePath,
+      );
+    }
+
     const id = relativePath.slice(0, -extension.length);
     const identity = template.kind + ":" + id;
 
