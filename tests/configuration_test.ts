@@ -79,6 +79,62 @@ for (
   );
 }
 
+Deno.test("normalizes read and write team permission aliases", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  teams:",
+        "    - name: readers",
+        "      permission: read",
+        "    - name: writers",
+        "      permission: write",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+    const desired = await resolveDesiredState(
+      loaded,
+      { name: "sample", teams: [], properties: {} },
+      (name) => name,
+    );
+
+    assertEquals(desired.teams, [
+      {
+        team: "readers",
+        permission: { kind: "built-in", name: "pull" },
+      },
+      {
+        team: "writers",
+        permission: { kind: "built-in", name: "push" },
+      },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("fixture organization agrees with root configuration", async () => {
   const loaded = await loadConfigurationDirectory(CONFIGURATION_ROOT);
   const organization = JSON.parse(
