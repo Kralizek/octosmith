@@ -1218,7 +1218,8 @@ function materializeRule(
       const restriction = rule.dismissalRestriction;
       if (
         restriction !== undefined &&
-        (restriction.enabled === undefined ||
+        (restriction === null ||
+          restriction.enabled === undefined ||
           restriction.allowedActors === undefined)
       ) {
         throw new Error(
