@@ -1244,7 +1244,11 @@ function renderFileChangeText(
 
 function isRetryableGitHubConflict(error: unknown): boolean {
   return error instanceof Error &&
-    /^GitHub API request failed: (409|422)\b/.test(error.message);
+    [
+      "Reference already exists",
+      "Update is not a fast forward",
+      "A pull request already exists",
+    ].some((message) => error.message.includes(message));
 }
 
 function encodePath(path: string): string {
