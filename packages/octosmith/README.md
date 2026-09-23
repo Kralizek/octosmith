@@ -77,9 +77,15 @@ properties. Name selectors support `*` and `?` glob patterns.
 
 ### Repository templates
 
-Every repository in scope must resolve to exactly one template:
+Every repository in scope must resolve to exactly one template. Templates are
+discovered recursively and identified as
+`<kind>:<relative-path-without-extension>`. The optional `name` is
+display-only.
+
+Example:
 
 ```yaml
+version: 1
 kind: repository
 
 match:
