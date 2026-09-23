@@ -35,11 +35,13 @@ Deno.test("loads example configuration and templates", async () => {
   ]);
 
   assertEquals(
-    loaded.templates["repository:code"].repository?.settings?.deleteBranchOnMerge,
+    loaded.templates["repository:code"].repository?.settings
+      ?.deleteBranchOnMerge,
     true,
   );
   assertEquals(
-    loaded.templates["repository:code"].repository.rulesets?.[0].conditions?.refName?.include,
+    loaded.templates["repository:code"].repository.rulesets?.[0].conditions
+      ?.refName?.include,
     ["~DEFAULT_BRANCH"],
   );
 });
@@ -316,12 +318,18 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     assertEquals(loaded.templates["repository:code"].match.properties, {
       repository_type: "code",
     });
-    assertEquals(loaded.templates["repository:code"].repository?.customProperties, {
-      deployment_region: "eu-north-1",
-    });
-    assertEquals(Object.keys(loaded.templates["repository:code"].repository.files ?? {}), [
-      ".github/workflows/release_candidate.yml",
-    ]);
+    assertEquals(
+      loaded.templates["repository:code"].repository?.customProperties,
+      {
+        deployment_region: "eu-north-1",
+      },
+    );
+    assertEquals(
+      Object.keys(loaded.templates["repository:code"].repository.files ?? {}),
+      [
+        ".github/workflows/release_candidate.yml",
+      ],
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
