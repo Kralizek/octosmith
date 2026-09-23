@@ -49,7 +49,7 @@ export class FetchGitHubClient implements GitHubClient {
   constructor(options: FetchGitHubClientOptions) {
     this.#token = options.token;
     this.#baseUrl = options.baseUrl ?? "https://api.github.com";
-    this.#apiVersion = options.apiVersion ?? "2022-11-28";
+    this.#apiVersion = options.apiVersion ?? "2026-03-10";
     this.#fetch = options.fetch ?? globalThis.fetch;
     this.#trace = options.trace;
   }
@@ -78,14 +78,19 @@ export class FetchGitHubClient implements GitHubClient {
       }
     }
 
+    const headers = new Headers({
+      accept: "application/vnd.github+json",
+      authorization: "Bearer " + this.#token,
+      "x-github-api-version": this.#apiVersion,
+    });
+
+    if (options.body !== undefined) {
+      headers.set("content-type", "application/json");
+    }
+
     const response = await this.#fetch(url, {
       method,
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: "Bearer " + this.#token,
-        "content-type": "application/json",
-        "x-github-api-version": this.#apiVersion,
-      },
+      headers,
       ...(options.body !== undefined && {
         body: JSON.stringify(options.body),
       }),

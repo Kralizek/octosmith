@@ -47,13 +47,16 @@ Deno.test("GitHub client still resolves root API URLs", async () => {
   assertEquals(requestedUrl, "https://api.github.com/repos/acme/api");
 });
 
-Deno.test("GitHub client defaults to GitHub's broadly compatible API version", async () => {
+Deno.test("GitHub client omits content-type for GET requests", async () => {
+  let contentType: string | null | undefined;
   let requestedVersion: string | null | undefined;
 
   const client = new FetchGitHubClient({
     token: "token",
     fetch: (_, init) => {
-      requestedVersion = new Headers(init?.headers).get("x-github-api-version");
+      const headers = new Headers(init?.headers);
+      contentType = headers.get("content-type");
+      requestedVersion = headers.get("x-github-api-version");
       return Promise.resolve(
         new Response(JSON.stringify({ name: "api" }), {
           status: 200,
@@ -65,17 +68,19 @@ Deno.test("GitHub client defaults to GitHub's broadly compatible API version", a
 
   await client.get("/repos/acme/api");
 
-  assertEquals(requestedVersion, "2022-11-28");
+  assertEquals(contentType, null);
+  assertEquals(requestedVersion, "2026-03-10");
 });
 
-Deno.test("GitHub client honors an explicit API version override", async () => {
-  let requestedVersion: string | null | undefined;
+Deno.test("GitHub client adds content-type for JSON request bodies", async () => {
+  let contentType: string | null | undefined;
+  let requestedBody: string | undefined;
 
   const client = new FetchGitHubClient({
     token: "token",
-    apiVersion: "2026-03-10",
     fetch: (_, init) => {
-      requestedVersion = new Headers(init?.headers).get("x-github-api-version");
+      contentType = new Headers(init?.headers).get("content-type");
+      requestedBody = typeof init?.body === "string" ? init.body : undefined;
       return Promise.resolve(
         new Response(JSON.stringify({ name: "api" }), {
           status: 200,
@@ -85,9 +90,12 @@ Deno.test("GitHub client honors an explicit API version override", async () => {
     },
   });
 
-  await client.get("/repos/acme/api");
+  await client.request("PATCH", "/repos/acme/api", {
+    body: { has_issues: false },
+  });
 
-  assertEquals(requestedVersion, "2026-03-10");
+  assertEquals(contentType, "application/json");
+  assertEquals(requestedBody, JSON.stringify({ has_issues: false }));
 });
 
 Deno.test("GitHub client throws on an ordinary 404", async () => {

@@ -5,6 +5,7 @@ interface CapturedRequest {
   readonly method: string;
   readonly url: URL;
   readonly body?: unknown;
+  readonly headers?: Headers;
 }
 
 Deno.test("CLI applies through the real GitHub HTTP stack", async () => {
@@ -133,6 +134,49 @@ Deno.test("CLI targets one in-scope repository without enumerating the organizat
       rendered,
       "Summary: 0 unchanged, 1 planned, 0 applied, 0 partially-applied, 0 failed",
     );
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI team discovery succeeds through the real GitHub HTTP stack", async () => {
+  const root = await teamConfigurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+
+  try {
+    Deno.env.set("DESIRED", "same");
+
+    const requests: CapturedRequest[] = [];
+    const output: string[] = [];
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeTeamGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const teamRequest = requests.find((request) =>
+      request.method === "GET" &&
+      request.url.pathname === "/api/v3/orgs/acme/teams/platform/repos"
+    );
+    assertEquals(teamRequest?.headers?.get("content-type"), null);
+    assertEquals(
+      teamRequest?.headers?.get("x-github-api-version"),
+      "2026-03-10",
+    );
+    assertStringIncludes(output.join("\n"), "sample [code] — unchanged");
   } finally {
     if (previous === undefined) {
       Deno.env.delete("DESIRED");
@@ -862,13 +906,14 @@ function fakeGitHub(
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
+    const headers = new Headers(init?.headers ?? request?.headers);
     const rawBody = init?.body ??
       (request ? await request.clone().text() : undefined);
     const body = typeof rawBody === "string" && rawBody.length > 0
       ? JSON.parse(rawBody)
       : undefined;
 
-    requests.push({ method, url, body });
+    requests.push({ method, url, body, headers });
 
     if (
       method === "GET" &&
@@ -929,6 +974,46 @@ function fakeGitHub(
 
     return json(
       { message: "Unexpected request: " + method + " " + url },
+      500,
+    );
+  };
+}
+
+function fakeTeamGitHub(requests: CapturedRequest[]): typeof globalThis.fetch {
+  return async (input, init) => {
+    const request = input instanceof Request ? input : undefined;
+    const url = new URL(request?.url ?? String(input));
+    const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
+    const headers = new Headers(init?.headers ?? request?.headers);
+    requests.push({ method, url, headers });
+
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/orgs/acme/teams/platform/repos"
+    ) {
+      if (headers.get("content-type") !== null) {
+        return json({
+          message: "Resource not accessible by personal access token",
+        }, 403);
+      }
+      return json([{ name: "sample", visibility: "private" }]);
+    }
+
+    if (method === "GET" && url.pathname === "/api/v3/repos/acme/sample") {
+      return json(repository());
+    }
+
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/repos/acme/sample/actions/variables"
+    ) {
+      return json({
+        variables: [{ name: "DESIRED", value: "same" }],
+      });
+    }
+
+    return json(
+      { message: "Unexpected request: " + method + " " + url.pathname },
       500,
     );
   };
@@ -1387,6 +1472,41 @@ async function configurationDirectory(
       "repository:",
       "  settings:",
       "    has_issues: false",
+      "  actions:",
+      "    variables:",
+      "      - DESIRED",
+      "",
+    ].join("\n"),
+  );
+
+  return root;
+}
+
+async function teamConfigurationDirectory(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      "  scope:",
+      "    teams:",
+      "      - platform",
+      "",
+    ].join("\n"),
+  );
+
+  await Deno.writeTextFile(
+    root + "/templates/code.yml",
+    [
+      "kind: repository",
+      "match:",
+      "  names:",
+      "    - sample",
+      "repository:",
       "  actions:",
       "    variables:",
       "      - DESIRED",
