@@ -1249,8 +1249,8 @@ function materializeRule(
         requireCodeOwnerReview: rule.requireCodeOwnerReview ?? false,
         requireLastPushApproval: rule.requireLastPushApproval ?? false,
         requiredApprovingReviewCount: rule.requiredApprovingReviewCount ?? 0,
-        requiredReviewThreadResolution:
-          rule.requiredReviewThreadResolution ?? false,
+        requiredReviewThreadResolution: rule.requiredReviewThreadResolution ??
+          false,
         requiredReviewers,
       };
     }
