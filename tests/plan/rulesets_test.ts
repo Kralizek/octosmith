@@ -667,7 +667,61 @@ Deno.test("new rules reject types incompatible with the ruleset target", () => {
   );
 });
 
-Deno.test("new pull-request rules require complete nested objects", () => {
+Deno.test("new pull-request rules default optional fields", () => {
+  assertEquals(
+    buildPlan(currentState(), {
+      repository: "sample",
+      template: "code",
+      rulesets: [{
+        name: "branch",
+        target: "branch",
+        enforcement: "active",
+        conditions: {
+          refName: { include: ["~DEFAULT_BRANCH"] },
+        },
+        rules: [{
+          type: "pull-request",
+          allowedMergeMethods: ["squash"],
+          requiredReviewThreadResolution: true,
+        }],
+      }],
+    }),
+    {
+      repository: "sample",
+      operations: [{
+        type: "create-ruleset",
+        ruleset: {
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          bypassActors: [],
+          conditions: {
+            refName: {
+              include: ["~DEFAULT_BRANCH"],
+              exclude: [],
+            },
+          },
+          rules: [{
+            type: "pull-request",
+            allowedMergeMethods: ["squash"],
+            dismissStaleReviewsOnPush: false,
+            dismissalRestriction: {
+              enabled: false,
+              allowedActors: [],
+            },
+            requireCodeOwnerReview: false,
+            requireLastPushApproval: false,
+            requiredApprovingReviewCount: 0,
+            requiredReviewThreadResolution: true,
+            requiredReviewers: [],
+          }],
+        },
+      }],
+    },
+  );
+});
+
+Deno.test("new pull-request rules validate declared nested objects", () => {
   assertThrows(
     () =>
       buildPlan(currentState(), {
@@ -683,15 +737,9 @@ Deno.test("new pull-request rules require complete nested objects", () => {
           rules: [{
             type: "pull-request",
             allowedMergeMethods: ["squash"],
-            dismissStaleReviewsOnPush: true,
             dismissalRestriction: {
               enabled: true,
             },
-            requireCodeOwnerReview: true,
-            requireLastPushApproval: true,
-            requiredApprovingReviewCount: 1,
-            requiredReviewThreadResolution: true,
-            requiredReviewers: [],
           }],
         }],
       }),
