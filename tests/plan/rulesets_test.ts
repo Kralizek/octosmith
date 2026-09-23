@@ -770,22 +770,24 @@ Deno.test("pull-request updates preserve unsupported fields", () => {
     id: 1,
     changes: {
       name: "protect",
-      rules: [{
-        type: "pull-request",
-        allowedMergeMethods: ["squash"],
-        dismissStaleReviewsOnPush: false,
-        dismissalRestriction: {
-          enabled: false,
-          allowedActors: [],
-          futureNestedField: "keep",
-        } as never,
-        requireCodeOwnerReview: false,
-        requireLastPushApproval: false,
-        requiredApprovingReviewCount: 0,
-        requiredReviewThreadResolution: true,
-        requiredReviewers: [],
-        futureTopLevelField: "keep",
-      } as unknown as import("../../packages/octosmith/mod.ts").DesiredRulesetRule],
+      rules: [
+        {
+          type: "pull-request",
+          allowedMergeMethods: ["squash"],
+          dismissStaleReviewsOnPush: false,
+          dismissalRestriction: {
+            enabled: false,
+            allowedActors: [],
+            futureNestedField: "keep",
+          } as never,
+          requireCodeOwnerReview: false,
+          requireLastPushApproval: false,
+          requiredApprovingReviewCount: 0,
+          requiredReviewThreadResolution: true,
+          requiredReviewers: [],
+          futureTopLevelField: "keep",
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredRulesetRule,
+      ],
     },
   }]);
 });
