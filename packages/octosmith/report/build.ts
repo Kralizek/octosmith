@@ -33,13 +33,6 @@ export function reportAppliedRepository(
   operations: readonly AppliedOperationLike[],
   templateName?: string,
 ): RepositoryReport {
-/** Build a repository report for an applied change set. */
-export function reportAppliedRepository(
-  template: string,
-  repository: string,
-  evaluations: readonly ApplyEvaluation[],
-  operations: readonly AppliedOperationLike[],
-): RepositoryReport {
   const applied = operations.filter((item) => item.status === "applied").length;
   const failed = operations.some((item) => item.status === "failed");
   const skipped = operations.some((item) => item.status === "skipped");
