@@ -46,6 +46,13 @@ const BUILT_IN_PERMISSIONS = new Set<BuiltInRepositoryPermission>([
   "admin",
 ]);
 
+const BUILT_IN_PERMISSION_ALIASES: Readonly<
+  Record<string, BuiltInRepositoryPermission>
+> = {
+  read: "pull",
+  write: "push",
+};
+
 /** Resolve repository configuration into normalized desired state. */
 export async function resolveDesiredState(
   loaded: LoadedConfiguration,
@@ -395,9 +402,15 @@ function normalizeTeamPermission(
 }
 
 function normalizePermission(name: string): RepositoryPermission {
-  return BUILT_IN_PERMISSIONS.has(name as BuiltInRepositoryPermission)
-    ? { kind: "built-in", name: name as BuiltInRepositoryPermission }
-    : { kind: "custom", name };
+  const builtIn = Object.hasOwn(BUILT_IN_PERMISSION_ALIASES, name)
+    ? BUILT_IN_PERMISSION_ALIASES[name]
+    : (BUILT_IN_PERMISSIONS.has(name as BuiltInRepositoryPermission)
+      ? name as BuiltInRepositoryPermission
+      : undefined);
+
+  return builtIn === undefined
+    ? { kind: "custom", name }
+    : { kind: "built-in", name: builtIn };
 }
 
 function normalizeRuleset(ruleset: RulesetConfiguration): DesiredRuleset {
