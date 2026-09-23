@@ -140,6 +140,16 @@ class MappingClient implements GitHubClient {
       return this.get(path, options.query);
     }
 
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      return Promise.resolve({ sha: "blob-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      return Promise.resolve({ sha: "tree-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/commits")) {
+      return Promise.resolve({ sha: "commit-sha" } as T);
+    }
+
     return Promise.resolve(undefined as T);
   }
 
