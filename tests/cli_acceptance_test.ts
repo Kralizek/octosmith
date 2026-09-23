@@ -136,7 +136,8 @@ Deno.test("CLI defaults managed file delivery to pull requests", async () => {
     assertEquals(
       requests.some((request) =>
         request.method === "PATCH" &&
-        request.url.pathname === "/api/v3/repos/acme/sample/git/refs/heads/master"
+        request.url.pathname ===
+          "/api/v3/repos/acme/sample/git/refs/heads/master"
       ),
       false,
     );
