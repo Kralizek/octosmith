@@ -531,7 +531,9 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     const repositoryPath = this.repo(repository);
-    const metadata = await this.#client.get<{ readonly default_branch: string }>(
+    const metadata = await this.#client.get<
+      { readonly default_branch: string }
+    >(
       repositoryPath,
     );
     const defaultBranch = metadata.default_branch;
@@ -630,9 +632,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       });
     }
 
-    const pulls = await this.#client.get<readonly {
-      readonly number: number;
-    }[]>(repositoryPath + "/pulls", {
+    const pulls = await this.#client.get<
+      readonly {
+        readonly number: number;
+      }[]
+    >(repositoryPath + "/pulls", {
       state: "open",
       head: this.#owner + ":" + branch,
       base: defaultBranch,
@@ -1104,4 +1108,3 @@ function renderFileChangeText(
 function encodePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
-
