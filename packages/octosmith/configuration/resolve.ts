@@ -402,8 +402,9 @@ function normalizeTeamPermission(
 }
 
 function normalizePermission(name: string): RepositoryPermission {
-  const builtIn = BUILT_IN_PERMISSION_ALIASES[name] ??
-    (BUILT_IN_PERMISSIONS.has(name as BuiltInRepositoryPermission)
+  const builtIn = Object.hasOwn(BUILT_IN_PERMISSION_ALIASES, name)
+    ? BUILT_IN_PERMISSION_ALIASES[name]
+    : (BUILT_IN_PERMISSIONS.has(name as BuiltInRepositoryPermission)
       ? name as BuiltInRepositoryPermission
       : undefined);
 
