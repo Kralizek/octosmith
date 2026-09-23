@@ -667,7 +667,13 @@ Deno.test("managed file delivery rejects stale update and delete SHAs", async ()
 class PullRequestFileClient implements GitHubClient {
   readonly requests: RecordedRequest[] = [];
   branchExists = false;
+  branchSha = "old-branch-sha";
+  pullExists = false;
   pullNumber = 42;
+  failCreateBranchOnce = false;
+  failUpdateBranchOnce = false;
+  failCreatePullOnce = false;
+  commitNumber = 0;
 
   request<T>(
     method: string,
@@ -700,13 +706,54 @@ class PullRequestFileClient implements GitHubClient {
       return Promise.resolve({ sha: "tree-sha" } as T);
     }
     if (method === "POST" && path.endsWith("/git/commits")) {
-      return Promise.resolve({ sha: "commit-sha" } as T);
+      this.commitNumber += 1;
+      return Promise.resolve({ sha: "commit-sha-" + this.commitNumber } as T);
     }
     if (method === "POST" && path.endsWith("/git/refs")) {
+      if (this.failCreateBranchOnce) {
+        this.failCreateBranchOnce = false;
+        this.branchExists = true;
+        this.branchSha = "competing-branch-sha";
+        return Promise.reject(
+          new Error(
+            "GitHub API request failed: 422 Unprocessable Entity - " +
+              "Reference already exists",
+          ),
+        );
+      }
       this.branchExists = true;
+      this.branchSha = String((options.body as { sha?: string })?.sha);
+      return Promise.resolve(undefined as T);
+    }
+    if (
+      method === "PATCH" && path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ) {
+      if (this.failUpdateBranchOnce) {
+        this.failUpdateBranchOnce = false;
+        this.branchSha = "competing-branch-sha";
+        return Promise.reject(
+          new Error(
+            "GitHub API request failed: 422 Unprocessable Entity - " +
+              "Update is not a fast forward",
+          ),
+        );
+      }
+      this.branchExists = true;
+      this.branchSha = String((options.body as { sha?: string })?.sha);
       return Promise.resolve(undefined as T);
     }
     if (method === "POST" && path.endsWith("/pulls")) {
+      if (this.failCreatePullOnce) {
+        this.failCreatePullOnce = false;
+        this.pullExists = true;
+        return Promise.reject(
+          new Error(
+            "GitHub API request failed: 422 Unprocessable Entity - " +
+              "A pull request already exists",
+          ),
+        );
+      }
+      this.pullExists = true;
       return Promise.resolve({ number: this.pullNumber } as T);
     }
 
@@ -727,10 +774,12 @@ class PullRequestFileClient implements GitHubClient {
       return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
     }
     if (path.endsWith("/git/ref/heads/octosmith/reconcile")) {
-      return Promise.resolve({ object: { sha: "old-branch-sha" } } as T);
+      return Promise.resolve({ object: { sha: this.branchSha } } as T);
     }
     if (path.endsWith("/pulls")) {
-      return Promise.resolve([] as T);
+      return Promise.resolve(
+        (this.pullExists ? [{ number: this.pullNumber }] : []) as T,
+      );
     }
 
     throw new Error("Unexpected GET " + path);
@@ -777,7 +826,7 @@ Deno.test("pull-request file delivery creates a stable branch and labeled PR", a
   );
   assertEquals(ref?.body, {
     ref: "refs/heads/octosmith/reconcile",
-    sha: "commit-sha",
+    sha: "commit-sha-1",
   });
 
   const pull = client.requests.find((item) =>
@@ -790,7 +839,7 @@ Deno.test("pull-request file delivery creates a stable branch and labeled PR", a
   });
 
   const labels = client.requests.find((item) =>
-    item.method === "POST" && item.path.endsWith("/issues/42/labels")
+    item.method === "PUT" && item.path.endsWith("/issues/42/labels")
   );
   assertEquals(labels?.body, {
     labels: ["automation", "octosmith"],
@@ -800,27 +849,7 @@ Deno.test("pull-request file delivery creates a stable branch and labeled PR", a
 Deno.test("pull-request file delivery reuses its stable branch and open PR", async () => {
   const client = new PullRequestFileClient();
   client.branchExists = true;
-  client.get = function <T>(
-    path: string,
-    _query: Readonly<Record<string, GitHubQueryValue>> = {},
-  ): Promise<T> {
-    if (path === "/repos/acme/sample") {
-      return Promise.resolve({ default_branch: "main" } as T);
-    }
-    if (path.endsWith("/git/ref/heads/main")) {
-      return Promise.resolve({ object: { sha: "base-sha" } } as T);
-    }
-    if (path.endsWith("/git/commits/base-sha")) {
-      return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
-    }
-    if (path.endsWith("/git/ref/heads/octosmith/reconcile")) {
-      return Promise.resolve({ object: { sha: "old-branch-sha" } } as T);
-    }
-    if (path.endsWith("/pulls")) {
-      return Promise.resolve([{ number: 42 }] as T);
-    }
-    throw new Error("Unexpected GET " + path);
-  };
+  client.pullExists = true;
 
   const sink = new GitHubRepositoryMutationSink({
     client,
@@ -844,6 +873,19 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
       item.path.endsWith("/git/refs/heads/octosmith/reconcile")
     ),
   );
+  const branchUpdate = client.requests.find((item) =>
+    item.method === "PATCH" &&
+    item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+  );
+  assertEquals(branchUpdate?.body, { sha: "commit-sha-1", force: false });
+  const commit = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commit?.body, {
+    message: "Sync acme/sample",
+    tree: "tree-sha",
+    parents: ["base-sha", "old-branch-sha"],
+  });
   assert(
     client.requests.some((item) =>
       item.method === "PATCH" && item.path.endsWith("/pulls/42")
@@ -854,6 +896,116 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
       item.method === "POST" && item.path.endsWith("/pulls")
     ),
     false,
+  );
+  const labels = client.requests.find((item) =>
+    item.method === "PUT" && item.path.endsWith("/issues/42/labels")
+  );
+  assertEquals(labels?.body, { labels: [] });
+});
+
+Deno.test("pull-request file delivery retries concurrent branch creation", async () => {
+  const client = new PullRequestFileClient();
+  client.failCreateBranchOnce = true;
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  const commits = client.requests.filter((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commits.length, 2);
+  assertEquals(commits[1]?.body, {
+    message: "Sync acme/sample",
+    tree: "tree-sha",
+    parents: ["base-sha", "competing-branch-sha"],
+  });
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ),
+  );
+});
+
+Deno.test("pull-request file delivery retries concurrent branch updates", async () => {
+  const client = new PullRequestFileClient();
+  client.branchExists = true;
+  client.failUpdateBranchOnce = true;
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  const commits = client.requests.filter((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commits.length, 2);
+  assertEquals(commits[1]?.body, {
+    message: "Sync acme/sample",
+    tree: "tree-sha",
+    parents: ["base-sha", "competing-branch-sha"],
+  });
+  assertEquals(
+    client.requests.filter((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ).length,
+    2,
+  );
+});
+
+Deno.test("pull-request file delivery retries concurrent PR creation", async () => {
+  const client = new PullRequestFileClient();
+  client.failCreatePullOnce = true;
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  assertEquals(
+    client.requests.filter((item) =>
+      item.method === "POST" && item.path.endsWith("/pulls")
+    ).length,
+    1,
+  );
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" && item.path.endsWith("/pulls/42")
+    ),
   );
 });
 

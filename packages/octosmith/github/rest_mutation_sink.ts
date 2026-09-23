@@ -609,19 +609,14 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       this.#owner,
       repository,
     );
-    const nextCommit = await this.#client.request<{ readonly sha: string }>(
-      "POST",
-      repositoryPath + "/git/commits",
-      {
-        body: {
-          message,
-          tree: nextTree.sha,
-          parents: [baseSha],
-        },
-      },
-    );
 
     if (this.#fileChanges.mode === "direct") {
+      const nextCommit = await this.createFileChangeCommit(
+        repositoryPath,
+        message,
+        nextTree.sha,
+        baseSha,
+      );
       await this.#client.request(
         "PATCH",
         repositoryPath + "/git/refs/heads/" + encodePath(defaultBranch),
@@ -634,24 +629,68 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     const branchRef = "heads/" + encodePath(branch);
     const branchReadPath = repositoryPath + "/git/ref/" + branchRef;
     const branchWritePath = repositoryPath + "/git/refs/" + branchRef;
-    const existingBranch = await this.#client.request<
+    let existingBranch = await this.#client.request<
       { readonly object: { readonly sha: string } } | undefined
     >("GET", branchReadPath, { allowNotFound: true });
+    let nextCommit = await this.createFileChangeCommit(
+      repositoryPath,
+      message,
+      nextTree.sha,
+      baseSha,
+      existingBranch?.object.sha,
+    );
 
-    if (existingBranch === undefined) {
-      await this.#client.request("POST", repositoryPath + "/git/refs", {
-        body: {
-          ref: "refs/heads/" + branch,
-          sha: nextCommit.sha,
-        },
-      });
-    } else {
-      await this.#client.request("PATCH", branchWritePath, {
-        body: { sha: nextCommit.sha, force: true },
-      });
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      if (existingBranch === undefined) {
+        try {
+          await this.#client.request("POST", repositoryPath + "/git/refs", {
+            body: {
+              ref: "refs/heads/" + branch,
+              sha: nextCommit.sha,
+            },
+          });
+          break;
+        } catch (error) {
+          if (!isRetryableGitHubConflict(error)) {
+            throw error;
+          }
+          existingBranch = await this.#client.request<
+            { readonly object: { readonly sha: string } }
+          >("GET", branchReadPath);
+          nextCommit = await this.createFileChangeCommit(
+            repositoryPath,
+            message,
+            nextTree.sha,
+            baseSha,
+            existingBranch.object.sha,
+          );
+          continue;
+        }
+      }
+
+      try {
+        await this.#client.request("PATCH", branchWritePath, {
+          body: { sha: nextCommit.sha, force: false },
+        });
+        break;
+      } catch (error) {
+        if (!isRetryableGitHubConflict(error) || attempt === 2) {
+          throw error;
+        }
+        existingBranch = await this.#client.request<
+          { readonly object: { readonly sha: string } }
+        >("GET", branchReadPath);
+        nextCommit = await this.createFileChangeCommit(
+          repositoryPath,
+          message,
+          nextTree.sha,
+          baseSha,
+          existingBranch.object.sha,
+        );
+      }
     }
 
-    const pulls = await this.#client.get<
+    let pulls = await this.#client.get<
       readonly {
         readonly number: number;
       }[]
@@ -667,20 +706,43 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
 
     let pullNumber = pulls[0]?.number;
+    let existingPull = pullNumber !== undefined;
     if (pullNumber === undefined) {
-      const pull = await this.#client.request<{ readonly number: number }>(
-        "POST",
-        repositoryPath + "/pulls",
-        {
-          body: {
-            title,
-            head: branch,
-            base: defaultBranch,
+      try {
+        const pull = await this.#client.request<{ readonly number: number }>(
+          "POST",
+          repositoryPath + "/pulls",
+          {
+            body: {
+              title,
+              head: branch,
+              base: defaultBranch,
+            },
           },
-        },
-      );
-      pullNumber = pull.number;
-    } else {
+        );
+        pullNumber = pull.number;
+      } catch (error) {
+        if (!isRetryableGitHubConflict(error)) {
+          throw error;
+        }
+        pulls = await this.#client.get<
+          readonly {
+            readonly number: number;
+          }[]
+        >(repositoryPath + "/pulls", {
+          state: "open",
+          head: this.#owner + ":" + branch,
+          base: defaultBranch,
+        });
+        pullNumber = pulls[0]?.number;
+        if (pullNumber === undefined) {
+          throw error;
+        }
+        existingPull = true;
+      }
+    }
+
+    if (existingPull) {
       await this.#client.request(
         "PATCH",
         repositoryPath + "/pulls/" + pullNumber,
@@ -688,13 +750,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       );
     }
 
-    if (this.#fileChanges.labels.length > 0) {
-      await this.#client.request(
-        "POST",
-        repositoryPath + "/issues/" + pullNumber + "/labels",
-        { body: { labels: this.#fileChanges.labels } },
-      );
-    }
+    await this.#client.request(
+      "PUT",
+      repositoryPath + "/issues/" + pullNumber + "/labels",
+      { body: { labels: this.#fileChanges.labels } },
+    );
   }
 
   async validateFileOperation(
@@ -731,6 +791,28 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         "Managed file changed since planning: " + path,
       );
     }
+  }
+
+  private async createFileChangeCommit(
+    repositoryPath: string,
+    message: string,
+    tree: string,
+    baseSha: string,
+    branchSha?: string,
+  ): Promise<{ readonly sha: string }> {
+    return await this.#client.request<{ readonly sha: string }>(
+      "POST",
+      repositoryPath + "/git/commits",
+      {
+        body: {
+          message,
+          tree,
+          parents: branchSha !== undefined && branchSha !== baseSha
+            ? [baseSha, branchSha]
+            : [baseSha],
+        },
+      },
+    );
   }
 
   private repo(repository: string): string {
@@ -1158,6 +1240,11 @@ function renderFileChangeText(
   return template
     .replaceAll("{organization}", organization)
     .replaceAll("{repository}", repository);
+}
+
+function isRetryableGitHubConflict(error: unknown): boolean {
+  return error instanceof Error &&
+    /^GitHub API request failed: (409|422)\b/.test(error.message);
 }
 
 function encodePath(path: string): string {
