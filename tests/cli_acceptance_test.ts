@@ -1410,6 +1410,7 @@ async function fileConfigurationDirectory(): Promise<string> {
   await Deno.writeTextFile(
     root + "/templates/code.yml",
     [
+      "version: 1",
       "kind: repository",
       "match:",
       "  names:",
