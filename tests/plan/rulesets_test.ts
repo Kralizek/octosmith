@@ -667,7 +667,132 @@ Deno.test("new rules reject types incompatible with the ruleset target", () => {
   );
 });
 
-Deno.test("new pull-request rules require complete nested objects", () => {
+Deno.test("new pull-request rules default optional fields", () => {
+  assertEquals(
+    buildPlan(currentState(), {
+      repository: "sample",
+      template: "code",
+      rulesets: [{
+        name: "branch",
+        target: "branch",
+        enforcement: "active",
+        conditions: {
+          refName: { include: ["~DEFAULT_BRANCH"] },
+        },
+        rules: [{
+          type: "pull-request",
+          allowedMergeMethods: ["squash"],
+          requiredReviewThreadResolution: true,
+        }],
+      }],
+    }),
+    {
+      repository: "sample",
+      operations: [{
+        type: "create-ruleset",
+        ruleset: {
+          name: "branch",
+          target: "branch",
+          enforcement: "active",
+          bypassActors: [],
+          conditions: {
+            refName: {
+              include: ["~DEFAULT_BRANCH"],
+              exclude: [],
+            },
+          },
+          rules: [{
+            type: "pull-request",
+            allowedMergeMethods: ["squash"],
+            dismissStaleReviewsOnPush: false,
+            dismissalRestriction: {
+              enabled: false,
+              allowedActors: [],
+            },
+            requireCodeOwnerReview: false,
+            requireLastPushApproval: false,
+            requiredApprovingReviewCount: 0,
+            requiredReviewThreadResolution: true,
+            requiredReviewers: [],
+          }],
+        },
+      }],
+    },
+  );
+});
+
+Deno.test("pull-request updates preserve unsupported fields", () => {
+  const current = currentState({
+    rulesets: [{
+      id: 1,
+      name: "protect",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: {
+        refName: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+      },
+      rules: [
+        {
+          type: "pull-request",
+          allowedMergeMethods: ["squash"],
+          dismissStaleReviewsOnPush: false,
+          dismissalRestriction: {
+            enabled: false,
+            allowedActors: [],
+            futureNestedField: "keep",
+          },
+          requireCodeOwnerReview: false,
+          requireLastPushApproval: false,
+          requiredApprovingReviewCount: 0,
+          requiredReviewThreadResolution: false,
+          requiredReviewers: [],
+          futureTopLevelField: "keep",
+        } as unknown as import("../../packages/octosmith/mod.ts").CurrentRefRule,
+      ],
+    }],
+  });
+
+  const plan = buildPlan(current, {
+    repository: "sample",
+    template: "code",
+    rulesets: [{
+      name: "protect",
+      rules: [{
+        type: "pull-request",
+        requiredReviewThreadResolution: true,
+      }],
+    }],
+  });
+
+  assertEquals(plan.operations, [{
+    type: "update-ruleset",
+    id: 1,
+    changes: {
+      name: "protect",
+      rules: [
+        {
+          type: "pull-request",
+          allowedMergeMethods: ["squash"],
+          dismissStaleReviewsOnPush: false,
+          dismissalRestriction: {
+            enabled: false,
+            allowedActors: [],
+            futureNestedField: "keep",
+          } as never,
+          requireCodeOwnerReview: false,
+          requireLastPushApproval: false,
+          requiredApprovingReviewCount: 0,
+          requiredReviewThreadResolution: true,
+          requiredReviewers: [],
+          futureTopLevelField: "keep",
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredRulesetRule,
+      ],
+    },
+  }]);
+});
+
+Deno.test("new pull-request rules validate declared nested objects", () => {
   assertThrows(
     () =>
       buildPlan(currentState(), {
@@ -683,21 +808,117 @@ Deno.test("new pull-request rules require complete nested objects", () => {
           rules: [{
             type: "pull-request",
             allowedMergeMethods: ["squash"],
-            dismissStaleReviewsOnPush: true,
             dismissalRestriction: {
               enabled: true,
             },
-            requireCodeOwnerReview: true,
-            requireLastPushApproval: true,
-            requiredApprovingReviewCount: 1,
-            requiredReviewThreadResolution: true,
-            requiredReviewers: [],
           }],
         }],
       }),
     Error,
     "requires complete dismissalRestriction",
   );
+});
+
+Deno.test("new pull-request rules reject null dismissal restriction", () => {
+  assertThrows(
+    () =>
+      buildPlan(
+        currentState(),
+        {
+          repository: "sample",
+          template: "code",
+          rulesets: [{
+            name: "branch",
+            target: "branch",
+            enforcement: "active",
+            conditions: {
+              refName: { include: ["~DEFAULT_BRANCH"] },
+            },
+            rules: [{
+              type: "pull-request",
+              allowedMergeMethods: ["squash"],
+              dismissalRestriction: null,
+            }],
+          }],
+        } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
+      ),
+    Error,
+    "requires complete dismissalRestriction",
+  );
+});
+
+Deno.test("new pull-request rules reject null dismissal restriction fields", () => {
+  for (
+    const dismissalRestriction of [
+      { enabled: null, allowedActors: [] },
+      { enabled: false, allowedActors: null },
+    ]
+  ) {
+    assertThrows(
+      () =>
+        buildPlan(
+          currentState(),
+          {
+            repository: "sample",
+            template: "code",
+            rulesets: [{
+              name: "branch",
+              target: "branch",
+              enforcement: "active",
+              conditions: {
+                refName: { include: ["~DEFAULT_BRANCH"] },
+              },
+              rules: [{
+                type: "pull-request",
+                allowedMergeMethods: ["squash"],
+                dismissalRestriction,
+              }],
+            }],
+          } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
+        ),
+      Error,
+      "requires complete dismissalRestriction",
+    );
+  }
+});
+
+Deno.test("new pull-request rules reject null optional fields", () => {
+  for (
+    const [field, value] of [
+      ["dismissStaleReviewsOnPush", null],
+      ["requireCodeOwnerReview", null],
+      ["requireLastPushApproval", null],
+      ["requiredApprovingReviewCount", null],
+      ["requiredReviewThreadResolution", null],
+      ["requiredReviewers", null],
+    ] as const
+  ) {
+    assertThrows(
+      () =>
+        buildPlan(
+          currentState(),
+          {
+            repository: "sample",
+            template: "code",
+            rulesets: [{
+              name: "branch",
+              target: "branch",
+              enforcement: "active",
+              conditions: {
+                refName: { include: ["~DEFAULT_BRANCH"] },
+              },
+              rules: [{
+                type: "pull-request",
+                allowedMergeMethods: ["squash"],
+                [field]: value,
+              }],
+            }],
+          } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
+        ),
+      Error,
+      "does not allow null " + field,
+    );
+  }
 });
 
 Deno.test("ruleset creation rejects duplicate rule types", () => {

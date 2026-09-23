@@ -783,7 +783,12 @@ function mapRule(
         | undefined;
 
       if (restriction !== undefined) {
+        const mappedRestriction = mapped.dismissal_restriction as
+          | Record<string, unknown>
+          | undefined;
+
         mapped.dismissal_restriction = {
+          ...mappedRestriction,
           ...(restriction.enabled !== undefined && {
             enabled: restriction.enabled,
           }),

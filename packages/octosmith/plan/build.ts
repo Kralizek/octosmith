@@ -1213,36 +1213,59 @@ function materializeRule(
       return rule as CurrentRefRule;
 
     case "pull-request": {
-      requireRuleFields(rule, [
-        "allowedMergeMethods",
+      requireRuleFields(rule, ["allowedMergeMethods"]);
+      rejectNullRuleFields(rule, [
         "dismissStaleReviewsOnPush",
-        "dismissalRestriction",
         "requireCodeOwnerReview",
         "requireLastPushApproval",
         "requiredApprovingReviewCount",
         "requiredReviewThreadResolution",
         "requiredReviewers",
       ]);
+
       const restriction = rule.dismissalRestriction;
       if (
-        restriction?.enabled === undefined ||
-        restriction.allowedActors === undefined
+        restriction !== undefined &&
+        (restriction === null ||
+          restriction.enabled == null ||
+          restriction.allowedActors == null)
       ) {
         throw new Error(
           "Rule pull-request requires complete dismissalRestriction",
         );
       }
+      const dismissalRestriction = {
+        ...restriction,
+        enabled: restriction?.enabled ?? false,
+        allowedActors: restriction?.allowedActors ?? [],
+      };
+
+      const requiredReviewers = rule.requiredReviewers ?? [];
+
       assertCompleteObjects(
         "pull-request dismissal actor",
-        restriction.allowedActors,
+        dismissalRestriction.allowedActors,
         ["id", "type"],
       );
       assertCompleteObjects(
         "pull-request required reviewer",
-        rule.requiredReviewers ?? [],
+        requiredReviewers,
         ["reviewerTeamId", "filePatterns", "minimumApprovals"],
       );
-      return rule as CurrentRefRule;
+
+      return {
+        ...rule,
+        type: "pull-request",
+        allowedMergeMethods: rule.allowedMergeMethods!,
+        dismissStaleReviewsOnPush: rule.dismissStaleReviewsOnPush ?? false,
+        dismissalRestriction,
+        requireCodeOwnerReview: rule.requireCodeOwnerReview ?? false,
+        requireLastPushApproval: rule.requireLastPushApproval ?? false,
+        requiredApprovingReviewCount: rule.requiredApprovingReviewCount ?? 0,
+        requiredReviewThreadResolution: rule.requiredReviewThreadResolution ??
+          false,
+        requiredReviewers,
+      };
     }
 
     case "required-status-checks":
@@ -1312,6 +1335,19 @@ function materializeRule(
         "Unsupported ruleset rule type: " +
           String(Reflect.get(rule as unknown as object, "type")),
       );
+  }
+}
+
+function rejectNullRuleFields(
+  rule: DesiredRulesetRule,
+  fields: readonly string[],
+): void {
+  for (const field of fields) {
+    if (Reflect.get(rule, field) === null) {
+      throw new Error(
+        "Rule " + rule.type + " does not allow null " + field,
+      );
+    }
   }
 }
 
