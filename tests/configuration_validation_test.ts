@@ -134,6 +134,47 @@ Deno.test("configuration rejects unsupported versions", async () => {
   );
 });
 
+Deno.test("configuration rejects empty file_changes", async () => {
+  await withConfiguration(
+    {
+      ...configuration,
+      repositories: {
+        scope: { names: ["sample"] },
+        file_changes: {},
+      },
+    },
+    template,
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "/repositories/file_changes",
+      ),
+  );
+});
+
+Deno.test("configuration rejects pull_request settings in direct mode", async () => {
+  await withConfiguration(
+    {
+      ...configuration,
+      repositories: {
+        scope: { names: ["sample"] },
+        file_changes: {
+          mode: "direct",
+          pull_request: { title: "Not allowed" },
+        },
+      },
+    },
+    template,
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "pull_request",
+      ),
+  );
+});
+
 Deno.test("configuration rejects misspelled template selectors", async () => {
   await withConfiguration(
     configuration,
