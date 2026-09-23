@@ -1506,6 +1506,12 @@ function fakeFileDeliveryGitHub(
     ) {
       return json({ number: 42 }, 201);
     }
+    if (
+      method === "PUT" &&
+      url.pathname === "/api/v3/repos/acme/sample/issues/42/labels"
+    ) {
+      return json([]);
+    }
 
     return json(
       { message: "Unexpected request: " + method + " " + url.pathname },

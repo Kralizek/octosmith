@@ -889,7 +889,7 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
     item.method === "POST" && item.path.endsWith("/git/commits")
   );
   assertEquals(commit?.body, {
-    message: "Sync acme/sample",
+    message: "Octosmith: reconcile managed files",
     tree: "tree-sha",
     parents: ["base-sha", "old-branch-sha"],
   });
@@ -934,7 +934,7 @@ Deno.test("pull-request file delivery retries concurrent branch creation", async
   );
   assertEquals(commits.length, 2);
   assertEquals(commits[1]?.body, {
-    message: "Sync acme/sample",
+    message: "Octosmith: reconcile managed files",
     tree: "tree-sha",
     parents: ["base-sha", "competing-branch-sha"],
   });
@@ -971,7 +971,7 @@ Deno.test("pull-request file delivery retries concurrent branch updates", async 
   );
   assertEquals(commits.length, 2);
   assertEquals(commits[1]?.body, {
-    message: "Sync acme/sample",
+    message: "Octosmith: reconcile managed files",
     tree: "tree-sha",
     parents: ["base-sha", "competing-branch-sha"],
   });
