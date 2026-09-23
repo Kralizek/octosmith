@@ -882,6 +882,45 @@ Deno.test("new pull-request rules reject null dismissal restriction fields", () 
   }
 });
 
+Deno.test("new pull-request rules reject null optional fields", () => {
+  for (
+    const [field, value] of [
+      ["dismissStaleReviewsOnPush", null],
+      ["requireCodeOwnerReview", null],
+      ["requireLastPushApproval", null],
+      ["requiredApprovingReviewCount", null],
+      ["requiredReviewThreadResolution", null],
+      ["requiredReviewers", null],
+    ] as const
+  ) {
+    assertThrows(
+      () =>
+        buildPlan(
+          currentState(),
+          {
+            repository: "sample",
+            template: "code",
+            rulesets: [{
+              name: "branch",
+              target: "branch",
+              enforcement: "active",
+              conditions: {
+                refName: { include: ["~DEFAULT_BRANCH"] },
+              },
+              rules: [{
+                type: "pull-request",
+                allowedMergeMethods: ["squash"],
+                [field]: value,
+              }],
+            }],
+          } as unknown as import("../../packages/octosmith/mod.ts").DesiredState,
+        ),
+      Error,
+      "does not allow null " + field,
+    );
+  }
+});
+
 Deno.test("ruleset creation rejects duplicate rule types", () => {
   assertThrows(
     () =>
