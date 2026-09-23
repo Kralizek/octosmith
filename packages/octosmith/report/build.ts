@@ -88,10 +88,12 @@ export function reportFailedRepository(
   repository: string,
   error: unknown,
   template?: string,
+  templateName?: string,
 ): RepositoryReport {
   return {
     repository,
     ...(template !== undefined && { template }),
+    ...(templateName !== undefined && { templateName }),
     status: "failed",
     items: [],
     error: error instanceof Error ? error.message : String(error),
