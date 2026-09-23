@@ -28,6 +28,7 @@ export interface Report {
 export interface RepositoryReport {
   readonly repository: string;
   readonly template?: string;
+  readonly templateName?: string;
   readonly status: RepositoryReportStatus;
   readonly items: readonly ApplyItemReport[];
   readonly error?: string;
