@@ -79,8 +79,7 @@ properties. Name selectors support `*` and `?` glob patterns.
 
 Every repository in scope must resolve to exactly one template. Templates are
 discovered recursively and identified as
-`<kind>:<relative-path-without-extension>`. The optional `name` is
-display-only.
+`<kind>:<relative-path-without-extension>`. The optional `name` is display-only.
 
 Example:
 
