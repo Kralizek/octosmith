@@ -2,6 +2,7 @@ import sodium from "libsodium-wrappers";
 import { buildPlan } from "@octosmith/octosmith";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
+  GitHubRequestError,
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryMutationSink,
@@ -715,9 +716,10 @@ class PullRequestFileClient implements GitHubClient {
         this.branchExists = true;
         this.branchSha = "competing-branch-sha";
         return Promise.reject(
-          new Error(
-            "GitHub API request failed: 422 Unprocessable Entity - " +
-              "Reference already exists",
+          new GitHubRequestError(
+            422,
+            "Unprocessable Entity",
+            "Reference already exists",
           ),
         );
       }
@@ -732,9 +734,10 @@ class PullRequestFileClient implements GitHubClient {
         this.failUpdateBranchOnce = false;
         this.branchSha = "competing-branch-sha";
         return Promise.reject(
-          new Error(
-            "GitHub API request failed: 422 Unprocessable Entity - " +
-              "Update is not a fast forward",
+          new GitHubRequestError(
+            422,
+            "Unprocessable Entity",
+            "Update is not a fast forward",
           ),
         );
       }
@@ -747,9 +750,10 @@ class PullRequestFileClient implements GitHubClient {
         this.failCreatePullOnce = false;
         this.pullExists = true;
         return Promise.reject(
-          new Error(
-            "GitHub API request failed: 422 Unprocessable Entity - " +
-              "A pull request already exists",
+          new GitHubRequestError(
+            422,
+            "Unprocessable Entity",
+            "A pull request already exists",
           ),
         );
       }

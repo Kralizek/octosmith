@@ -10,7 +10,7 @@ import type {
   RulesetDefinition,
   Variable,
 } from "../mod.ts";
-import type { GitHubClient } from "./client.ts";
+import { GitHubRequestError, type GitHubClient } from "./client.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 
 /** Describes secret value provider. */
@@ -1243,12 +1243,13 @@ function renderFileChangeText(
 }
 
 function isRetryableGitHubConflict(error: unknown): boolean {
-  return error instanceof Error &&
+  return error instanceof GitHubRequestError &&
+    error.status === 422 &&
     [
       "Reference already exists",
       "Update is not a fast forward",
       "A pull request already exists",
-    ].some((message) => error.message.includes(message));
+    ].some((message) => error.body.includes(message));
 }
 
 function encodePath(path: string): string {

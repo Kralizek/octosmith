@@ -38,6 +38,24 @@ export interface FetchGitHubClientOptions {
   readonly trace?: (entry: GitHubResponseTrace) => void;
 }
 
+/** Describes a failed GitHub request. */
+export class GitHubRequestError extends Error {
+  readonly status: number;
+  readonly statusText: string;
+  readonly body: string;
+
+  constructor(status: number, statusText: string, body: string) {
+    super(
+      "GitHub API request failed: " + status + " " +
+        statusText + (body ? " - " + body : ""),
+    );
+    this.name = "GitHubRequestError";
+    this.status = status;
+    this.statusText = statusText;
+    this.body = body;
+  }
+}
+
 /** Describes fetch GitHub client. */
 export class FetchGitHubClient implements GitHubClient {
   readonly #token: string;
@@ -108,9 +126,10 @@ export class FetchGitHubClient implements GitHubClient {
 
     if (!response.ok) {
       const body = await response.text();
-      throw new Error(
-        "GitHub API request failed: " + response.status + " " +
-          response.statusText + (body ? " - " + body : ""),
+      throw new GitHubRequestError(
+        response.status,
+        response.statusText,
+        body,
       );
     }
 
