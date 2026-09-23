@@ -127,6 +127,55 @@ Deno.test("loads nested templates with kind-scoped path identities", async () =>
       loaded.templates["repository:team-a/backend"].name,
       "Backend services",
     );
+
+    const desired = await resolveDesiredState(
+      loaded,
+      { name: "team-a-backend", teams: [], properties: {} },
+      (name) => name,
+    );
+    assertEquals(desired.template, "repository:team-a/backend");
+    assertEquals(desired.templateName, "Backend services");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("rejects colliding template identities across yaml extensions", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+
+    const source = [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  names:",
+      "    - sample",
+      "repository: {}",
+      "",
+    ].join("\n");
+
+    await Deno.writeTextFile(join(root, "templates", "a.yml"), source);
+    await Deno.writeTextFile(join(root, "templates", "a.yaml"), source);
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "Duplicate template identity: repository:a",
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
