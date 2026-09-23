@@ -721,6 +721,73 @@ Deno.test("new pull-request rules default optional fields", () => {
   );
 });
 
+Deno.test("pull-request updates preserve unsupported fields", () => {
+  const current = currentState({
+    rulesets: [{
+      id: 1,
+      name: "protect",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: {
+        refName: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+      },
+      rules: [{
+        type: "pull-request",
+        allowedMergeMethods: ["squash"],
+        dismissStaleReviewsOnPush: false,
+        dismissalRestriction: {
+          enabled: false,
+          allowedActors: [],
+          futureNestedField: "keep",
+        },
+        requireCodeOwnerReview: false,
+        requireLastPushApproval: false,
+        requiredApprovingReviewCount: 0,
+        requiredReviewThreadResolution: false,
+        requiredReviewers: [],
+        futureTopLevelField: "keep",
+      } as unknown as import("../../packages/octosmith/mod.ts").CurrentRefRule],
+    }],
+  });
+
+  const plan = buildPlan(current, {
+    repository: "sample",
+    template: "code",
+    rulesets: [{
+      name: "protect",
+      rules: [{
+        type: "pull-request",
+        requiredReviewThreadResolution: true,
+      }],
+    }],
+  });
+
+  assertEquals(plan.operations, [{
+    type: "update-ruleset",
+    id: 1,
+    changes: {
+      name: "protect",
+      rules: [{
+        type: "pull-request",
+        allowedMergeMethods: ["squash"],
+        dismissStaleReviewsOnPush: false,
+        dismissalRestriction: {
+          enabled: false,
+          allowedActors: [],
+          futureNestedField: "keep",
+        },
+        requireCodeOwnerReview: false,
+        requireLastPushApproval: false,
+        requiredApprovingReviewCount: 0,
+        requiredReviewThreadResolution: true,
+        requiredReviewers: [],
+        futureTopLevelField: "keep",
+      }],
+    },
+  }]);
+});
+
 Deno.test("new pull-request rules validate declared nested objects", () => {
   assertThrows(
     () =>
