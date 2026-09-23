@@ -29,6 +29,7 @@ export interface RepositoriesConfiguration {
 /** Describes repository management settings. */
 export interface RepositoryManagementSettings {
   readonly collectionManagement?: CollectionManagementMode;
+  readonly unmatchedRepositories?: "error" | "ignore";
 }
 
 /** Describes repository selector. */

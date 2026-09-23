@@ -5,6 +5,7 @@ import {
   loadConfigurationDirectory,
   matchesSelector,
   resolveDesiredState,
+  validateConfigurationDirectory,
 } from "../packages/octosmith/mod.ts";
 
 import { currentState } from "./plan/fixtures.ts";
@@ -170,6 +171,114 @@ Deno.test("template version is required", async () => {
   }
 });
 
+Deno.test("normalizes read and write team permission aliases", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  teams:",
+        "    - name: readers",
+        "      permission: read",
+        "    - name: writers",
+        "      permission: write",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+    const desired = await resolveDesiredState(
+      loaded,
+      { name: "sample", teams: [], properties: {} },
+      (name) => name,
+    );
+
+    assertEquals(desired.teams, [
+      {
+        team: "readers",
+        permission: { kind: "built-in", name: "pull" },
+      },
+      {
+        team: "writers",
+        permission: { kind: "built-in", name: "push" },
+      },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("preserves inherited object keys as custom team permissions", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "sample.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  names:",
+        "    - sample",
+        "repository:",
+        "  teams:",
+        "    - name: maintainers",
+        "      permission: constructor",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+    const desired = await resolveDesiredState(
+      loaded,
+      { name: "sample", teams: [], properties: {} },
+      (name) => name,
+    );
+
+    assertEquals(desired.teams, [
+      {
+        team: "maintainers",
+        permission: { kind: "custom", name: "constructor" },
+      },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("fixture organization agrees with root configuration", async () => {
   const loaded = await loadConfigurationDirectory(CONFIGURATION_ROOT);
   const organization = JSON.parse(
@@ -177,6 +286,32 @@ Deno.test("fixture organization agrees with root configuration", async () => {
   );
 
   assertEquals(organization.organization, loaded.configuration.organization);
+});
+
+Deno.test("validation allows literal scope entries without templates when unmatched repositories are ignored", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - unmatched",
+        "  settings:",
+        "    unmatched_repositories: ignore",
+        "",
+      ].join("\n"),
+    );
+
+    await validateConfigurationDirectory(root);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("rejects symlinked root configuration file", async () => {

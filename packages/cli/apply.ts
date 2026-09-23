@@ -3,6 +3,7 @@ import {
   buildPlan,
   type DesiredState,
   type LoadedConfiguration,
+  matchesSelector,
   type Plan,
   reportAppliedRepository,
   reportFailedRepository,
@@ -135,6 +136,18 @@ export async function apply(
   }
 
   for (const repository of discovery.repositories) {
+    const matchingTemplates = Object.values(loaded.templates).filter((
+      template,
+    ) => matchesSelector(template.match, repository));
+
+    if (
+      matchingTemplates.length === 0 &&
+      loaded.configuration.repositories.settings?.unmatchedRepositories ===
+        "ignore"
+    ) {
+      continue;
+    }
+
     let template: string | undefined;
     let result: import("@octosmith/octosmith").RepositoryReport;
 

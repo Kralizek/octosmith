@@ -58,14 +58,22 @@ repositories:
 
   settings:
     collection_management: explicit
+    unmatched_repositories: ignore
 ```
 
 Repository scope may use names, teams, visibility, and custom properties. Name
 selectors support `*` and `?` glob patterns.
 
+By default, every repository discovered in scope must match exactly one
+template. Set `repositories.settings.unmatched_repositories` to `ignore` to
+allow a broader scope where repositories without a matching template are left
+unmanaged. Repositories that match more than one template are always rejected.
+
 ## Templates
 
-Each repository in scope must resolve to exactly one template.
+Each repository in scope that is managed must resolve to exactly one template.
+When `repositories.settings.unmatched_repositories` is `ignore`, repositories
+without a matching template are left unmanaged.
 
 Templates are discovered recursively under `templates/`. Their canonical
 identity is `<kind>:<relative-path-without-extension>`, so
@@ -96,6 +104,10 @@ repository:
 
 Templates can manage repository settings, teams, custom properties, Actions
 settings and values, Dependabot secrets, rulesets, environments, and files.
+
+Team permissions accept GitHub's built-in permission names. The user-facing
+aliases `read` and `write` are normalized to GitHub's REST API values `pull` and
+`push` respectively; custom repository-role names are preserved.
 
 ## Collection management
 
