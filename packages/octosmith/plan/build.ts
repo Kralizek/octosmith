@@ -1214,6 +1214,14 @@ function materializeRule(
 
     case "pull-request": {
       requireRuleFields(rule, ["allowedMergeMethods"]);
+      rejectNullRuleFields(rule, [
+        "dismissStaleReviewsOnPush",
+        "requireCodeOwnerReview",
+        "requireLastPushApproval",
+        "requiredApprovingReviewCount",
+        "requiredReviewThreadResolution",
+        "requiredReviewers",
+      ]);
 
       const restriction = rule.dismissalRestriction;
       if (
@@ -1327,6 +1335,19 @@ function materializeRule(
         "Unsupported ruleset rule type: " +
           String(Reflect.get(rule as unknown as object, "type")),
       );
+  }
+}
+
+function rejectNullRuleFields(
+  rule: DesiredRulesetRule,
+  fields: readonly string[],
+): void {
+  for (const field of fields) {
+    if (Reflect.get(rule, field) === null) {
+      throw new Error(
+        "Rule " + rule.type + " does not allow null " + field,
+      );
+    }
   }
 }
 
