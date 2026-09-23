@@ -75,6 +75,9 @@ export function createGitHubRuntime(
         client,
         owner: loaded.configuration.organization,
         secretValue,
+        fileChanges: loaded.configuration.repositories.fileChanges ?? {
+          mode: "pull_request",
+        },
       });
 
       return await discoverRepositories(client, loaded, repository);

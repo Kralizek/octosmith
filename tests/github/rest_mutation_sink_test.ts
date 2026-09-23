@@ -1,11 +1,12 @@
 import sodium from "libsodium-wrappers";
 import { buildPlan } from "@octosmith/octosmith";
-import { assert, assertEquals } from "@std/assert";
+import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
+  GitHubRequestError,
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
@@ -27,6 +28,16 @@ class EnvironmentClient implements GitHubClient {
 
     if (method === "GET") {
       return this.get(path, options.query);
+    }
+
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      return Promise.resolve({ sha: "blob-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      return Promise.resolve({ sha: "tree-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/commits")) {
+      return Promise.resolve({ sha: "commit-sha" } as T);
     }
 
     return Promise.resolve(undefined as T);
@@ -126,8 +137,26 @@ class MappingClient implements GitHubClient {
   ): Promise<T> {
     this.requests.push({ method, path, body: options.body });
 
+    if (
+      method === "GET" &&
+      path.endsWith("/contents/README.md") &&
+      options.allowNotFound
+    ) {
+      return Promise.resolve(undefined as T);
+    }
+
     if (method === "GET") {
       return this.get(path, options.query);
+    }
+
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      return Promise.resolve({ sha: "blob-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      return Promise.resolve({ sha: "tree-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/commits")) {
+      return Promise.resolve({ sha: "commit-sha" } as T);
     }
 
     return Promise.resolve(undefined as T);
@@ -179,6 +208,16 @@ class MappingClient implements GitHubClient {
         use_default: true,
         use_immutable_subject: false,
       } as T);
+    }
+
+    if (path === "/repos/acme/sample") {
+      return Promise.resolve({ default_branch: "main" } as T);
+    }
+    if (path.endsWith("/git/ref/heads/main")) {
+      return Promise.resolve({ object: { sha: "base-sha" } } as T);
+    }
+    if (path.endsWith("/git/commits/base-sha")) {
+      return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
     }
 
     throw new Error("Unexpected GET " + path);
@@ -478,7 +517,7 @@ Deno.test("organization OIDC templates do not collapse to GitHub defaults", asyn
   });
 });
 
-Deno.test("managed file uploads preserve UTF-8 content through base64", async () => {
+Deno.test("managed file uploads use one Git commit with UTF-8 blobs", async () => {
   const client = new MappingClient();
   const sink = new GitHubRepositoryMutationSink({
     client,
@@ -486,7 +525,16 @@ Deno.test("managed file uploads preserve UTF-8 content through base64", async ()
     secretValue: () => "unused",
   });
 
-  await sink.apply("sample", {
+  const prepared = sink.prepare("sample", [{
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "ciao 👋",
+    },
+  }]);
+
+  await prepared.apply("sample", {
     type: "create-file",
     file: {
       path: "README.md",
@@ -495,14 +543,540 @@ Deno.test("managed file uploads preserve UTF-8 content through base64", async ()
     },
   });
 
-  const request = client.requests.find((item) =>
-    item.method === "PUT" && item.path.endsWith("/contents/README.md")
+  const blob = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/blobs")
   );
-  const body = request?.body as { content: string };
-  const binary = atob(body.content);
-  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  assertEquals(blob?.body, {
+    content: "ciao 👋",
+    encoding: "utf-8",
+  });
 
-  assertEquals(new TextDecoder().decode(bytes), "ciao 👋");
+  const commit = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commit?.body, {
+    message: "Octosmith: reconcile managed files",
+    tree: "tree-sha",
+    parents: ["base-sha"],
+  });
+
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/main")
+    ),
+  );
+});
+
+class ConcurrentFileClient extends MappingClient {
+  constructor(
+    readonly current: Readonly<Record<string, { readonly sha: string }>>,
+  ) {
+    super();
+  }
+
+  override request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
+  ): Promise<T> {
+    if (method === "GET" && path.includes("/contents/")) {
+      this.requests.push({ method, path, body: options.body });
+      const filePath = decodeURIComponent(path.split("/contents/")[1]);
+      return Promise.resolve(this.current[filePath] as T);
+    }
+
+    return super.request(method, path, options);
+  }
+}
+
+Deno.test("managed file delivery rejects concurrent creates", async () => {
+  const client = new ConcurrentFileClient({
+    "README.md": { sha: "concurrent-sha" },
+  });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "create-file",
+        file: {
+          path: "README.md",
+          ensure: "exact",
+          content: "managed",
+        },
+      }),
+    Error,
+    "was created concurrently",
+  );
+
+  assertEquals(
+    client.requests.some((item) =>
+      item.method === "POST" && item.path.endsWith("/git/trees")
+    ),
+    false,
+  );
+});
+
+Deno.test("managed file delivery rejects stale update and delete SHAs", async () => {
+  for (
+    const operation of [
+      {
+        type: "update-file" as const,
+        sha: "planned-sha",
+        file: {
+          path: "README.md",
+          ensure: "exact" as const,
+          content: "managed",
+        },
+      },
+      {
+        type: "delete-file" as const,
+        path: "README.md",
+        sha: "planned-sha",
+      },
+    ]
+  ) {
+    const client = new ConcurrentFileClient({
+      "README.md": { sha: "concurrent-sha" },
+    });
+    const sink = new GitHubRepositoryMutationSink({
+      client,
+      owner: "acme",
+      secretValue: () => "unused",
+    });
+
+    await assertRejects(
+      () => sink.apply("sample", operation),
+      Error,
+      "Managed file changed since planning: README.md",
+    );
+
+    assertEquals(
+      client.requests.some((item) =>
+        item.method === "POST" && item.path.endsWith("/git/trees")
+      ),
+      false,
+    );
+  }
+});
+
+class PullRequestFileClient implements GitHubClient {
+  readonly requests: RecordedRequest[] = [];
+  defaultBranch = "main";
+  branchExists = false;
+  branchSha = "old-branch-sha";
+  pullExists = false;
+  pullNumber = 42;
+  failCreateBranchOnce = false;
+  failUpdateBranchOnce = false;
+  failCreatePullOnce = false;
+  commitNumber = 0;
+
+  request<T>(
+    method: string,
+    path: string,
+    options: import("@octosmith/octosmith").GitHubRequestOptions = {},
+  ): Promise<T> {
+    this.requests.push({ method, path, body: options.body });
+
+    if (method === "GET") {
+      if (
+        path.endsWith("/contents/README.md") &&
+        options.allowNotFound
+      ) {
+        return Promise.resolve(undefined as T);
+      }
+      if (
+        path.endsWith("/git/ref/heads/octosmith/reconcile") &&
+        options.allowNotFound &&
+        !this.branchExists
+      ) {
+        return Promise.resolve(undefined as T);
+      }
+      return this.get(path, options.query);
+    }
+
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      return Promise.resolve({ sha: "blob-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      return Promise.resolve({ sha: "tree-sha" } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/commits")) {
+      this.commitNumber += 1;
+      return Promise.resolve({ sha: "commit-sha-" + this.commitNumber } as T);
+    }
+    if (method === "POST" && path.endsWith("/git/refs")) {
+      if (this.failCreateBranchOnce) {
+        this.failCreateBranchOnce = false;
+        this.branchExists = true;
+        this.branchSha = "competing-branch-sha";
+        return Promise.reject(
+          new GitHubRequestError(
+            422,
+            "Unprocessable Entity",
+            JSON.stringify({ message: "Reference already exists" }),
+          ),
+        );
+      }
+      this.branchExists = true;
+      this.branchSha = String((options.body as { sha?: string })?.sha);
+      return Promise.resolve(undefined as T);
+    }
+    if (
+      method === "PATCH" && path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ) {
+      if (this.failUpdateBranchOnce) {
+        this.failUpdateBranchOnce = false;
+        this.branchSha = "competing-branch-sha";
+        return Promise.reject(
+          new GitHubRequestError(
+            422,
+            "Unprocessable Entity",
+            JSON.stringify({ message: "Update is not a fast forward" }),
+          ),
+        );
+      }
+      this.branchExists = true;
+      this.branchSha = String((options.body as { sha?: string })?.sha);
+      return Promise.resolve(undefined as T);
+    }
+    if (method === "POST" && path.endsWith("/pulls")) {
+      if (this.failCreatePullOnce) {
+        this.failCreatePullOnce = false;
+        this.pullExists = true;
+        return Promise.reject(
+          new GitHubRequestError(
+            422,
+            "Unprocessable Entity",
+            JSON.stringify({
+              message: "Validation Failed",
+              errors: [{ message: "A pull request already exists" }],
+            }),
+          ),
+        );
+      }
+      this.pullExists = true;
+      return Promise.resolve({ number: this.pullNumber } as T);
+    }
+
+    return Promise.resolve(undefined as T);
+  }
+
+  get<T>(
+    path: string,
+    _query: Readonly<Record<string, GitHubQueryValue>> = {},
+  ): Promise<T> {
+    if (path === "/repos/acme/sample") {
+      return Promise.resolve({ default_branch: this.defaultBranch } as T);
+    }
+    if (path.endsWith("/git/ref/heads/" + this.defaultBranch)) {
+      return Promise.resolve({ object: { sha: "base-sha" } } as T);
+    }
+    if (path.endsWith("/git/commits/base-sha")) {
+      return Promise.resolve({ tree: { sha: "base-tree-sha" } } as T);
+    }
+    if (path.endsWith("/git/ref/heads/octosmith/reconcile")) {
+      return Promise.resolve({ object: { sha: this.branchSha } } as T);
+    }
+    if (path.endsWith("/pulls")) {
+      return Promise.resolve(
+        (this.pullExists ? [{ number: this.pullNumber }] : []) as T,
+      );
+    }
+
+    throw new Error("Unexpected GET " + path);
+  }
+}
+
+Deno.test("pull-request file delivery creates a stable branch and labeled PR", async () => {
+  const client = new PullRequestFileClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: {
+      mode: "pull_request",
+      commit: { message: "Sync {organization}/{repository}" },
+      pullRequest: {
+        branchPrefix: "octosmith/",
+        title: "Reconcile {repository}",
+        labels: ["automation", "octosmith"],
+      },
+    },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  const commit = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commit?.body, {
+    message: "Sync acme/sample",
+    tree: "tree-sha",
+    parents: ["base-sha"],
+  });
+
+  const ref = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/refs")
+  );
+  assertEquals(ref?.body, {
+    ref: "refs/heads/octosmith/reconcile",
+    sha: "commit-sha-1",
+  });
+
+  const pull = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/pulls")
+  );
+  assertEquals(pull?.body, {
+    title: "Reconcile sample",
+    head: "octosmith/reconcile",
+    base: "main",
+  });
+
+  const labels = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/issues/42/labels")
+  );
+  assertEquals(labels?.body, {
+    labels: ["automation", "octosmith"],
+  });
+});
+
+Deno.test("pull-request file delivery preserves existing labels when none are configured", async () => {
+  const client = new PullRequestFileClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  assertEquals(
+    client.requests.some((item) => item.path.endsWith("/issues/42/labels")),
+    false,
+  );
+});
+
+Deno.test("pull-request file delivery reuses its stable branch and open PR", async () => {
+  const client = new PullRequestFileClient();
+  client.branchExists = true;
+  client.pullExists = true;
+
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ),
+  );
+  const branchUpdate = client.requests.find((item) =>
+    item.method === "PATCH" &&
+    item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+  );
+  assertEquals(branchUpdate?.body, { sha: "commit-sha-1", force: false });
+  const commit = client.requests.find((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commit?.body, {
+    message: "Octosmith: reconcile managed files",
+    tree: "tree-sha",
+    parents: ["base-sha", "old-branch-sha"],
+  });
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" && item.path.endsWith("/pulls/42")
+    ),
+  );
+  assertEquals(
+    client.requests.some((item) =>
+      item.method === "POST" && item.path.endsWith("/pulls")
+    ),
+    false,
+  );
+  assertEquals(
+    client.requests.some((item) => item.path.endsWith("/issues/42/labels")),
+    false,
+  );
+});
+
+Deno.test("pull-request file delivery retries concurrent branch creation", async () => {
+  const client = new PullRequestFileClient();
+  client.failCreateBranchOnce = true;
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  const commits = client.requests.filter((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commits.length, 2);
+  assertEquals(commits[1]?.body, {
+    message: "Octosmith: reconcile managed files",
+    tree: "tree-sha",
+    parents: ["base-sha", "competing-branch-sha"],
+  });
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ),
+  );
+});
+
+Deno.test("pull-request file delivery rejects default-branch reconciliation", async () => {
+  const client = new PullRequestFileClient();
+  client.defaultBranch = "octosmith/reconcile";
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "create-file",
+        file: {
+          path: "README.md",
+          ensure: "exact",
+          content: "managed",
+        },
+      }),
+    Error,
+    "Managed file pull-request branch must not match default branch",
+  );
+
+  assertEquals(
+    client.requests.some((item) =>
+      item.method === "POST" && item.path.endsWith("/git/commits")
+    ),
+    false,
+  );
+  assertEquals(
+    client.requests.some((item) =>
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ),
+    false,
+  );
+});
+
+Deno.test("pull-request file delivery retries concurrent branch updates", async () => {
+  const client = new PullRequestFileClient();
+  client.branchExists = true;
+  client.failUpdateBranchOnce = true;
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  const commits = client.requests.filter((item) =>
+    item.method === "POST" && item.path.endsWith("/git/commits")
+  );
+  assertEquals(commits.length, 2);
+  assertEquals(commits[1]?.body, {
+    message: "Octosmith: reconcile managed files",
+    tree: "tree-sha",
+    parents: ["base-sha", "competing-branch-sha"],
+  });
+  assertEquals(
+    client.requests.filter((item) =>
+      item.method === "PATCH" &&
+      item.path.endsWith("/git/refs/heads/octosmith/reconcile")
+    ).length,
+    2,
+  );
+});
+
+Deno.test("pull-request file delivery retries concurrent PR creation", async () => {
+  const client = new PullRequestFileClient();
+  client.failCreatePullOnce = true;
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "pull_request" },
+  });
+
+  await sink.apply("sample", {
+    type: "create-file",
+    file: {
+      path: "README.md",
+      ensure: "exact",
+      content: "managed",
+    },
+  });
+
+  assertEquals(
+    client.requests.filter((item) =>
+      item.method === "POST" && item.path.endsWith("/pulls")
+    ).length,
+    1,
+  );
+  assert(
+    client.requests.some((item) =>
+      item.method === "PATCH" && item.path.endsWith("/pulls/42")
+    ),
+  );
 });
 
 class SecretClient implements GitHubClient {

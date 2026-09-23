@@ -29,6 +29,9 @@
         },
         "settings": {
           "$ref": "#/$defs/settings"
+        },
+        "file_changes": {
+          "$ref": "#/$defs/fileChanges"
         }
       }
     }
@@ -125,6 +128,75 @@
             "error",
             "ignore"
           ]
+        }
+      }
+    },
+    "fileChanges": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "pull_request"
+            },
+            "commit": {
+              "$ref": "#/$defs/fileChangesCommit"
+            },
+            "pull_request": {
+              "$ref": "#/$defs/fileChangesPullRequest"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mode"
+          ],
+          "properties": {
+            "mode": {
+              "const": "direct"
+            },
+            "commit": {
+              "$ref": "#/$defs/fileChangesCommit"
+            }
+          }
+        }
+      ]
+    },
+    "fileChangesCommit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "fileChangesPullRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branch_prefix": {
+          "type": "string",
+          "minLength": 1
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "labels": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         }
       }
     }
