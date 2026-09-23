@@ -929,10 +929,12 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
     ),
     false,
   );
-  const labels = client.requests.find((item) =>
-    item.method === "POST" && item.path.endsWith("/issues/42/labels")
+  assertEquals(
+    client.requests.some((item) =>
+      item.path.endsWith("/issues/42/labels")
+    ),
+    false,
   );
-  assertEquals(labels?.body, { labels: [] });
 });
 
 Deno.test("pull-request file delivery retries concurrent branch creation", async () => {
