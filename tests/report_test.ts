@@ -130,6 +130,27 @@ Deno.test("text renderer uses concise status icons and hides unchanged items", (
   assertStringIncludes(rendered, "✗ read failed");
 });
 
+Deno.test("text renderer prefers template display names", () => {
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [
+      reportPlannedRepository(
+        "repository:team-a/backend",
+        { repository: "api", operations: [operation] },
+        [evaluation],
+        "Backend services",
+      ),
+    ],
+  };
+
+  const rendered = renderReport(report);
+
+  assertStringIncludes(rendered, "→ api [Backend services] — planned");
+  assertEquals(rendered.includes("repository:team-a/backend"), false);
+});
+
 Deno.test("verbose text includes unchanged apply items", () => {
   const report: Report = {
     organization: "acme",
