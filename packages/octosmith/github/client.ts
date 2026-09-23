@@ -49,7 +49,7 @@ export class FetchGitHubClient implements GitHubClient {
   constructor(options: FetchGitHubClientOptions) {
     this.#token = options.token;
     this.#baseUrl = options.baseUrl ?? "https://api.github.com";
-    this.#apiVersion = options.apiVersion ?? "2026-03-10";
+    this.#apiVersion = options.apiVersion ?? "2022-11-28";
     this.#fetch = options.fetch ?? globalThis.fetch;
     this.#trace = options.trace;
   }

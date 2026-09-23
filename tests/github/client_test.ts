@@ -47,6 +47,49 @@ Deno.test("GitHub client still resolves root API URLs", async () => {
   assertEquals(requestedUrl, "https://api.github.com/repos/acme/api");
 });
 
+Deno.test("GitHub client defaults to GitHub's broadly compatible API version", async () => {
+  let requestedVersion: string | null | undefined;
+
+  const client = new FetchGitHubClient({
+    token: "token",
+    fetch: (_, init) => {
+      requestedVersion = new Headers(init?.headers).get("x-github-api-version");
+      return Promise.resolve(
+        new Response(JSON.stringify({ name: "api" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    },
+  });
+
+  await client.get("/repos/acme/api");
+
+  assertEquals(requestedVersion, "2022-11-28");
+});
+
+Deno.test("GitHub client honors an explicit API version override", async () => {
+  let requestedVersion: string | null | undefined;
+
+  const client = new FetchGitHubClient({
+    token: "token",
+    apiVersion: "2026-03-10",
+    fetch: (_, init) => {
+      requestedVersion = new Headers(init?.headers).get("x-github-api-version");
+      return Promise.resolve(
+        new Response(JSON.stringify({ name: "api" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+    },
+  });
+
+  await client.get("/repos/acme/api");
+
+  assertEquals(requestedVersion, "2026-03-10");
+});
+
 Deno.test("GitHub client throws on an ordinary 404", async () => {
   const client = responseClient(
     new Response("missing", {
