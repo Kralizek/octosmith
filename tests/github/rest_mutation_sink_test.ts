@@ -4,9 +4,9 @@ import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   type GitHubClient,
   type GitHubQueryValue,
-  GitHubRequestError,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
+  GitHubRequestError,
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
