@@ -5,6 +5,7 @@ import {
   loadConfigurationDirectory,
   matchesSelector,
   resolveDesiredState,
+  validateConfigurationDirectory,
 } from "../packages/octosmith/mod.ts";
 
 import { currentState } from "./plan/fixtures.ts";
@@ -86,6 +87,32 @@ Deno.test("fixture organization agrees with root configuration", async () => {
   );
 
   assertEquals(organization.organization, loaded.configuration.organization);
+});
+
+Deno.test("validation allows literal scope entries without templates when unmatched repositories are ignored", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    names:",
+        "      - unmatched",
+        "  settings:",
+        "    unmatched_repositories: ignore",
+        "",
+      ].join("\n"),
+    );
+
+    await validateConfigurationDirectory(root);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("rejects symlinked root configuration file", async () => {
