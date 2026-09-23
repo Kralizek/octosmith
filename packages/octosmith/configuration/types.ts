@@ -41,7 +41,9 @@ export interface RepositorySelector {
 
 /** Describes repository template. */
 export interface RepositoryTemplate {
+  readonly version: 1;
   readonly kind: "repository";
+  readonly name?: string;
   readonly match: RepositorySelector;
   readonly repository: RepositoryConfiguration;
 }
