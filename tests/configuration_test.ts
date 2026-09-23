@@ -35,11 +35,11 @@ Deno.test("loads example configuration and templates", async () => {
   ]);
 
   assertEquals(
-    loaded.templates.code.repository?.settings?.deleteBranchOnMerge,
+    loaded.templates["repository:code"].repository?.settings?.deleteBranchOnMerge,
     true,
   );
   assertEquals(
-    loaded.templates.code.repository.rulesets?.[0].conditions?.refName?.include,
+    loaded.templates["repository:code"].repository.rulesets?.[0].conditions?.refName?.include,
     ["~DEFAULT_BRANCH"],
   );
 });
@@ -198,6 +198,7 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "code.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  properties:",
@@ -223,13 +224,13 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
     assertEquals(loaded.configuration.repositories.scope.properties, {
       repository_type: "code",
     });
-    assertEquals(loaded.templates.code.match.properties, {
+    assertEquals(loaded.templates["repository:code"].match.properties, {
       repository_type: "code",
     });
-    assertEquals(loaded.templates.code.repository?.customProperties, {
+    assertEquals(loaded.templates["repository:code"].repository?.customProperties, {
       deployment_region: "eu-north-1",
     });
-    assertEquals(Object.keys(loaded.templates.code.repository.files ?? {}), [
+    assertEquals(Object.keys(loaded.templates["repository:code"].repository.files ?? {}), [
       ".github/workflows/release_candidate.yml",
     ]);
   } finally {
@@ -308,6 +309,7 @@ for (
       await Deno.writeTextFile(
         join(root, "templates", "sample.yml"),
         [
+          "version: 1",
           "kind: repository",
           "match:",
           "  names:",
@@ -385,6 +387,7 @@ Deno.test("rejects aggregate configuration file sources larger than 50 MiB", asy
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -434,6 +437,7 @@ Deno.test("rejects configuration file sources larger than 10 MiB", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -498,6 +502,7 @@ Deno.test("rejects symlinked configuration file sources escaping root", async ()
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -551,6 +556,7 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -629,6 +635,7 @@ Deno.test("resolves variable and secret binding forms", async () => {
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -724,6 +731,7 @@ Deno.test("preserves omitted environment members in desired state", async () => 
     await Deno.writeTextFile(
       join(root, "templates", "sample.yml"),
       [
+        "version: 1",
         "kind: repository",
         "match:",
         "  names:",
@@ -809,6 +817,7 @@ for (
       await Deno.writeTextFile(
         join(root, "templates", "sample.yml"),
         [
+          "version: 1",
           "kind: repository",
           "match:",
           "  names:",
