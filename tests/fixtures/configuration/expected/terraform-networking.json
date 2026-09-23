@@ -1,6 +1,6 @@
 {
   "repository": "terraform-networking",
-  "template": "infrastructure",
+  "template": "repository:infrastructure",
   "settings": {
     "hasProjects": false,
     "hasDiscussions": false,
