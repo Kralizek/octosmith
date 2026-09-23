@@ -1219,8 +1219,8 @@ function materializeRule(
       if (
         restriction !== undefined &&
         (restriction === null ||
-          restriction.enabled === undefined ||
-          restriction.allowedActors === undefined)
+          restriction.enabled == null ||
+          restriction.allowedActors == null)
       ) {
         throw new Error(
           "Rule pull-request requires complete dismissalRestriction",
