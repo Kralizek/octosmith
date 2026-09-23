@@ -24,7 +24,32 @@ export interface Configuration {
 export interface RepositoriesConfiguration {
   readonly scope: RepositorySelector;
   readonly settings?: RepositoryManagementSettings;
+  readonly fileChanges?: FileChangesConfiguration;
 }
+
+/** Describes commit customization for managed file changes. */
+export interface FileChangesCommitConfiguration {
+  readonly message?: string;
+}
+
+/** Describes pull request customization for managed file changes. */
+export interface FileChangesPullRequestConfiguration {
+  readonly branchPrefix?: string;
+  readonly title?: string;
+  readonly labels?: readonly string[];
+}
+
+/** Describes how managed file changes are delivered. */
+export type FileChangesConfiguration =
+  | {
+    readonly mode: "pull_request";
+    readonly commit?: FileChangesCommitConfiguration;
+    readonly pullRequest?: FileChangesPullRequestConfiguration;
+  }
+  | {
+    readonly mode: "direct";
+    readonly commit?: FileChangesCommitConfiguration;
+  };
 
 /** Describes repository management settings. */
 export interface RepositoryManagementSettings {
