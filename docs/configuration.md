@@ -64,10 +64,10 @@ repositories:
 Repository scope may use names, teams, visibility, and custom properties. Name
 selectors support `*` and `?` glob patterns.
 
-By default, every repository discovered in scope must match exactly one template.
-Set `repositories.settings.unmatched_repositories` to `ignore` to allow a
-broader scope where repositories without a matching template are left unmanaged.
-Repositories that match more than one template are always rejected.
+By default, every repository discovered in scope must match exactly one
+template. Set `repositories.settings.unmatched_repositories` to `ignore` to
+allow a broader scope where repositories without a matching template are left
+unmanaged. Repositories that match more than one template are always rejected.
 
 ## Templates
 
