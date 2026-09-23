@@ -988,30 +988,30 @@ function fakeTeamGitHub(requests: CapturedRequest[]): typeof globalThis.fetch {
       url.pathname === "/api/v3/orgs/acme/teams/platform/repos"
     ) {
       if (headers.get("content-type") !== null) {
-        return json({
+        return Promise.resolve(json({
           message: "Resource not accessible by personal access token",
-        }, 403);
+        }, 403));
       }
-      return json([{ name: "sample", visibility: "private" }]);
+      return Promise.resolve(json([{ name: "sample", visibility: "private" }]));
     }
 
     if (method === "GET" && url.pathname === "/api/v3/repos/acme/sample") {
-      return json(repository());
+      return Promise.resolve(json(repository()));
     }
 
     if (
       method === "GET" &&
       url.pathname === "/api/v3/repos/acme/sample/actions/variables"
     ) {
-      return json({
+      return Promise.resolve(json({
         variables: [{ name: "DESIRED", value: "same" }],
-      });
+      }));
     }
 
-    return json(
+    return Promise.resolve(json(
       { message: "Unexpected request: " + method + " " + url.pathname },
       500,
-    );
+    ));
   };
 }
 
