@@ -5,6 +5,7 @@ import type {
   DesiredEnvironment,
   DesiredRepositorySettings,
   DesiredRuleset,
+  FileChangesConfiguration,
   Operation,
   RulesetDefinition,
   Variable,
@@ -20,18 +21,49 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly client: GitHubClient;
   readonly owner: string;
   readonly secretValue: SecretValueProvider;
+  readonly fileChanges?: FileChangesConfiguration;
+  readonly preparedFileChanges?: PreparedFileChanges;
 }
+
+type FileOperation = Extract<
+  Operation,
+  { readonly type: "create-file" | "update-file" | "delete-file" }
+>;
+
+interface PreparedFileChanges {
+  readonly operations: readonly FileOperation[];
+  applied: boolean;
+}
+
+type EffectiveFileChanges =
+  | {
+    readonly mode: "direct";
+    readonly commitMessage: string;
+  }
+  | {
+    readonly mode: "pull_request";
+    readonly commitMessage: string;
+    readonly branchPrefix: string;
+    readonly title: string;
+    readonly labels: readonly string[];
+  };
 
 /** Describes GitHub repository mutation sink. */
 export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #client: GitHubClient;
   readonly #owner: string;
   readonly #secretValue: SecretValueProvider;
+  readonly #fileChanges: EffectiveFileChanges;
+  readonly #preparedFileChanges?: PreparedFileChanges;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
     this.#client = options.client;
     this.#owner = options.owner;
     this.#secretValue = options.secretValue;
+    this.#fileChanges = normalizeFileChanges(
+      options.fileChanges ?? { mode: "direct" },
+    );
+    this.#preparedFileChanges = options.preparedFileChanges;
   }
 
   prepare(
@@ -62,6 +94,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       values.set(name, value);
     }
 
+    const fileOperations = operations.filter(isFileOperation);
+
     return new GitHubRepositoryMutationSink({
       client: this.#client,
       owner: this.#owner,
@@ -72,6 +106,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         }
         return value;
       },
+      fileChanges: toConfiguration(this.#fileChanges),
+      ...(fileOperations.length > 0 && {
+        preparedFileChanges: {
+          operations: fileOperations,
+          applied: false,
+        },
+      }),
     });
   }
 
@@ -206,31 +247,20 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "create-file":
-        await this.putFile(
-          repository,
-          operation.file.path,
-          operation.file.content,
-        );
-        return;
       case "update-file":
-        await this.putFile(
-          repository,
-          operation.file.path,
-          operation.file.content,
-          operation.sha,
-        );
-        return;
       case "delete-file":
-        await this.#client.request(
-          "DELETE",
-          this.repo(repository) + "/contents/" + encodePath(operation.path),
-          {
-            body: {
-              message: "Octosmith: remove " + operation.path,
-              sha: operation.sha,
-            },
-          },
-        );
+        if (
+          this.#preparedFileChanges !== undefined &&
+          !this.#preparedFileChanges.applied
+        ) {
+          this.#preparedFileChanges.applied = true;
+          await this.applyFileChanges(
+            repository,
+            this.#preparedFileChanges.operations,
+          );
+        } else if (this.#preparedFileChanges === undefined) {
+          await this.applyFileChanges(repository, [operation]);
+        }
         return;
     }
   }
@@ -492,23 +522,156 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
   }
 
-  async putFile(
+  async applyFileChanges(
     repository: string,
-    path: string,
-    content: string,
-    sha?: string,
+    operations: readonly FileOperation[],
   ): Promise<void> {
-    await this.#client.request(
-      "PUT",
-      this.repo(repository) + "/contents/" + encodePath(path),
+    if (operations.length === 0) {
+      return;
+    }
+
+    const repositoryPath = this.repo(repository);
+    const metadata = await this.#client.get<{ readonly default_branch: string }>(
+      repositoryPath,
+    );
+    const defaultBranch = metadata.default_branch;
+    const baseRef = await this.#client.get<{
+      readonly object: { readonly sha: string };
+    }>(
+      repositoryPath + "/git/ref/heads/" + encodePath(defaultBranch),
+    );
+    const baseSha = baseRef.object.sha;
+    const baseCommit = await this.#client.get<{
+      readonly tree: { readonly sha: string };
+    }>(repositoryPath + "/git/commits/" + baseSha);
+
+    const tree: Array<Record<string, unknown>> = [];
+    for (const operation of operations) {
+      if (operation.type === "delete-file") {
+        tree.push({
+          path: operation.path,
+          mode: "100644",
+          type: "blob",
+          sha: null,
+        });
+        continue;
+      }
+
+      const blob = await this.#client.request<{ readonly sha: string }>(
+        "POST",
+        repositoryPath + "/git/blobs",
+        {
+          body: {
+            content: operation.file.content,
+            encoding: "utf-8",
+          },
+        },
+      );
+      tree.push({
+        path: operation.file.path,
+        mode: "100644",
+        type: "blob",
+        sha: blob.sha,
+      });
+    }
+
+    const nextTree = await this.#client.request<{ readonly sha: string }>(
+      "POST",
+      repositoryPath + "/git/trees",
       {
         body: {
-          message: "Octosmith: apply " + path,
-          content: encodeBase64(content),
-          ...(sha !== undefined && { sha }),
+          base_tree: baseCommit.tree.sha,
+          tree,
         },
       },
     );
+    const message = renderFileChangeText(
+      this.#fileChanges.commitMessage,
+      this.#owner,
+      repository,
+    );
+    const nextCommit = await this.#client.request<{ readonly sha: string }>(
+      "POST",
+      repositoryPath + "/git/commits",
+      {
+        body: {
+          message,
+          tree: nextTree.sha,
+          parents: [baseSha],
+        },
+      },
+    );
+
+    if (this.#fileChanges.mode === "direct") {
+      await this.#client.request(
+        "PATCH",
+        repositoryPath + "/git/refs/heads/" + encodePath(defaultBranch),
+        { body: { sha: nextCommit.sha, force: false } },
+      );
+      return;
+    }
+
+    const branch = this.#fileChanges.branchPrefix + "reconcile";
+    const branchPath = repositoryPath + "/git/refs/heads/" + encodePath(branch);
+    const existingBranch = await this.#client.request<
+      { readonly object: { readonly sha: string } } | undefined
+    >("GET", branchPath, { allowNotFound: true });
+
+    if (existingBranch === undefined) {
+      await this.#client.request("POST", repositoryPath + "/git/refs", {
+        body: {
+          ref: "refs/heads/" + branch,
+          sha: nextCommit.sha,
+        },
+      });
+    } else {
+      await this.#client.request("PATCH", branchPath, {
+        body: { sha: nextCommit.sha, force: true },
+      });
+    }
+
+    const pulls = await this.#client.get<readonly {
+      readonly number: number;
+    }[]>(repositoryPath + "/pulls", {
+      state: "open",
+      head: this.#owner + ":" + branch,
+      base: defaultBranch,
+    });
+    const title = renderFileChangeText(
+      this.#fileChanges.title,
+      this.#owner,
+      repository,
+    );
+
+    let pullNumber = pulls[0]?.number;
+    if (pullNumber === undefined) {
+      const pull = await this.#client.request<{ readonly number: number }>(
+        "POST",
+        repositoryPath + "/pulls",
+        {
+          body: {
+            title,
+            head: branch,
+            base: defaultBranch,
+          },
+        },
+      );
+      pullNumber = pull.number;
+    } else {
+      await this.#client.request(
+        "PATCH",
+        repositoryPath + "/pulls/" + pullNumber,
+        { body: { title } },
+      );
+    }
+
+    if (this.#fileChanges.labels.length > 0) {
+      await this.#client.request(
+        "POST",
+        repositoryPath + "/issues/" + pullNumber + "/labels",
+        { body: { labels: this.#fileChanges.labels } },
+      );
+    }
   }
 
   private repo(repository: string): string {
@@ -880,17 +1043,65 @@ function pascal(value: string): string {
     .join("");
 }
 
+function isFileOperation(operation: Operation): operation is FileOperation {
+  return operation.type === "create-file" ||
+    operation.type === "update-file" ||
+    operation.type === "delete-file";
+}
+
+function normalizeFileChanges(
+  configuration: FileChangesConfiguration,
+): EffectiveFileChanges {
+  const commitMessage = configuration.commit?.message ??
+    "Octosmith: reconcile managed files";
+
+  if (configuration.mode === "direct") {
+    return {
+      mode: "direct",
+      commitMessage,
+    };
+  }
+
+  return {
+    mode: "pull_request",
+    commitMessage,
+    branchPrefix: configuration.pullRequest?.branchPrefix ?? "octosmith/",
+    title: configuration.pullRequest?.title ??
+      "Octosmith: reconcile managed files",
+    labels: configuration.pullRequest?.labels ?? [],
+  };
+}
+
+function toConfiguration(
+  settings: EffectiveFileChanges,
+): FileChangesConfiguration {
+  return settings.mode === "direct"
+    ? {
+      mode: "direct",
+      commit: { message: settings.commitMessage },
+    }
+    : {
+      mode: "pull_request",
+      commit: { message: settings.commitMessage },
+      pullRequest: {
+        branchPrefix: settings.branchPrefix,
+        title: settings.title,
+        labels: settings.labels,
+      },
+    };
+}
+
+function renderFileChangeText(
+  template: string,
+  organization: string,
+  repository: string,
+): string {
+  return template
+    .replaceAll("{organization}", organization)
+    .replaceAll("{repository}", repository);
+}
+
 function encodePath(path: string): string {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
-function encodeBase64(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary);
-}
