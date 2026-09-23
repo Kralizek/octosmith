@@ -97,6 +97,54 @@ Deno.test("CLI applies through the real GitHub HTTP stack", async () => {
   }
 });
 
+Deno.test("CLI defaults managed file delivery to pull requests", async () => {
+  const root = await fileConfigurationDirectory();
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeFileDeliveryGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["apply", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    assertEquals(
+      requests.some((request) =>
+        request.method === "POST" &&
+        request.url.pathname === "/api/v3/repos/acme/sample/git/refs" &&
+        (request.body as { ref?: string } | undefined)?.ref ===
+          "refs/heads/octosmith/reconcile"
+      ),
+      true,
+    );
+    assertEquals(
+      requests.some((request) =>
+        request.method === "POST" &&
+        request.url.pathname === "/api/v3/repos/acme/sample/pulls"
+      ),
+      true,
+    );
+    assertEquals(
+      requests.some((request) =>
+        request.method === "PATCH" &&
+        request.url.pathname === "/api/v3/repos/acme/sample/git/refs/heads/master"
+      ),
+      false,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("CLI targets one in-scope repository without enumerating the organization", async () => {
   const root = await configurationDirectory();
   const previous = Deno.env.get("DESIRED");
@@ -1340,6 +1388,130 @@ Deno.test("CLI rejects invalid output format before apply", async () => {
     await Deno.remove(root, { recursive: true });
   }
 });
+
+async function fileConfigurationDirectory(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+  await Deno.mkdir(root + "/files");
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      "  scope:",
+      "    names:",
+      "      - sample",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(root + "/files/managed.txt", "managed");
+  await Deno.writeTextFile(
+    root + "/templates/code.yml",
+    [
+      "kind: repository",
+      "match:",
+      "  names:",
+      "    - sample",
+      "repository:",
+      "  files:",
+      "    managed.txt:",
+      "      ensure: exact",
+      "      source: files/managed.txt",
+      "",
+    ].join("\n"),
+  );
+  return root;
+}
+
+function fakeFileDeliveryGitHub(
+  requests: CapturedRequest[],
+): typeof globalThis.fetch {
+  return async (input, init) => {
+    const request = input instanceof Request ? input : undefined;
+    const url = new URL(request?.url ?? String(input));
+    const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
+    const rawBody = init?.body ??
+      (request ? await request.clone().text() : undefined);
+    const body = typeof rawBody === "string" && rawBody.length > 0
+      ? JSON.parse(rawBody)
+      : undefined;
+    requests.push({ method, url, body });
+
+    if (method === "GET" && url.pathname === "/api/v3/orgs/acme/repos") {
+      return json([{ name: "sample", visibility: "private" }]);
+    }
+    if (method === "GET" && url.pathname === "/api/v3/repos/acme/sample") {
+      return json(repository());
+    }
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/repos/acme/sample/contents/managed.txt"
+    ) {
+      return json({ message: "Not Found" }, 404);
+    }
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/repos/acme/sample/git/ref/heads/master"
+    ) {
+      return json({ object: { sha: "base-sha" } });
+    }
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/repos/acme/sample/git/commits/base-sha"
+    ) {
+      return json({ tree: { sha: "base-tree-sha" } });
+    }
+    if (
+      method === "POST" &&
+      url.pathname === "/api/v3/repos/acme/sample/git/blobs"
+    ) {
+      return json({ sha: "blob-sha" }, 201);
+    }
+    if (
+      method === "POST" &&
+      url.pathname === "/api/v3/repos/acme/sample/git/trees"
+    ) {
+      return json({ sha: "tree-sha" }, 201);
+    }
+    if (
+      method === "POST" &&
+      url.pathname === "/api/v3/repos/acme/sample/git/commits"
+    ) {
+      return json({ sha: "commit-sha" }, 201);
+    }
+    if (
+      method === "GET" &&
+      url.pathname ===
+        "/api/v3/repos/acme/sample/git/ref/heads/octosmith/reconcile"
+    ) {
+      return json({ message: "Not Found" }, 404);
+    }
+    if (
+      method === "POST" &&
+      url.pathname === "/api/v3/repos/acme/sample/git/refs"
+    ) {
+      return json({}, 201);
+    }
+    if (
+      method === "GET" &&
+      url.pathname === "/api/v3/repos/acme/sample/pulls"
+    ) {
+      return json([]);
+    }
+    if (
+      method === "POST" &&
+      url.pathname === "/api/v3/repos/acme/sample/pulls"
+    ) {
+      return json({ number: 42 }, 201);
+    }
+
+    return json(
+      { message: "Unexpected request: " + method + " " + url.pathname },
+      500,
+    );
+  };
+}
 
 async function configurationDirectory(
   exactNames = false,
