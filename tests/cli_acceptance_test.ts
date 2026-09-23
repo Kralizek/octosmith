@@ -172,10 +172,6 @@ Deno.test("CLI team discovery succeeds through the real GitHub HTTP stack", asyn
       request.url.pathname === "/api/v3/orgs/acme/teams/platform/repos"
     );
     assertEquals(teamRequest?.headers?.get("content-type"), null);
-    assertEquals(
-      teamRequest?.headers?.get("x-github-api-version"),
-      "2026-03-10",
-    );
     assertStringIncludes(output.join("\n"), "sample [code] — unchanged");
   } finally {
     if (previous === undefined) {

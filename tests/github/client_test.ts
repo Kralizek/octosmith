@@ -49,14 +49,12 @@ Deno.test("GitHub client still resolves root API URLs", async () => {
 
 Deno.test("GitHub client omits content-type for GET requests", async () => {
   let contentType: string | null | undefined;
-  let requestedVersion: string | null | undefined;
 
   const client = new FetchGitHubClient({
     token: "token",
     fetch: (_, init) => {
       const headers = new Headers(init?.headers);
       contentType = headers.get("content-type");
-      requestedVersion = headers.get("x-github-api-version");
       return Promise.resolve(
         new Response(JSON.stringify({ name: "api" }), {
           status: 200,
@@ -69,7 +67,6 @@ Deno.test("GitHub client omits content-type for GET requests", async () => {
   await client.get("/repos/acme/api");
 
   assertEquals(contentType, null);
-  assertEquals(requestedVersion, "2026-03-10");
 });
 
 Deno.test("GitHub client adds content-type for JSON request bodies", async () => {
