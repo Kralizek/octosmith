@@ -71,7 +71,9 @@ unmanaged. Repositories that match more than one template are always rejected.
 
 ## Templates
 
-Each repository in scope must resolve to exactly one template.
+Each repository in scope that is managed must resolve to exactly one template.
+When `repositories.settings.unmatched_repositories` is `ignore`, repositories
+without a matching template are left unmanaged.
 
 ```yaml
 kind: repository
