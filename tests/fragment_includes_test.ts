@@ -426,3 +426,48 @@ Deno.test("rejects fragment include chains deeper than 32 levels", async () => {
     await Deno.remove(root, { recursive: true });
   }
 });
+
+
+Deno.test("rejects invalid effective configurations produced by merging variants", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "exact.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  files:",
+      "    README.md:",
+      "      ensure: exact",
+      "      source: files/README.md",
+    ]);
+    await writeFragment(root, "absent.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  files:",
+      "    README.md:",
+      "      ensure: absent",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  names:",
+      "    - sample",
+      "includes:",
+      "  - ../fragments/exact.yml",
+      "  - ../fragments/absent.yml",
+      "repository: {}",
+    ]);
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "Invalid effective repository configuration",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
