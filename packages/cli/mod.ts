@@ -168,9 +168,10 @@ function createCli(
           renderOutput(
             format,
             report,
-            (value) => renderReport(value, {
-              verbose: commandOptions.verbose,
-            }),
+            (value) =>
+              renderReport(value, {
+                verbose: commandOptions.verbose,
+              }),
           ),
         );
 
