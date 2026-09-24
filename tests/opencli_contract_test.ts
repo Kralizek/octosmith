@@ -10,7 +10,10 @@ interface OpenCliFlag {
 interface OpenCliCommand {
   readonly kind?: "action" | "group";
   readonly flags?: readonly OpenCliFlag[];
-  readonly examples?: readonly { readonly title: string; readonly content: string }[];
+  readonly examples?: readonly {
+    readonly title: string;
+    readonly content: string;
+  }[];
 }
 
 interface OpenCliExitCode {
@@ -105,7 +108,6 @@ Deno.test("OpenCLI contract gives resource list configuration and output flags",
   );
 });
 
-
 Deno.test("OpenCLI contract documents help alias and current exit behavior", async () => {
   const document = await loadContract();
   const globalFlags = document.global?.flags ?? [];
@@ -128,12 +130,14 @@ Deno.test("OpenCLI contract documents help alias and current exit behavior", asy
 Deno.test("OpenCLI contract includes representative canonical examples", async () => {
   const document = await loadContract();
 
-  for (const commandName of [
-    "octosmith plan",
-    "octosmith apply",
-    "octosmith resource create",
-    "octosmith template validate",
-  ]) {
+  for (
+    const commandName of [
+      "octosmith plan",
+      "octosmith apply",
+      "octosmith resource create",
+      "octosmith template validate",
+    ]
+  ) {
     assertEquals(
       (document.commands[commandName].examples?.length ?? 0) > 0,
       true,
