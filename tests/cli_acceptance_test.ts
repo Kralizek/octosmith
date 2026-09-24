@@ -1777,7 +1777,6 @@ function json(value: unknown, status = 200): Response {
   });
 }
 
-
 Deno.test("template validate reports unresolved runtime references without reading environment values", async () => {
   const root = await secretConfigurationDirectory();
   const previous = Deno.env.get("TOKEN");
@@ -1892,7 +1891,10 @@ Deno.test("plan does not resolve runtime values from unmatched templates", async
       ),
       0,
     );
-    assertStringIncludes(output.join("\n"), "sample [repository:code] — planned");
+    assertStringIncludes(
+      output.join("\n"),
+      "sample [repository:code] — planned",
+    );
   } finally {
     if (previous === undefined) {
       Deno.env.delete("UNUSED_TOKEN");
