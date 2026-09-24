@@ -967,10 +967,13 @@ Deno.test("runtime preflight snapshots each source name once", () => {
     },
   );
 
-  assertEquals(calls, new Map([
-    ["SHARED", 1],
-    ["SECRET", 1],
-  ]));
+  assertEquals(
+    calls,
+    new Map([
+      ["SHARED", 1],
+      ["SECRET", 1],
+    ]),
+  );
   assertEquals(values("SHARED"), "runtime:SHARED");
   assertEquals(calls.get("SHARED"), 1);
 });
