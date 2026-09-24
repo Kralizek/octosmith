@@ -29,6 +29,9 @@ import repositorySchema from "./schemas/resources/repository.schema.json" with {
 import repositorySelectorSchema from "./schemas/selectors/repository.schema.json" with {
   type: "json",
 };
+import repositoryScopeSchema from "./schemas/scopes/repository.schema.json" with {
+  type: "json",
+};
 
 const MAX_CONFIGURATION_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_INCLUDE_DEPTH = 32;
@@ -36,6 +39,7 @@ const MAX_INCLUDE_DEPTH = 32;
 const validator = new Ajv2020({ allErrors: true, strict: false });
 validator.addSchema(repositorySchema);
 validator.addSchema(repositorySelectorSchema);
+validator.addSchema(repositoryScopeSchema);
 const validateConfiguration = validator.compile(configurationSchema);
 const validateTemplate = validator.compile(templateSchema);
 const validateFragment = validator.compile(fragmentSchema);
