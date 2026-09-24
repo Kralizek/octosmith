@@ -48,7 +48,7 @@ Deno.test("validate emits machine-readable success", async () => {
       0,
     );
 
-    assertEquals(JSON.parse(output[0]), { valid: true });
+    assertEquals(JSON.parse(output[0]), { valid: true, diagnostics: [] });
   } finally {
     await Deno.remove(root, { recursive: true });
   }
