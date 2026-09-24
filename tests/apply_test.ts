@@ -85,7 +85,7 @@ Deno.test("apply rejects an empty resource target before discovery", async () =>
         {} as LoadedConfiguration,
         {
           mode: "apply",
-          repository: "",
+          resource: "",
           onRepositoryApplied: () => {},
         },
       ),
