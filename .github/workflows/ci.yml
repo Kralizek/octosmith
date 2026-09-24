@@ -41,15 +41,17 @@ jobs:
           organization: Kralizek
           repositories:
             scope:
-              names:
-                - octosmith
+              include:
+                names:
+                  - octosmith
           YAML
           cat > "$RUNNER_TEMP/octosmith-action-smoke/templates/default.yml" <<'YAML'
           version: 1
           kind: repository
           match:
-            names:
-              - octosmith
+            include:
+              names:
+                - octosmith
           repository: {}
           YAML
 
