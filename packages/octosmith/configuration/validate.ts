@@ -33,6 +33,11 @@ export async function validateConfigurationDirectory(
     assertScopeCanMatchTemplate(scope, loaded.templates);
   }
 
+  const hasExclusions = scope.exclude !== undefined ||
+    Object.values(loaded.templates).some((template) =>
+      template.match.exclude !== undefined
+    );
+
   for (const [name, template] of Object.entries(loaded.templates)) {
     const inScope = selectorsCanOverlap(scope.include, template.match.include);
     const repository = repositoryForSelectors(
@@ -47,8 +52,7 @@ export async function validateConfigurationDirectory(
         ...template,
         match: { include: template.match.include },
       };
-    const configuration: LoadedConfiguration = inScope &&
-        template.match.exclude === undefined
+    const configuration: LoadedConfiguration = inScope && !hasExclusions
       ? loaded
       : { ...loaded, templates: { [name]: validationTemplate } };
     const desired = await resolveDesiredState(
