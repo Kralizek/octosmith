@@ -4,6 +4,7 @@ import {
   buildPlan,
   loadConfigurationDirectory,
   matchesSelector,
+  preflightRuntimeReferences,
   resolveDesiredState,
   validateConfigurationDirectory,
 } from "../packages/octosmith/mod.ts";
@@ -934,6 +935,44 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
   } finally {
     await Deno.remove(root, { recursive: true });
   }
+});
+
+
+Deno.test("runtime preflight snapshots each source name once", () => {
+  const template = {
+    version: 1,
+    kind: "repository",
+    match: { names: ["sample"] },
+    repository: {
+      actions: {
+        variables: [
+          "SHARED",
+          { from: "SHARED", to: "RENAMED" },
+        ],
+        secrets: ["SECRET"],
+      },
+      dependabot: {
+        secrets: [{ from: "SECRET", to: "DEPENDABOT_SECRET" }],
+      },
+    },
+  } as const;
+  const calls = new Map<string, number>();
+  const values = preflightRuntimeReferences(
+    "repository:sample",
+    template,
+    { name: "sample", teams: [], properties: {} },
+    (name) => {
+      calls.set(name, (calls.get(name) ?? 0) + 1);
+      return "runtime:" + name;
+    },
+  );
+
+  assertEquals(calls, new Map([
+    ["SHARED", 1],
+    ["SECRET", 1],
+  ]));
+  assertEquals(values("SHARED"), "runtime:SHARED");
+  assertEquals(calls.get("SHARED"), 1);
 });
 
 Deno.test("resolves variable and secret binding forms", async () => {
