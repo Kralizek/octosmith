@@ -1,67 +1,99 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { parse } from "@std/yaml";
 import { usage, VERSION } from "../packages/cli/mod.ts";
 
-interface OpenCliOption {
+interface OpenCliFlag {
   readonly name: string;
   readonly aliases?: readonly string[];
 }
 
 interface OpenCliCommand {
-  readonly name: string;
-  readonly options?: readonly OpenCliOption[];
+  readonly kind?: "action" | "group";
+  readonly flags?: readonly OpenCliFlag[];
+}
+
+interface OpenCliDocument {
+  readonly opencliVersion: string;
+  readonly info: {
+    readonly binary: string;
+    readonly version: string;
+  };
+  readonly global?: {
+    readonly flags?: readonly OpenCliFlag[];
+  };
+  readonly commands: Readonly<Record<string, OpenCliCommand>>;
+}
+
+async function loadContract(): Promise<OpenCliDocument> {
+  return parse(
+    await Deno.readTextFile("opencli.ocs.yaml"),
+  ) as OpenCliDocument;
 }
 
 Deno.test("OpenCLI contract tracks the implemented root command surface", async () => {
-  const document = JSON.parse(
-    await Deno.readTextFile("opencli.json"),
-  ) as {
-    readonly opencli: string;
-    readonly info: { readonly version: string };
-    readonly commands: readonly OpenCliCommand[];
-  };
+  const document = await loadContract();
 
-  assertEquals(document.opencli, "0.1.0");
+  assertEquals(document.opencliVersion, "1.0.0-alpha.14");
+  assertEquals(document.info.binary, "octosmith");
   assertEquals(document.info.version, VERSION);
   assertEquals(
-    document.commands.map((command) => command.name),
-    ["plan", "apply", "resource", "template"],
+    Object.keys(document.commands),
+    [
+      "octosmith plan",
+      "octosmith apply",
+      "octosmith resource",
+      "octosmith resource list",
+      "octosmith resource create",
+      "octosmith template",
+      "octosmith template validate",
+      "octosmith template permissions",
+    ],
   );
 
   const help = usage();
-  for (const command of document.commands) {
-    assertStringIncludes(help, command.name);
+  for (const command of ["plan", "apply", "resource", "template"]) {
+    assertStringIncludes(help, command);
   }
 });
 
 Deno.test("OpenCLI contract reserves -v for verbose and omits a short version alias", async () => {
-  const document = JSON.parse(
-    await Deno.readTextFile("opencli.json"),
-  ) as {
-    readonly options: readonly OpenCliOption[];
-    readonly commands: readonly OpenCliCommand[];
-  };
+  const document = await loadContract();
+  const globalFlags = document.global?.flags ?? [];
 
   assertEquals(
-    document.options.some((option) => option.name === "--version"),
+    globalFlags.some((flag) => flag.name === "version"),
     true,
   );
   assertEquals(
-    document.options.some((option) =>
-      option.name === "--version" && option.aliases?.includes("-V")
+    globalFlags.some((flag) =>
+      flag.name === "version" && flag.aliases?.includes("V")
     ),
     false,
   );
 
-  for (
-    const command of document.commands.filter((command) =>
-      command.name === "plan" || command.name === "apply"
-    )
-  ) {
+  for (const commandName of ["octosmith plan", "octosmith apply"]) {
+    const command = document.commands[commandName];
     assertEquals(
-      command.options?.some((option) =>
-        option.name === "--verbose" && option.aliases?.includes("-v")
+      command.flags?.some((flag) =>
+        flag.name === "verbose" && flag.aliases?.includes("v")
       ),
       true,
     );
   }
+});
+
+Deno.test("OpenCLI contract gives resource list configuration and output flags", async () => {
+  const document = await loadContract();
+  const command = document.commands["octosmith resource list"];
+
+  assertEquals(
+    command.flags?.some((flag) =>
+      flag.name === "path" && flag.aliases?.includes("p")
+    ),
+    true,
+  );
+  assertEquals(
+    command.flags?.some((flag) => flag.name === "format"),
+    true,
+  );
 });
