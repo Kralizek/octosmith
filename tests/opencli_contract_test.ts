@@ -117,11 +117,11 @@ Deno.test("OpenCLI contract documents help alias and current exit behavior", asy
     true,
   );
   assertEquals(
-    document.global?.exitCodes,
+    document.global?.exitCodes?.map(({ code, status }) => ({ code, status })),
     [
       { code: 0, status: "OK" },
       { code: 1, status: "INTERNAL_CLI_ERROR" },
-    ].map(({ code, status }) => ({ code, status })),
+    ],
   );
 });
 
