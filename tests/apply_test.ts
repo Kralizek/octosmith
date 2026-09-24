@@ -249,7 +249,7 @@ async function configurationDirectory(
       "version: 1",
       "organization: acme",
       "repositories:",
-      '  scope: { names: ["*"] }',
+      '  scope: { include: { names: ["*"] } }',
       ...(settings?.unmatchedRepositories !== undefined
         ? [
           "  settings:",
