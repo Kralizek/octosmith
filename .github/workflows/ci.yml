@@ -22,7 +22,9 @@ jobs:
           cache: true
 
       - name: Install OpenCLI
-        run: go install github.com/bcdxn/opencli/cmd/ocli@v1.3.0
+        run: |
+          go install github.com/bcdxn/opencli/cmd/ocli@v1.3.0
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Validate OpenCLI contract
         run: ocli check opencli.ocs.yaml
