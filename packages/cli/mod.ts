@@ -11,9 +11,9 @@ import { Command } from "@cliffy/command";
 import {
   loadConfigurationDirectory,
   renderReport,
+  renderRuntimeReferenceDiagnostic,
   type Report,
   type RepositoryReport,
-  renderRuntimeReferenceDiagnostic,
   validateConfigurationDirectory,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
@@ -47,7 +47,9 @@ function createCli(
     }
 
     const format = parseOutputFormat(commandOptions.format);
-    const diagnostics = await validateConfigurationDirectory(commandOptions.path);
+    const diagnostics = await validateConfigurationDirectory(
+      commandOptions.path,
+    );
     const result = { valid: true, diagnostics };
     write(
       renderOutput(
