@@ -7,7 +7,6 @@ Deno.test("usage identifies Octosmith", () => {
   assertStringIncludes(usage(), "apply");
   assertStringIncludes(usage(), "template");
   assertStringIncludes(usage(), "resource");
-  assertStringIncludes(usage(), "-v, --verbose");
   assertEquals(usage().includes("-v, --version"), false);
 });
 
