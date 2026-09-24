@@ -6,8 +6,10 @@ import type {
   TeamPermission,
 } from "../types.ts";
 import type {
+  RepositorySelector,
   RepositorySettingsConfiguration,
   RepositoryTemplate,
+  Scope,
   RulesetConfiguration,
   RulesetRuleConfiguration,
 } from "./types.ts";
@@ -60,7 +62,9 @@ export async function resolveDesiredState(
   values: RuntimeValueProvider,
 ): Promise<DesiredState> {
   const matches = Object.entries(loaded.templates)
-    .filter(([, template]) => matchesSelector(template.match, repository));
+    .filter(([, template]) =>
+      matchesScope(template.match, repository, matchesSelector)
+    );
 
   if (matches.length !== 1) {
     throw new Error(
@@ -195,9 +199,19 @@ function createConfigurationSourceReader(
   };
 }
 
+/** Determine whether a value matches an include/exclude scope. */
+export function matchesScope<TSelector, TValue>(
+  scope: Scope<TSelector>,
+  value: TValue,
+  matches: (selector: TSelector, value: TValue) => boolean,
+): boolean {
+  return matches(scope.include, value) &&
+    (scope.exclude === undefined || !matches(scope.exclude, value));
+}
+
 /** Determine whether repository metadata matches a configured selector. */
 export function matchesSelector(
-  selector: RepositoryTemplate["match"],
+  selector: RepositorySelector,
   repository: RepositoryMetadata,
 ): boolean {
   if (
