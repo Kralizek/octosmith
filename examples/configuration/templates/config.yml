@@ -4,8 +4,9 @@ version: 1
 kind: repository
 
 match:
-  properties:
-    repository-type: config
+  include:
+    properties:
+      repository-type: config
 
 repository:
   settings:
