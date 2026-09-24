@@ -98,7 +98,7 @@ Deno.test("validate rejects overlapping repository templates", async () => {
         "kind: repository",
         "match:",
         "  include:",
-        '  names: ["*"]',
+        '      names: ["*"]',
         "repository: {}",
         "",
       ].join("\n"),
@@ -194,7 +194,7 @@ Deno.test("validate rejects overlaps that require combined metadata", async () =
         "repositories:",
         "  scope:",
         "    include:",
-        '    names: ["*"]',
+        '      names: ["*"]',
         "",
       ].join("\n"),
     );
@@ -289,7 +289,7 @@ Deno.test("validate allows incompatible metadata selectors", async () => {
         "repositories:",
         "  scope:",
         "    include:",
-        '    names: ["*"]',
+        '      names: ["*"]',
         "",
       ].join("\n"),
     );
