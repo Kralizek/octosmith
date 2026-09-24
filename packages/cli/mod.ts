@@ -60,7 +60,7 @@ function createCli(
     .name("octosmith")
     .description("Declaratively manage GitHub resources.")
     .version(VERSION)
-    .versionOption("--version", "Print the Octosmith CLI version.")
+    .versionOption("--version", "Print the Octosmith CLI version.", { global: true })
     .noExit()
     .action(function () {
       this.showHelp();
