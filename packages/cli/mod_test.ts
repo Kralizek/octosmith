@@ -67,3 +67,58 @@ Deno.test("apply rejects combining a resource target with --plan", async () => {
     console.error = originalError;
   }
 });
+
+
+Deno.test("version is available from grouped commands without a short alias", async () => {
+  const output: string[] = [];
+  const originalLog = console.log;
+
+  try {
+    console.log = (...values: unknown[]) => output.push(values.map(String).join(" "));
+    assertEquals(await main(["template", "--version"]), 0);
+    assertStringIncludes(output.join("\n"), VERSION);
+  } finally {
+    console.log = originalLog;
+  }
+});
+
+for (
+  const [name, args, message] of [
+    [
+      "resource list",
+      ["resource", "list", "--path", ".", "--format", "json"],
+      "resource list is not implemented yet",
+    ],
+    [
+      "resource create",
+      ["resource", "create", "teams/backend", "--name", "api-service"],
+      "resource create is not implemented yet",
+    ],
+    [
+      "template validate target",
+      ["template", "validate", "teams/backend"],
+      "Template-specific validation is not implemented yet",
+    ],
+    [
+      "template permissions",
+      ["template", "permissions", "teams/backend"],
+      "template permissions is not implemented yet",
+    ],
+  ] as const
+) {
+  Deno.test(`canonical CLI form parses: ${name}`, async () => {
+    const errors: string[] = [];
+    const originalError = console.error;
+
+    try {
+      console.error = (...values: unknown[]) => {
+        errors.push(values.map(String).join(" "));
+      };
+
+      assertEquals(await main([...args]), 1);
+      assertStringIncludes(errors.join("\n"), message);
+    } finally {
+      console.error = originalError;
+    }
+  });
+}
