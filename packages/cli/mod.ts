@@ -37,132 +37,236 @@ function createCli(
 ): Command {
   const write = options.write ?? console.log;
   const writeError = options.writeError ?? console.error;
+  const executeValidation = async (
+    commandOptions: { path: string; format: string },
+    template?: string,
+  ) => {
+    if (template !== undefined) {
+      throw new Error("Template-specific validation is not implemented yet");
+    }
+
+    const format = parseOutputFormat(commandOptions.format);
+    await validateConfigurationDirectory(commandOptions.path);
+    write(
+      renderOutput(
+        format,
+        { valid: true },
+        () => "Configuration is valid.",
+      ),
+    );
+  };
 
   const root = new Command()
     .name("octosmith")
-    .description("Declaratively apply GitHub repository configuration.")
+    .description("Declaratively manage GitHub resources.")
     .version(VERSION)
-    .versionOption("-v, --version", "Print the Octosmith CLI version.")
+    .versionOption("--version", "Print the Octosmith CLI version.", {
+      global: true,
+    })
     .noExit()
     .action(function () {
       this.showHelp();
     });
 
-  root.command(
-    "validate",
-    new Command()
-      .description("Validate configuration without accessing GitHub.")
+  for (const mode of ["plan", "apply"] as const) {
+    const command = new Command()
+      .description(
+        mode === "plan" ? "Show required changes." : "Apply required changes.",
+      )
+      .arguments("[resource:string]")
       .option("-p, --path <path:string>", "Configuration directory.", {
         default: ".",
       })
       .option("--format <format:string>", "Output format: text or json.", {
         default: "text",
       })
-      .action(async (commandOptions) => {
+      .option("-v, --verbose", "Show additional result details.")
+      .option("--trace", "Emit GitHub API request traces to stderr.")
+      .option(
+        "--events-output <path:string>",
+        "Write Hooksmith resource events as NDJSON.",
+      );
+
+    if (mode === "plan") {
+      command.option(
+        "--out <path:string>",
+        "Write the persisted plan artifact.",
+      );
+    } else {
+      command.option(
+        "--plan <path:string>",
+        "Apply a persisted plan artifact.",
+      );
+    }
+
+    root.command(
+      mode,
+      command.action(async (commandOptions, resource?: string) => {
+        assertResourcePosition(args, mode, resource);
+        const modeOptions = commandOptions as typeof commandOptions & {
+          readonly plan?: string;
+          readonly out?: string;
+        };
+
+        if (mode === "apply" && modeOptions.plan !== undefined) {
+          if (resource !== undefined) {
+            throw new Error(
+              "Cannot combine a resource target with --plan",
+            );
+          }
+
+          throw new Error("Persisted plan apply is not implemented yet");
+        }
+
+        if (mode === "plan" && modeOptions.out !== undefined) {
+          throw new Error("Persisted plan output is not implemented yet");
+        }
+
         const format = parseOutputFormat(commandOptions.format);
-        await validateConfigurationDirectory(commandOptions.path);
+        const runtime = options.runtime ??
+          createDefaultRuntime(commandOptions.trace ?? false, writeError);
+        const loaded = await loadConfigurationDirectory(
+          commandOptions.path,
+        );
+        if (
+          commandOptions.eventsOutput !== undefined &&
+          commandOptions.eventsOutput.length === 0
+        ) {
+          throw new Error("Events output path must not be empty");
+        }
+
+        const eventOutput = commandOptions.eventsOutput !== undefined
+          ? await openEventOutput(commandOptions.eventsOutput)
+          : undefined;
+        const startedAt = new Date();
+        const repositories: RepositoryReport[] = [];
+
+        try {
+          await apply(runtime, loaded, {
+            mode,
+            ...(resource !== undefined && { resource }),
+            onRepositoryApplied: async (repositoryReport) => {
+              repositories.push(repositoryReport);
+
+              if (eventOutput) {
+                await eventOutput.write(
+                  toRepositoryEvent(
+                    loaded.configuration.organization,
+                    mode,
+                    repositoryReport,
+                  ),
+                );
+              }
+            },
+          });
+        } finally {
+          eventOutput?.close();
+        }
+
+        const report: Report = {
+          organization: loaded.configuration.organization,
+          startedAt,
+          completedAt: new Date(),
+          repositories,
+        };
+
         write(
           renderOutput(
             format,
-            { valid: true },
-            () => "Configuration is valid.",
+            report,
+            (value) =>
+              renderReport(value, {
+                verbose: commandOptions.verbose,
+              }),
           ),
         );
+
+        if (hasFailures(report)) {
+          throw new ApplyFailedError();
+        }
       }),
-  );
-
-  for (const mode of ["plan", "apply"] as const) {
-    root.command(
-      mode,
-      new Command()
-        .description(
-          mode === "plan"
-            ? "Show repository configuration changes."
-            : "Apply repository configuration changes.",
-        )
-        .arguments("[repository:string]")
-        .option("-p, --path <path:string>", "Configuration directory.", {
-          default: ".",
-        })
-        .option("--format <format:string>", "Output format: text or json.", {
-          default: "text",
-        })
-        .option("--verbose", "Show unchanged apply items.")
-        .option(
-          "--events-output <path:string>",
-          "Write Hooksmith repository events as NDJSON.",
-        )
-        .action(async (commandOptions, repository?: string) => {
-          assertRepositoryPosition(args, mode, repository);
-          const format = parseOutputFormat(commandOptions.format);
-          const runtime = options.runtime ??
-            createDefaultRuntime(commandOptions.verbose ?? false, writeError);
-          const loaded = await loadConfigurationDirectory(
-            commandOptions.path,
-          );
-          if (
-            commandOptions.eventsOutput !== undefined &&
-            commandOptions.eventsOutput.length === 0
-          ) {
-            throw new Error("Events output path must not be empty");
-          }
-
-          const eventOutput = commandOptions.eventsOutput !== undefined
-            ? await openEventOutput(commandOptions.eventsOutput)
-            : undefined;
-          const startedAt = new Date();
-          const repositories: RepositoryReport[] = [];
-
-          try {
-            await apply(runtime, loaded, {
-              mode,
-              ...(repository !== undefined && { repository }),
-              onRepositoryApplied: async (repositoryReport) => {
-                repositories.push(repositoryReport);
-
-                if (eventOutput) {
-                  await eventOutput.write(
-                    toRepositoryEvent(
-                      loaded.configuration.organization,
-                      mode,
-                      repositoryReport,
-                    ),
-                  );
-                }
-              },
-            });
-          } finally {
-            eventOutput?.close();
-          }
-
-          const report: Report = {
-            organization: loaded.configuration.organization,
-            startedAt,
-            completedAt: new Date(),
-            repositories,
-          };
-
-          write(
-            renderOutput(
-              format,
-              report,
-              (value) =>
-                renderReport(value, { verbose: commandOptions.verbose }),
-            ),
-          );
-
-          if (hasFailures(report)) {
-            throw new ApplyFailedError();
-          }
-        }),
     );
   }
+
+  root.command(
+    "resource",
+    new Command()
+      .description("Resource operations.")
+      .command(
+        "list",
+        new Command()
+          .description("List resources within configured scope.")
+          .option("-p, --path <path:string>", "Configuration directory.", {
+            default: ".",
+          })
+          .option("--format <format:string>", "Output format: text or json.", {
+            default: "text",
+          })
+          .action((_commandOptions) => {
+            throw new Error("resource list is not implemented yet");
+          }),
+      )
+      .command(
+        "create",
+        new Command()
+          .description("Create a resource from a template.")
+          .arguments("<template:string>")
+          .option("--name <name:string>", "Name for the new resource.")
+          .option("-p, --path <path:string>", "Configuration directory.", {
+            default: ".",
+          })
+          .option("--format <format:string>", "Output format: text or json.", {
+            default: "text",
+          })
+          .action((_commandOptions, _template: string) => {
+            throw new Error("resource create is not implemented yet");
+          }),
+      ),
+  );
+
+  root.command(
+    "template",
+    new Command()
+      .description("Template operations.")
+      .command(
+        "validate",
+        new Command()
+          .description(
+            "Validate configuration and templates without accessing GitHub.",
+          )
+          .arguments("[template:string]")
+          .option("-p, --path <path:string>", "Configuration directory.", {
+            default: ".",
+          })
+          .option("--format <format:string>", "Output format: text or json.", {
+            default: "text",
+          })
+          .action(executeValidation),
+      )
+      .command(
+        "permissions",
+        new Command()
+          .description(
+            "Analyze worst-case permissions for the selected template or configuration.",
+          )
+          .arguments("[template:string]")
+          .option("-p, --path <path:string>", "Configuration directory.", {
+            default: ".",
+          })
+          .option("--format <format:string>", "Output format: text or json.", {
+            default: "text",
+          })
+          .action((_commandOptions, _template?: string) => {
+            throw new Error("template permissions is not implemented yet");
+          }),
+      ),
+  );
 
   return root;
 }
 
 function createDefaultRuntime(
-  verbose: boolean,
+  trace: boolean,
   writeError: (value: string) => void,
 ): ApplyRuntime {
   const token = Deno.env.get("GITHUB_TOKEN");
@@ -177,7 +281,7 @@ function createDefaultRuntime(
 
   return createGitHubRuntime({
     token,
-    ...(verbose && {
+    ...(trace && {
       traceGroup: (name) => {
         if (!firstTraceGroup) {
           writeError("");
@@ -217,7 +321,7 @@ export async function main(
 ): Promise<number> {
   try {
     validateRawEventsOutputArgument(args);
-    validateRawRepositoryArgument(args);
+    validateRawResourceArgument(args);
     await createCli(options, args).parse(args);
     return 0;
   } catch (error) {
@@ -243,7 +347,7 @@ function validateRawEventsOutputArgument(args: readonly string[]): void {
   }
 }
 
-function validateRawRepositoryArgument(args: readonly string[]): void {
+function validateRawResourceArgument(args: readonly string[]): void {
   const [command, ...rest] = args;
 
   if (command !== "plan" && command !== "apply") {
@@ -251,22 +355,22 @@ function validateRawRepositoryArgument(args: readonly string[]): void {
   }
 
   if (rest.includes("")) {
-    throw new Error("Repository target must not be empty");
+    throw new Error("Resource target must not be empty");
   }
 }
 
-function assertRepositoryPosition(
+function assertResourcePosition(
   args: readonly string[] | undefined,
   command: "plan" | "apply",
-  repository: string | undefined,
+  resource: string | undefined,
 ): void {
-  if (repository === undefined || args === undefined) {
+  if (resource === undefined || args === undefined) {
     return;
   }
 
-  if (args[0] !== command || args[1] !== repository) {
+  if (args[0] !== command || args[1] !== resource) {
     throw new Error(
-      "Repository target must appear immediately after the command",
+      "Resource target must appear immediately after the command",
     );
   }
 }

@@ -30,7 +30,7 @@ export type ApplyMode = "plan" | "apply";
 export interface ApplyRuntime {
   discover(
     loaded: LoadedConfiguration,
-    repository?: string,
+    resource?: string,
   ): Promise<RepositoryDiscoveryResult>;
 
   read(
@@ -106,24 +106,24 @@ export function createGitHubRuntime(
 /** Describes apply options. */
 export interface ApplyOptions {
   readonly mode: ApplyMode;
-  readonly repository?: string;
+  readonly resource?: string;
   readonly values?: RuntimeValueProvider;
   readonly onRepositoryApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
   ) => void | Promise<void>;
 }
 
-/** Plan or apply repository configuration and emit each repository result. */
+/** Plan or apply configuration for the targeted resource set. */
 export async function apply(
   runtime: ApplyRuntime,
   loaded: LoadedConfiguration,
   options: ApplyOptions,
 ): Promise<void> {
-  if (options.repository !== undefined && options.repository.length === 0) {
-    throw new Error("Repository target must not be empty");
+  if (options.resource !== undefined && options.resource.length === 0) {
+    throw new Error("Resource target must not be empty");
   }
 
-  const discovery = await runtime.discover(loaded, options.repository);
+  const discovery = await runtime.discover(loaded, options.resource);
   const values = options.values ?? environmentValue;
 
   const addResult = async (

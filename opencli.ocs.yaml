@@ -1,0 +1,211 @@
+opencliVersion: "1.0.0-alpha.14"
+
+info:
+  title: Octosmith
+  summary: Declaratively manage GitHub resources.
+  version: "0.1.0"
+  binary: octosmith
+
+global:
+  exitCodes:
+    - code: 0
+      status: OK
+      summary: Command completed successfully.
+    - code: 1
+      status: INTERNAL_CLI_ERROR
+      summary: Validation, usage, command, or apply execution failed.
+  flags:
+    - name: help
+      aliases: [h]
+      type: boolean
+      summary: Show help.
+    - name: version
+      type: boolean
+      summary: Print the Octosmith CLI version.
+
+commands:
+  octosmith plan:
+    kind: action
+    summary: Show required changes.
+    args:
+      - name: resource
+        type: string
+        required: false
+        summary: Primary resource target.
+    flags:
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: text
+        choices:
+          - value: text
+          - value: json
+        summary: Output format.
+      - name: verbose
+        aliases: [v]
+        type: boolean
+        summary: Show additional result details.
+      - name: trace
+        type: boolean
+        summary: Emit GitHub API request traces to stderr.
+      - name: events-output
+        type: string
+        summary: Write Hooksmith resource events as NDJSON.
+      - name: out
+        type: string
+        summary: Write the persisted plan artifact.
+    examples:
+      - title: Target one resource
+        content: |
+          $ octosmith plan api-service
+      - title: Persist an executable plan
+        content: |
+          $ octosmith plan --format json --out plan.json
+
+  octosmith apply:
+    kind: action
+    summary: Apply required changes.
+    args:
+      - name: resource
+        type: string
+        required: false
+        summary: Primary resource target.
+    flags:
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: text
+        choices:
+          - value: text
+          - value: json
+        summary: Output format.
+      - name: verbose
+        aliases: [v]
+        type: boolean
+        summary: Show additional result details.
+      - name: trace
+        type: boolean
+        summary: Emit GitHub API request traces to stderr.
+      - name: events-output
+        type: string
+        summary: Write Hooksmith resource events as NDJSON.
+      - name: plan
+        type: string
+        summary: Apply a persisted plan artifact.
+    examples:
+      - title: Apply one resource
+        content: |
+          $ octosmith apply api-service
+      - title: Apply a persisted plan
+        content: |
+          $ octosmith apply --plan plan.json
+
+  octosmith resource:
+    kind: group
+    summary: Resource operations.
+
+  octosmith resource list:
+    kind: action
+    summary: List resources within configured scope.
+    flags:
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: text
+        choices:
+          - value: text
+          - value: json
+        summary: Output format.
+
+  octosmith resource create:
+    kind: action
+    summary: Create a resource from a template.
+    args:
+      - name: template
+        type: string
+        required: true
+        summary: Template to instantiate.
+    flags:
+      - name: name
+        type: string
+        summary: Name for the new resource.
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: text
+        choices:
+          - value: text
+          - value: json
+        summary: Output format.
+    examples:
+      - title: Create a resource from a template
+        content: |
+          $ octosmith resource create teams/backend --name api-service
+
+  octosmith template:
+    kind: group
+    summary: Template operations.
+
+  octosmith template validate:
+    kind: action
+    summary: Validate configuration and templates without accessing GitHub.
+    args:
+      - name: template
+        type: string
+        required: false
+        summary: Template target.
+    flags:
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: text
+        choices:
+          - value: text
+          - value: json
+        summary: Output format.
+    examples:
+      - title: Validate one template
+        content: |
+          $ octosmith template validate teams/backend
+
+  octosmith template permissions:
+    kind: action
+    summary: Analyze worst-case permissions for a template or configuration.
+    args:
+      - name: template
+        type: string
+        required: false
+        summary: Template target.
+    flags:
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: text
+        choices:
+          - value: text
+          - value: json
+        summary: Output format.

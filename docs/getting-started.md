@@ -28,7 +28,7 @@ Useful options:
 Validation is fully offline:
 
 ```sh
-deno run -A jsr:@octosmith/cli@0 validate --path ./github-config
+deno run -A jsr:@octosmith/cli@0 template validate --path ./github-config
 ```
 
 Validation checks the configuration schema, template compatibility, file

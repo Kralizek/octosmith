@@ -17,7 +17,7 @@ Deno.test("validate succeeds offline without GITHUB_TOKEN", async () => {
 
     assertEquals(
       await main(
-        ["validate", "--path", root],
+        ["template", "validate", "--path", root],
         { write: (value) => output.push(value) },
       ),
       0,
@@ -42,7 +42,7 @@ Deno.test("validate emits machine-readable success", async () => {
   try {
     assertEquals(
       await main(
-        ["validate", "--format", "json", "--path", root],
+        ["template", "validate", "--format", "json", "--path", root],
         { write: (value) => output.push(value) },
       ),
       0,
@@ -63,7 +63,7 @@ Deno.test("validate fails when a managed file source is missing", async () => {
     console.error = (...values: unknown[]) =>
       errors.push(values.map(String).join(" "));
 
-    assertEquals(await main(["validate", "--path", root]), 1);
+    assertEquals(await main(["template", "validate", "--path", root]), 1);
     assertStringIncludes(errors.join("\n"), "managed.txt");
   } finally {
     console.error = originalError;
@@ -117,7 +117,7 @@ Deno.test("validate rejects overlapping repository templates", async () => {
     console.error = (...values: unknown[]) =>
       errors.push(values.map(String).join(" "));
 
-    assertEquals(await main(["validate", "--path", root]), 1);
+    assertEquals(await main(["template", "validate", "--path", root]), 1);
     assertStringIncludes(
       errors.join("\n"),
       "templates can overlap within configured scope",
@@ -163,7 +163,7 @@ Deno.test("validate rejects literal scoped repositories without a template", asy
     console.error = (...values: unknown[]) =>
       errors.push(values.map(String).join(" "));
 
-    assertEquals(await main(["validate", "--path", root]), 1);
+    assertEquals(await main(["template", "validate", "--path", root]), 1);
     assertStringIncludes(
       errors.join("\n"),
       "cannot match any template within configured scope",
@@ -220,7 +220,7 @@ Deno.test("validate rejects overlaps that require combined metadata", async () =
     console.error = (...values: unknown[]) =>
       errors.push(values.map(String).join(" "));
 
-    assertEquals(await main(["validate", "--path", root]), 1);
+    assertEquals(await main(["template", "validate", "--path", root]), 1);
     assertStringIncludes(errors.join("\n"), "templates can overlap");
   } finally {
     console.error = originalError;
@@ -260,7 +260,7 @@ Deno.test("validate accepts literal scope when metadata could satisfy template",
       ].join("\n"),
     );
 
-    assertEquals(await main(["validate", "--path", root]), 0);
+    assertEquals(await main(["template", "validate", "--path", root]), 0);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -305,7 +305,7 @@ Deno.test("validate allows incompatible metadata selectors", async () => {
       ].join("\n"),
     );
 
-    assertEquals(await main(["validate", "--path", root]), 0);
+    assertEquals(await main(["template", "validate", "--path", root]), 0);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -365,7 +365,7 @@ Deno.test("validate allows template overlap outside configured scope", async () 
       ].join("\n"),
     );
 
-    assertEquals(await main(["validate", "--path", root]), 0);
+    assertEquals(await main(["template", "validate", "--path", root]), 0);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -406,7 +406,7 @@ Deno.test("validate rejects scope metadata incompatible with all templates", asy
     console.error = (...values: unknown[]) =>
       errors.push(values.map(String).join(" "));
 
-    assertEquals(await main(["validate", "--path", root]), 1);
+    assertEquals(await main(["template", "validate", "--path", root]), 1);
     assertStringIncludes(
       errors.join("\n"),
       "Configured repository scope cannot match any template",

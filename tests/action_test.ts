@@ -49,9 +49,10 @@ Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
   const result = await runActionWrapper({
     OCTOSMITH_MODE: " apply ",
     OCTOSMITH_PATH: " ./configuration ",
-    OCTOSMITH_REPOSITORY: " api-service ",
+    OCTOSMITH_RESOURCE: " api-service ",
     OCTOSMITH_FORMAT: " json ",
     OCTOSMITH_VERBOSE: " TrUe ",
+    OCTOSMITH_TRACE: " true ",
     OCTOSMITH_EVENTS_OUTPUT: " /tmp/octosmith-events ",
   });
 
@@ -70,6 +71,7 @@ Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
     "--format",
     "json",
     "--verbose",
+    "--trace",
     "--events-output",
     "/tmp/octosmith-events",
   ]);
@@ -81,7 +83,8 @@ Deno.test("action wrapper supports offline validate", async () => {
   });
 
   assertEquals(result.code, 0);
-  assertEquals(result.args.slice(-5), [
+  assertEquals(result.args.slice(-6), [
+    "template",
     "validate",
     "--path",
     ".",
@@ -124,14 +127,19 @@ Deno.test("action wrapper applies optional input defaults", async () => {
 for (
   const [name, env, message] of [
     [
-      "repository for validate",
-      { OCTOSMITH_MODE: "validate", OCTOSMITH_REPOSITORY: "api-service" },
-      "repository is not supported for validate",
+      "resource for validate",
+      { OCTOSMITH_MODE: "validate", OCTOSMITH_RESOURCE: "api-service" },
+      "resource is not supported for validate",
     ],
     [
       "verbose for validate",
       { OCTOSMITH_MODE: "validate", OCTOSMITH_VERBOSE: "true" },
       "verbose is not supported for validate",
+    ],
+    [
+      "trace for validate",
+      { OCTOSMITH_MODE: "validate", OCTOSMITH_TRACE: "true" },
+      "trace is not supported for validate",
     ],
     [
       "events-output for validate",
@@ -166,6 +174,11 @@ for (
       "verbose",
       { OCTOSMITH_MODE: "plan", OCTOSMITH_VERBOSE: "maybe" },
       "verbose must be either 'true' or 'false'",
+    ],
+    [
+      "trace",
+      { OCTOSMITH_MODE: "plan", OCTOSMITH_TRACE: "maybe" },
+      "trace must be either 'true' or 'false'",
     ],
   ] as const
 ) {

@@ -192,7 +192,7 @@ Deno.test("CLI targets one in-scope repository without enumerating the organizat
   }
 });
 
-Deno.test("CLI rejects an explicitly empty repository target without discovery", async () => {
+Deno.test("CLI rejects an explicitly empty resource target without discovery", async () => {
   const root = await configurationDirectory();
   const requests: CapturedRequest[] = [];
   const errors: string[] = [];
@@ -219,7 +219,7 @@ Deno.test("CLI rejects an explicitly empty repository target without discovery",
     assertEquals(requests, []);
     assertStringIncludes(
       errors.join("\n"),
-      "Repository target must not be empty",
+      "Resource target must not be empty",
     );
   } finally {
     console.error = originalError;
@@ -227,7 +227,7 @@ Deno.test("CLI rejects an explicitly empty repository target without discovery",
   }
 });
 
-Deno.test("CLI rejects an explicitly empty repository target after options", async () => {
+Deno.test("CLI rejects an explicitly empty resource target after options", async () => {
   const root = await configurationDirectory();
   const requests: CapturedRequest[] = [];
   const errors: string[] = [];
@@ -254,7 +254,7 @@ Deno.test("CLI rejects an explicitly empty repository target after options", asy
     assertEquals(requests, []);
     assertStringIncludes(
       errors.join("\n"),
-      "Repository target must not be empty",
+      "Resource target must not be empty",
     );
   } finally {
     console.error = originalError;
@@ -262,7 +262,7 @@ Deno.test("CLI rejects an explicitly empty repository target after options", asy
   }
 });
 
-Deno.test("CLI rejects an explicitly empty repository target after format option", async () => {
+Deno.test("CLI rejects an explicitly empty resource target after format option", async () => {
   const root = await configurationDirectory();
   const requests: CapturedRequest[] = [];
   const errors: string[] = [];
@@ -289,7 +289,7 @@ Deno.test("CLI rejects an explicitly empty repository target after format option
     assertEquals(requests, []);
     assertStringIncludes(
       errors.join("\n"),
-      "Repository target must not be empty",
+      "Resource target must not be empty",
     );
   } finally {
     console.error = originalError;
@@ -297,7 +297,7 @@ Deno.test("CLI rejects an explicitly empty repository target after format option
   }
 });
 
-Deno.test("CLI rejects repository targets after options", async () => {
+Deno.test("CLI rejects resource targets after options", async () => {
   const root = await configurationDirectory();
   const requests: CapturedRequest[] = [];
   const errors: string[] = [];
@@ -324,7 +324,7 @@ Deno.test("CLI rejects repository targets after options", async () => {
     assertEquals(requests, []);
     assertStringIncludes(
       errors.join("\n"),
-      "Repository target must appear immediately after the command",
+      "Resource target must appear immediately after the command",
     );
   } finally {
     console.error = originalError;
@@ -1102,7 +1102,7 @@ Deno.test("CLI verbose text includes unchanged apply items", async () => {
 
     assertEquals(
       await main(
-        ["plan", "--verbose", "--path", root],
+        ["plan", "-v", "--path", root],
         { runtime, write: (value) => output.push(value) },
       ),
       0,
@@ -1122,7 +1122,7 @@ Deno.test("CLI verbose text includes unchanged apply items", async () => {
   }
 });
 
-Deno.test("CLI verbose traces GitHub calls on stderr before JSON stdout", async () => {
+Deno.test("CLI trace writes GitHub calls to stderr before JSON stdout", async () => {
   const root = await configurationDirectory();
   const previousDesired = Deno.env.get("DESIRED");
   const previousToken = Deno.env.get("GITHUB_TOKEN");
@@ -1146,7 +1146,7 @@ Deno.test("CLI verbose traces GitHub calls on stderr before JSON stdout", async 
 
     assertEquals(
       await main(
-        ["plan", "--verbose", "--format", "json", "--path", root],
+        ["plan", "--trace", "--format", "json", "--path", root],
         {
           write: (value) => {
             stdout.push(value);

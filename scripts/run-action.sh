@@ -10,9 +10,10 @@ trim() {
 
 mode="$(trim "${OCTOSMITH_MODE:-}")"
 path="$(trim "${OCTOSMITH_PATH:-.}")"
-repository="$(trim "${OCTOSMITH_REPOSITORY:-}")"
+resource="$(trim "${OCTOSMITH_RESOURCE:-}")"
 format="$(trim "${OCTOSMITH_FORMAT:-text}")"
 verbose="$(trim "${OCTOSMITH_VERBOSE:-false}")"
+trace="$(trim "${OCTOSMITH_TRACE:-false}")"
 events_output="$(trim "${OCTOSMITH_EVENTS_OUTPUT:-}")"
 
 deno_args=(--quiet --minimum-dependency-age 0)
@@ -44,6 +45,7 @@ case "$format" in
 esac
 
 normalized_verbose="$(printf '%s' "$verbose" | tr '[:upper:]' '[:lower:]')"
+normalized_trace="$(printf '%s' "$trace" | tr '[:upper:]' '[:lower:]')"
 
 case "$normalized_verbose" in
   true)
@@ -58,17 +60,34 @@ case "$normalized_verbose" in
     ;;
 esac
 
+case "$normalized_trace" in
+  true)
+    trace=true
+    ;;
+  false)
+    trace=false
+    ;;
+  *)
+    echo "::error::trace must be either 'true' or 'false'." >&2
+    exit 1
+    ;;
+esac
+
 if [[ -z "$path" ]]; then
   path="."
 fi
 
 if [[ "$mode" == "validate" ]]; then
-  if [[ -n "$repository" ]]; then
-    echo "::error::repository is not supported for validate." >&2
+  if [[ -n "$resource" ]]; then
+    echo "::error::resource is not supported for validate." >&2
     exit 1
   fi
   if [[ "$verbose" == "true" ]]; then
     echo "::error::verbose is not supported for validate." >&2
+    exit 1
+  fi
+  if [[ "$trace" == "true" ]]; then
+    echo "::error::trace is not supported for validate." >&2
     exit 1
   fi
   if [[ -n "$events_output" ]]; then
@@ -77,14 +96,22 @@ if [[ "$mode" == "validate" ]]; then
   fi
 fi
 
-args=("$mode")
-if [[ -n "$repository" ]]; then
-  args+=("$repository")
+if [[ "$mode" == "validate" ]]; then
+  args=(template validate)
+else
+  args=("$mode")
+fi
+if [[ -n "$resource" ]]; then
+  args+=("$resource")
 fi
 args+=(--path "$path" --format "$format")
 
 if [[ "$verbose" == "true" ]]; then
   args+=(--verbose)
+fi
+
+if [[ "$trace" == "true" ]]; then
+  args+=(--trace)
 fi
 
 if [[ -n "$events_output" ]]; then

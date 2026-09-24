@@ -75,7 +75,7 @@ class FakeRuntime implements ApplyRuntime {
   }
 }
 
-Deno.test("apply rejects an empty repository target before discovery", async () => {
+Deno.test("apply rejects an empty resource target before discovery", async () => {
   const runtime = new FakeRuntime([]);
 
   await assertRejects(
@@ -85,12 +85,12 @@ Deno.test("apply rejects an empty repository target before discovery", async () 
         {} as LoadedConfiguration,
         {
           mode: "apply",
-          repository: "",
+          resource: "",
           onRepositoryApplied: () => {},
         },
       ),
     Error,
-    "Repository target must not be empty",
+    "Resource target must not be empty",
   );
 
   assertEquals(runtime.discoveredTargets, []);
