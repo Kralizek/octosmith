@@ -364,7 +364,10 @@ Deno.test("rejects includes that escape the configuration root", async () => {
         "",
       ].join("\n"),
     );
-    const include = relative(join(root, "templates"), outside).replaceAll("\\", "/");
+    const include = relative(join(root, "templates"), outside).replaceAll(
+      "\\",
+      "/",
+    );
     await writeTemplate(root, [
       "version: 1",
       "kind: repository",
