@@ -1,3 +1,4 @@
+import type { RuntimeReferenceDiagnostic } from "../configuration/runtime_references.ts";
 import type { ApplyItemType, Operation } from "../plan/types.ts";
 
 /** Describes repository report status. */
@@ -32,6 +33,7 @@ export interface RepositoryReport {
   readonly status: RepositoryReportStatus;
   readonly items: readonly ApplyItemReport[];
   readonly error?: string;
+  readonly diagnostics?: readonly RuntimeReferenceDiagnostic[];
 }
 
 /** Describes apply item report. */
