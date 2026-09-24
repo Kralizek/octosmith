@@ -614,7 +614,7 @@ Deno.test("partial apply skips later operations and continues with the next repo
 Deno.test("CLI rejects a misspelled scope before any GitHub request", async () => {
   const root = await safetyConfigurationDirectory({
     code: {
-      match: { names: ["*"] },
+      match: { include: { names: ["*"] } },
       repository: { settings: { has_issues: false } },
     },
   }, { nmaes: ["sample"] });
@@ -640,7 +640,7 @@ Deno.test("CLI rejects a misspelled scope before any GitHub request", async () =
 
 Deno.test("CLI validates all templates before plan discovery", async () => {
   const root = await safetyConfigurationDirectory({
-    valid: { match: { names: ["sample"] } },
+    valid: { match: { include: { names: ["sample"] } } },
     invalid: { match: { nmaes: ["unrelated"] } },
   });
   const requests: CapturedRequest[] = [];
@@ -667,14 +667,14 @@ Deno.test("CLI preflights repository secrets before strict cleanup and continues
   const root = await safetyConfigurationDirectory(
     {
       code: {
-        match: { names: ["sample"] },
+        match: { include: { names: ["sample"] } },
         repository: {
           settings: { has_issues: false },
           actions: { secrets: ["NEW"] },
         },
       },
       healthy: {
-        match: { names: ["z-next"] },
+        match: { include: { names: ["z-next"] } },
         repository: { settings: { has_issues: false } },
       },
     },
@@ -730,7 +730,7 @@ Deno.test("CLI preflights environment secrets before any strict mutation", async
   const root = await safetyConfigurationDirectory(
     {
       code: {
-        match: { names: ["sample"] },
+        match: { include: { names: ["sample"] } },
         repository: { settings: { has_issues: false } },
         environments: [{
           name: "production",
@@ -778,7 +778,7 @@ Deno.test("CLI plan preflights secrets and identifies strict deletion targets", 
   const root = await safetyConfigurationDirectory(
     {
       code: {
-        match: { names: ["sample"] },
+        match: { include: { names: ["sample"] } },
         repository: {
           settings: { has_issues: false },
           actions: { secrets: ["NEW"] },
@@ -843,7 +843,7 @@ async function safetyConfigurationDirectory(
       version: 1,
       organization: "acme",
       repositories: {
-        scope,
+        scope: { include: scope },
         ...(collections && {
           settings: { collection_management: collections },
         }),
@@ -1420,8 +1420,9 @@ async function fileConfigurationDirectory(): Promise<string> {
       "organization: acme",
       "repositories:",
       "  scope:",
-      "    names:",
-      "      - sample",
+      "    include:",
+      "      names:",
+      "        - sample",
       "",
     ].join("\n"),
   );
@@ -1432,8 +1433,9 @@ async function fileConfigurationDirectory(): Promise<string> {
       "version: 1",
       "kind: repository",
       "match:",
-      "  names:",
-      "    - sample",
+      "  include:",
+      "    names:",
+      "      - sample",
       "repository:",
       "  files:",
       "    managed.txt:",
@@ -1555,9 +1557,10 @@ async function configurationDirectory(
         "organization: acme",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
-        "      - missing",
+        "    include:",
+        "      names:",
+        "        - sample",
+        "        - missing",
         "",
       ].join("\n")
       : [
@@ -1565,7 +1568,8 @@ async function configurationDirectory(
         "organization: acme",
         "repositories:",
         "  scope:",
-        '    names: ["*"]',
+        "    include:",
+        '      names: ["*"]',
         ...(collections
           ? [
             "  settings:",
@@ -1582,8 +1586,9 @@ async function configurationDirectory(
       "version: 1",
       "kind: repository",
       "match:",
-      "  names:",
-      "    - sample",
+      "  include:",
+      "    names:",
+      "      - sample",
       "repository:",
       "  settings:",
       "    has_issues: false",
@@ -1718,7 +1723,7 @@ async function secretConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'repositories: { scope: { names: ["*"] } }',
+      'repositories: { scope: { include: { names: ["*"] } } }',
       "",
     ].join("\n"),
   );
@@ -1728,8 +1733,9 @@ async function secretConfigurationDirectory(): Promise<string> {
       "version: 1",
       "kind: repository",
       "match:",
-      "  names:",
-      "    - sample",
+      "  include:",
+      "    names:",
+      "      - sample",
       "repository:",
       "  actions:",
       "    secrets:",
@@ -1749,7 +1755,7 @@ async function partialConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'repositories: { scope: { names: ["*"] } }',
+      'repositories: { scope: { include: { names: ["*"] } } }',
       "",
     ].join("\n"),
   );
@@ -1760,9 +1766,10 @@ async function partialConfigurationDirectory(): Promise<string> {
       "version: 1",
       "kind: repository",
       "match:",
-      "  names:",
-      "    - sample",
-      "    - z-next",
+      "  include:",
+      "    names:",
+      "      - sample",
+      "      - z-next",
       "repository:",
       "  settings:",
       "    has_issues: false",

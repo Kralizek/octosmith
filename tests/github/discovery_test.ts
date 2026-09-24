@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import type {
   LoadedConfiguration,
+  RepositorySelector,
   RepositoryTemplate,
 } from "@octosmith/octosmith";
 import {
@@ -394,8 +395,10 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
           version: 1,
           kind: "repository",
           match: {
-            teams: ["platform"],
-            properties: { kind: "service" },
+            include: {
+              teams: ["platform"],
+              properties: { kind: "service" },
+            },
           },
           repository: {},
         },
@@ -417,6 +420,69 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
       properties: { kind: "website" },
     },
   ]);
+});
+
+Deno.test("discovery hydrates selector metadata referenced only by exclusions", async () => {
+  const client = new FakeGitHubClient({
+    "/orgs/acme/repos?page=1&per_page=100": [[
+      { name: "api", visibility: "private" },
+      { name: "legacy", visibility: "private" },
+    ]],
+    "/orgs/acme/teams/archived/repos?page=1&per_page=100": [[
+      { name: "legacy", visibility: "private" },
+    ]],
+    "/orgs/acme/properties/values?page=1&per_page=100": [[
+      {
+        repository_name: "api",
+        properties: [{ property_name: "lifecycle", value: "active" }],
+      },
+      {
+        repository_name: "legacy",
+        properties: [{ property_name: "lifecycle", value: "retired" }],
+      },
+    ]],
+  });
+
+  const repositories = await discoverRepositoryList(
+    client,
+    configuration({
+      scope: { names: ["*"] },
+      exclude: {
+        teams: ["archived"],
+        properties: { lifecycle: "retired" },
+      },
+    }),
+  );
+
+  assertEquals(repositories.map((repository) => repository.name), ["api"]);
+  assertEquals(client.requests.map((request) => request.path), [
+    "/orgs/acme/repos",
+    "/orgs/acme/teams/archived/repos",
+    "/orgs/acme/properties/values",
+  ]);
+});
+
+Deno.test("include all selects all candidates before exclusions", async () => {
+  const client = new FakeGitHubClient({
+    "/orgs/acme/repos?page=1&per_page=100": [[
+      { name: "api", visibility: "private" },
+      { name: "legacy-api", visibility: "private" },
+    ]],
+  });
+
+  const repositories = await discoverRepositoryList(
+    client,
+    configuration(
+      {
+        scope: {},
+        exclude: { names: ["legacy-*"] },
+      },
+      {},
+      "all",
+    ),
+  );
+
+  assertEquals(repositories.map((repository) => repository.name), ["api"]);
 });
 
 Deno.test("discovery finds a matching repository on organization page two", async () => {
@@ -543,17 +609,23 @@ async function discoverRepositoryList(
 
 function configuration(
   root: {
-    readonly scope:
-      LoadedConfiguration["configuration"]["repositories"]["scope"];
+    readonly scope: RepositorySelector;
+    readonly exclude?: RepositorySelector;
   },
   templates: Readonly<Record<string, RepositoryTemplate>> = {},
+  include: RepositorySelector | "all" = root.scope,
 ): LoadedConfiguration {
   return {
     root: "/configuration",
     configuration: {
       version: 1,
       organization: "acme",
-      repositories: { scope: root.scope },
+      repositories: {
+        scope: {
+          include,
+          ...(root.exclude !== undefined && { exclude: root.exclude }),
+        },
+      },
     },
     templates,
   };

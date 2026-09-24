@@ -54,8 +54,7 @@ organization: acme
 
 repositories:
   scope:
-    names:
-      - "service-*"
+    include: all
 
   settings:
     collection_management: explicit
@@ -64,6 +63,10 @@ repositories:
 
 Repository scope may use names, teams, visibility, and custom properties. Name
 selectors support `*` and `?` glob patterns.
+
+`include` is required and may be either a repository selector or the literal
+`all`. Use `include: all` when the scope starts from every repository and
+`exclude` narrows it. `exclude` always uses the repository selector shape.
 
 By default, every repository discovered in scope must match exactly one
 template. Set `repositories.settings.unmatched_repositories` to `ignore` to
@@ -86,8 +89,9 @@ version: 1
 kind: repository
 
 match:
-  names:
-    - "service-*"
+  include:
+    names:
+      - "service-*"
 
 repository:
   settings:
@@ -118,8 +122,9 @@ version: 1
 kind: repository
 
 match:
-  properties:
-    type: backend
+  include:
+    properties:
+      type: backend
 
 includes:
   - ../fragments/common.yml

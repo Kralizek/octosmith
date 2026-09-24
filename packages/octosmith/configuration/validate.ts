@@ -8,6 +8,8 @@ import {
   type RepositorySelector,
   type RepositoryTemplate,
   resolveDesiredState,
+  type Scope,
+  matchesScope,
   type RuntimeReferenceDiagnostic,
   runtimeReferenceWarnings,
 } from "../mod.ts";
@@ -37,14 +39,23 @@ export async function validateConfigurationDirectory(
 
   for (const [name, template] of Object.entries(loaded.templates)) {
     diagnostics.push(...runtimeReferenceWarnings(name, template));
-    const inScope = selectorsCanOverlap(scope, template.match);
+    const scopeInclude = scope.include === "all" ? {} : scope.include;
+    const templateInclude = template.match.include === "all"
+      ? {}
+      : template.match.include;
+    const inScope = selectorsCanOverlap(scopeInclude, templateInclude);
     const repository = repositoryForSelectors(
       name,
-      inScope ? [scope, template.match] : [template.match],
+      inScope ? [scopeInclude, templateInclude] : [templateInclude],
     );
-    const configuration: LoadedConfiguration = inScope
-      ? loaded
-      : { ...loaded, templates: { [name]: template } };
+    const validationTemplate: RepositoryTemplate = {
+      ...template,
+      match: { include: template.match.include },
+    };
+    const configuration: LoadedConfiguration = {
+      ...loaded,
+      templates: { [name]: validationTemplate },
+    };
     const desired = await resolveDesiredState(
       configuration,
       repository,
@@ -58,10 +69,11 @@ export async function validateConfigurationDirectory(
 }
 
 function assertTemplatesDoNotOverlap(
-  scope: RepositorySelector,
+  scope: Scope<RepositorySelector>,
   templates: Readonly<Record<string, RepositoryTemplate>>,
 ): void {
   const entries = Object.entries(templates);
+  const scopeInclude = scope.include === "all" ? {} : scope.include;
 
   for (let leftIndex = 0; leftIndex < entries.length; leftIndex++) {
     const [leftName, left] = entries[leftIndex];
@@ -72,8 +84,25 @@ function assertTemplatesDoNotOverlap(
       rightIndex++
     ) {
       const [rightName, right] = entries[rightIndex];
+      const leftInclude = left.match.include === "all" ? {} : left.match.include;
+      const rightInclude = right.match.include === "all"
+        ? {}
+        : right.match.include;
 
-      if (selectorsCanOverlap(scope, left.match, right.match)) {
+      if (!selectorsCanOverlap(scopeInclude, leftInclude, rightInclude)) {
+        continue;
+      }
+
+      const witness = repositoryForSelectors(
+        leftName + "-" + rightName,
+        [scopeInclude, leftInclude, rightInclude],
+      );
+
+      if (
+        matchesScope(scope, witness) &&
+        matchesScope(left.match, witness) &&
+        matchesScope(right.match, witness)
+      ) {
         throw new Error(
           "Repository templates can overlap within configured scope: " +
             leftName + ", " + rightName,
@@ -84,21 +113,31 @@ function assertTemplatesDoNotOverlap(
 }
 
 function assertScopeCanMatchTemplate(
-  scope: RepositorySelector,
+  scope: Scope<RepositorySelector>,
   templates: Readonly<Record<string, RepositoryTemplate>>,
 ): void {
+  const scopeInclude = scope.include === "all" ? {} : scope.include;
   const templateSelectors = Object.values(templates).map((template) =>
-    template.match
+    template.match.include === "all" ? {} : template.match.include
   );
 
-  for (const name of scope.names ?? []) {
+  if (
+    scope.exclude !== undefined ||
+    Object.values(templates).some((template) =>
+      template.match.exclude !== undefined
+    )
+  ) {
+    return;
+  }
+
+  for (const name of scopeInclude.names ?? []) {
     if (name.includes("*") || name.includes("?")) {
       continue;
     }
 
     const literalName: RepositorySelector = { names: [name] };
     const possible = templateSelectors.some((selector) =>
-      selectorsCanOverlap(scope, literalName, selector)
+      selectorsCanOverlap(scopeInclude, literalName, selector)
     );
 
     if (!possible) {
@@ -111,7 +150,7 @@ function assertScopeCanMatchTemplate(
 
   if (
     templateSelectors.length === 0 ||
-    !templateSelectors.some((selector) => selectorsCanOverlap(scope, selector))
+    !templateSelectors.some((selector) => selectorsCanOverlap(scopeInclude, selector))
   ) {
     throw new Error("Configured repository scope cannot match any template");
   }

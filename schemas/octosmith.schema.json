@@ -25,7 +25,7 @@
       ],
       "properties": {
         "scope": {
-          "$ref": "#/$defs/selector"
+          "$ref": "./scopes/repository.schema.json"
         },
         "settings": {
           "$ref": "#/$defs/settings"

@@ -6,10 +6,12 @@ import type {
   TeamPermission,
 } from "../types.ts";
 import type {
+  RepositorySelector,
   RepositorySettingsConfiguration,
   RepositoryTemplate,
   RulesetConfiguration,
   RulesetRuleConfiguration,
+  Scope,
 } from "./types.ts";
 import type {
   DesiredMergeSettings,
@@ -60,7 +62,7 @@ export async function resolveDesiredState(
   values: RuntimeValueProvider,
 ): Promise<DesiredState> {
   const matches = Object.entries(loaded.templates)
-    .filter(([, template]) => matchesSelector(template.match, repository));
+    .filter(([, template]) => matchesScope(template.match, repository));
 
   if (matches.length !== 1) {
     throw new Error(
@@ -196,8 +198,19 @@ function createConfigurationSourceReader(
 }
 
 /** Determine whether repository metadata matches a configured selector. */
+export function matchesScope(
+  scope: Scope<RepositorySelector>,
+  repository: RepositoryMetadata,
+): boolean {
+  return (scope.include === "all" ||
+    matchesSelector(scope.include, repository)) &&
+    (scope.exclude === undefined ||
+      !matchesSelector(scope.exclude, repository));
+}
+
+/** Determine whether repository metadata matches a configured selector. */
 export function matchesSelector(
-  selector: RepositoryTemplate["match"],
+  selector: RepositorySelector,
   repository: RepositoryMetadata,
 ): boolean {
   if (

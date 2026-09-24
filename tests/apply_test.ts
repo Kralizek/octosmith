@@ -249,7 +249,7 @@ async function configurationDirectory(
       "version: 1",
       "organization: acme",
       "repositories:",
-      '  scope: { names: ["*"] }',
+      '  scope: { include: { names: ["*"] } }',
       ...(settings?.unmatchedRepositories !== undefined
         ? [
           "  settings:",
@@ -266,9 +266,10 @@ async function configurationDirectory(
       "version: 1",
       "kind: repository",
       "match:",
-      "  names:",
-      "    - sample",
-      "    - broken",
+      "  include:",
+      "    names:",
+      "      - sample",
+      "      - broken",
       "repository:",
       "  settings:",
       "    has_issues: false",
@@ -289,7 +290,7 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
     [
       "version: 1",
       "organization: acme",
-      'repositories: { scope: { names: ["sample"] } }',
+      'repositories: { scope: { include: { names: ["sample"] } } }',
       "",
     ].join("\n"),
   );
@@ -300,7 +301,8 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
       "version: 1",
       "kind: repository",
       "match:",
-      "  names:",
+      "  include:",
+      "    names:",
       "    - sample",
       "repository:",
       "  actions:",
