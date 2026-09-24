@@ -63,8 +63,10 @@ Deno.test("targeted discovery fetches only the requested repository and selector
     client,
     configuration({
       scope: {
-        teams: ["platform"],
-        properties: { kind: "service" },
+        include: {
+          teams: ["platform"],
+          properties: { kind: "service" },
+        },
       },
     }),
     "api",
@@ -100,7 +102,7 @@ Deno.test("targeted discovery reads repository property values once", async () =
 
   const result = await discoverRepositories(
     client,
-    configuration({ scope: { properties: { kind: "service" } } }),
+    configuration({ scope: { include: { properties: { kind: "service" } } } }),
     "api",
   );
 
@@ -124,7 +126,7 @@ Deno.test("targeted discovery rejects an empty repository target", async () => {
     () =>
       discoverRepositories(
         client,
-        configuration({ scope: { names: ["*"] } }),
+        configuration({ scope: { include: { names: ["*"] } } }),
         "",
       ),
     Error,
@@ -141,7 +143,7 @@ Deno.test("targeted discovery isolates selector metadata failures", async () => 
 
   const result = await discoverRepositories(
     client,
-    configuration({ scope: { teams: ["platform"] } }),
+    configuration({ scope: { include: { teams: ["platform"] } } }),
     "api",
   );
 
@@ -163,7 +165,7 @@ Deno.test("targeted discovery reports repositories outside configured scope", as
 
   const result = await discoverRepositories(
     client,
-    configuration({ scope: { visibility: "public" } }),
+    configuration({ scope: { include: { visibility: "public" } } }),
     "api",
   );
 
@@ -190,7 +192,7 @@ Deno.test("discovery fetches exact repository names directly", async () => {
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { names: ["api", "web"] },
+      scope: { include: { names: ["api", "web"] } },
     }),
   );
 
@@ -212,7 +214,7 @@ Deno.test("discovery deduplicates exact repository names", async () => {
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { names: ["api", "api"] },
+      scope: { include: { names: ["api", "api"] } },
     }),
   );
 
@@ -232,7 +234,7 @@ Deno.test("discovery isolates failures for exact repository names", async () => 
   const result = await discoverRepositories(
     client,
     configuration({
-      scope: { names: ["api", "missing"] },
+      scope: { include: { names: ["api", "missing"] } },
     }),
   );
 
@@ -257,7 +259,7 @@ Deno.test("discovery uses a scope team as the candidate source and verifies all 
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { teams: ["platform", "security"] },
+      scope: { include: { teams: ["platform", "security"] } },
     }),
   );
 
@@ -279,7 +281,7 @@ Deno.test("discovery applies a single visibility as an organization-side filter"
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { visibility: "private" },
+      scope: { include: { visibility: "private" } },
     }),
   );
 
@@ -301,7 +303,7 @@ Deno.test("discovery narrows a one-item visibility array", async () => {
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { visibility: ["private"] },
+      scope: { include: { visibility: ["private"] } },
     }),
   );
 
@@ -324,7 +326,7 @@ Deno.test("discovery does not send unsupported internal visibility filtering", a
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { visibility: "internal" },
+      scope: { include: { visibility: "internal" } },
     }),
   );
 
@@ -347,7 +349,7 @@ Deno.test("discovery falls back to organization listing for name globs", async (
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { names: ["api-*"] },
+      scope: { include: { names: ["api-*"] } },
     }),
   );
 
@@ -388,14 +390,16 @@ Deno.test("discovery hydrates only teams and custom properties referenced by sel
   const repositories = await discoverRepositoryList(
     client,
     configuration(
-      { scope: {} },
+      { scope: { include: {} } },
       {
         code: {
           version: 1,
           kind: "repository",
           match: {
-            teams: ["platform"],
-            properties: { kind: "service" },
+            include: {
+              teams: ["platform"],
+              properties: { kind: "service" },
+            },
           },
           repository: {},
         },
@@ -433,7 +437,7 @@ Deno.test("discovery finds a matching repository on organization page two", asyn
 
   const repositories = await discoverRepositoryList(
     client,
-    configuration({ scope: { names: ["target-*"] } }),
+    configuration({ scope: { include: { names: ["target-*"] } } }),
   );
 
   assertEquals(repositories.map((repository) => repository.name), [
@@ -455,7 +459,7 @@ Deno.test("discovery follows team membership pagination", async () => {
 
   const repositories = await discoverRepositoryList(
     client,
-    configuration({ scope: { teams: ["platform"] } }),
+    configuration({ scope: { include: { teams: ["platform"] } } }),
   );
 
   assertEquals(repositories.length, 101);
@@ -491,7 +495,7 @@ Deno.test("discovery uses custom properties from page two for selection", async 
   const repositories = await discoverRepositoryList(
     client,
     configuration({
-      scope: { properties: { kind: "service" } },
+      scope: { include: { properties: { kind: "service" } } },
     }),
   );
 
@@ -515,7 +519,7 @@ Deno.test("discovery requests an empty page after exactly 100 results", async ()
 
   const discovered = await discoverRepositoryList(
     client,
-    configuration({ scope: {} }),
+    configuration({ scope: { include: {} } }),
   );
 
   assertEquals(discovered.length, 100);
