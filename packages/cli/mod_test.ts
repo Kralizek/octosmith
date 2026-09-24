@@ -68,13 +68,13 @@ Deno.test("apply rejects combining a resource target with --plan", async () => {
   }
 });
 
-
 Deno.test("version is available from grouped commands without a short alias", async () => {
   const output: string[] = [];
   const originalLog = console.log;
 
   try {
-    console.log = (...values: unknown[]) => output.push(values.map(String).join(" "));
+    console.log = (...values: unknown[]) =>
+      output.push(values.map(String).join(" "));
     assertEquals(await main(["template", "--version"]), 0);
     assertStringIncludes(output.join("\n"), VERSION);
   } finally {
