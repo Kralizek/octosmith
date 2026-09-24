@@ -1,4 +1,11 @@
-import { dirname, extname, isAbsolute, join, relative, resolve } from "@std/path";
+import {
+  dirname,
+  extname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+} from "@std/path";
 import { parse } from "@std/yaml";
 import { Ajv2020, type ValidateFunction } from "ajv/2020";
 import type {
@@ -259,7 +266,7 @@ async function loadRepositoryFragment(
 
   if (fragment.resource !== "repository") {
     throw new Error(
-      'Fragment resource mismatch in ' + canonicalPath +
+      "Fragment resource mismatch in " + canonicalPath +
         ': expected "repository", found "' + fragment.resource + '"',
     );
   }
@@ -311,12 +318,12 @@ function mergeValues(earlier: unknown, later: unknown): unknown {
       ...(earlier as Record<string, unknown>),
     };
 
-    for (const [key, value] of Object.entries(
-      later as Record<string, unknown>,
-    )) {
-      result[key] = key in result
-        ? mergeValues(result[key], value)
-        : value;
+    for (
+      const [key, value] of Object.entries(
+        later as Record<string, unknown>,
+      )
+    ) {
+      result[key] = key in result ? mergeValues(result[key], value) : value;
     }
 
     return result;
