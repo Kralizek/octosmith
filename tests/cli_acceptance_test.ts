@@ -1881,11 +1881,11 @@ Deno.test("plan reports a structured missing secret before repository state is r
 Deno.test("plan does not resolve runtime values from unmatched templates", async () => {
   const root = await safetyConfigurationDirectory({
     code: {
-      match: { names: ["sample"] },
+      match: { include: { names: ["sample"] } },
       repository: { settings: { has_issues: false } },
     },
     unused: {
-      match: { names: ["unused"] },
+      match: { include: { names: ["unused"] } },
       repository: { actions: { secrets: ["UNUSED_TOKEN"] } },
     },
   });
