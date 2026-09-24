@@ -5,9 +5,10 @@ kind: repository
 
 match:
   include:
-    names:
-      - "*-infra"
-      - "terraform-*"
+    include:
+      names:
+        - "*-infra"
+        - "terraform-*"
 
 repository:
   settings:
