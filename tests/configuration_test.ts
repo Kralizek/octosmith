@@ -3,6 +3,7 @@ import { fromFileUrl, join, relative } from "@std/path";
 import {
   buildPlan,
   loadConfigurationDirectory,
+  matchesScope,
   matchesSelector,
   resolveDesiredState,
   validateConfigurationDirectory,
@@ -576,6 +577,39 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
   } finally {
     await Deno.remove(root, { recursive: true });
   }
+});
+
+Deno.test("scope matching applies include and exclude selectors", () => {
+  const repository = {
+    name: "legacy-api",
+    teams: ["platform"],
+    visibility: "private" as const,
+    properties: { kind: "service" },
+  };
+
+  assertEquals(
+    matchesScope(
+      {
+        include: { names: ["*"], teams: ["platform"] },
+        exclude: { names: ["legacy-*"] },
+      },
+      repository,
+      matchesSelector,
+    ),
+    false,
+  );
+
+  assertEquals(
+    matchesScope(
+      {
+        include: { names: ["*"], teams: ["platform"] },
+        exclude: { visibility: "public" },
+      },
+      repository,
+      matchesSelector,
+    ),
+    true,
+  );
 });
 
 Deno.test("name selectors treat regex metacharacters literally", () => {
