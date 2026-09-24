@@ -713,7 +713,10 @@ Deno.test("CLI preflights repository secrets before strict cleanup and continues
       events.indexOf("PATCH /api/v3/repos/acme/z-next") > preflightIndex,
       true,
     );
-    assertStringIncludes(output.join("\n"), "Missing environment value: NEW");
+    assertStringIncludes(
+      output.join("\n"),
+      'Required secret "NEW" is not available in the current context.',
+    );
     assertStringIncludes(
       output.join("\n"),
       "Summary: 0 unchanged, 0 planned, 1 applied, 0 partially-applied, 1 failed",
@@ -758,7 +761,10 @@ Deno.test("CLI preflights environment secrets before any strict mutation", async
       1,
     );
     assertEquals(mutations(requests), []);
-    assertStringIncludes(output.join("\n"), "Missing environment value: NEW");
+    assertStringIncludes(
+      output.join("\n"),
+      'Required secret "NEW" is not available in the current context.',
+    );
     assertStringIncludes(
       output.join("\n"),
       "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 1 failed",
