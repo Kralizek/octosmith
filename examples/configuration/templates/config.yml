@@ -5,8 +5,8 @@ kind: repository
 
 match:
   include:
-      properties:
-        repository-type: config
+    properties:
+      repository-type: config
 
 repository:
   settings:
