@@ -76,7 +76,7 @@ Deno.test("OpenCLI contract reserves -v for verbose and omits a short version al
   );
   assertEquals(
     globalFlags.some((flag) =>
-      flag.name === "version" && flag.aliases?.includes("V")
+      flag.name === "version" && flag.aliases?.includes("v")
     ),
     false,
   );
