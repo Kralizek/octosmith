@@ -3,9 +3,10 @@ import type {
   PropertyValue,
   RepositoryMetadata,
   RepositorySelector,
+  Scope,
   RepositoryVisibility,
 } from "../mod.ts";
-import { matchesSelector } from "../mod.ts";
+import { matchesScope, matchesSelector } from "../mod.ts";
 import type { GitHubClient, GitHubQueryValue } from "./client.ts";
 
 interface RepositoryResponse {
@@ -51,10 +52,11 @@ export async function discoverRepositories(
   }
 
   const organization = loaded.configuration.organization;
-  const selectors = [
+  const scopes = [
     loaded.configuration.repositories.scope,
     ...Object.values(loaded.templates).map((template) => template.match),
   ];
+  const selectors = scopes.flatMap(scopeSelectors);
   const referencedTeams = collectReferencedTeams(selectors);
   const referencedProperties = collectReferencedProperties(selectors);
   const teamRepositories = new Map<string, ReadonlySet<string>>();
@@ -72,7 +74,7 @@ export async function discoverRepositories(
   const discovery = await discoverCandidates(
     client,
     organization,
-    loaded.configuration.repositories.scope,
+    loaded.configuration.repositories.scope.include,
     teamRepositories,
   );
 
@@ -106,7 +108,11 @@ export async function discoverRepositories(
   return {
     repositories: repositories
       .filter((repository) =>
-        matchesSelector(loaded.configuration.repositories.scope, repository)
+        matchesScope(
+          loaded.configuration.repositories.scope,
+          repository,
+          matchesSelector,
+        )
       )
       .sort((left, right) => left.name.localeCompare(right.name)),
     failures: discovery.failures,
@@ -154,7 +160,13 @@ async function discoverTargetRepository(
       ),
     };
 
-    if (!matchesSelector(loaded.configuration.repositories.scope, metadata)) {
+    if (
+      !matchesScope(
+        loaded.configuration.repositories.scope,
+        metadata,
+        matchesSelector,
+      )
+    ) {
       return {
         repositories: [],
         failures: [{
@@ -295,6 +307,14 @@ async function getAllPages<T>(
       return result;
     }
   }
+}
+
+function scopeSelectors(
+  scope: Scope<RepositorySelector>,
+): readonly RepositorySelector[] {
+  return scope.exclude === undefined
+    ? [scope.include]
+    : [scope.include, scope.exclude];
 }
 
 function collectReferencedTeams(
