@@ -328,6 +328,68 @@ Deno.test("validate still detects overlap when an unrelated exclusion exists", a
   }
 });
 
+Deno.test("validate detects overlap through an alternate visibility witness", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/one.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        "    visibility:",
+        "      - public",
+        "      - private",
+        "  exclude:",
+        "    visibility: public",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/two.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        "    visibility:",
+        "      - public",
+        "      - private",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    const errors: string[] = [];
+    const originalError = console.error;
+    try {
+      console.error = (...values: unknown[]) =>
+        errors.push(values.map(String).join(" "));
+      assertEquals(await main(["template", "validate", "--path", root]), 1);
+      assertStringIncludes(errors.join("\n"), "templates can overlap");
+    } finally {
+      console.error = originalError;
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate materializes templates independently from exclusions", async () => {
   const root = await Deno.makeTempDir();
 
