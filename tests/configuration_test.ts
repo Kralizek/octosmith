@@ -3,6 +3,7 @@ import { fromFileUrl, join, relative } from "@std/path";
 import {
   buildPlan,
   loadConfigurationDirectory,
+  type LoadedConfiguration,
   matchesScope,
   matchesSelector,
   resolveDesiredState,
@@ -577,6 +578,47 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
   } finally {
     await Deno.remove(root, { recursive: true });
   }
+});
+
+Deno.test("template exclusion still allows another template to match", async () => {
+  const loaded = {
+    root: "/configuration",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: { names: ["*"] } } },
+    },
+    templates: {
+      excluded: {
+        version: 1,
+        kind: "repository",
+        match: {
+          include: { names: ["sample"] },
+          exclude: { properties: { lifecycle: "retired" } },
+        },
+        repository: {},
+      },
+      active: {
+        version: 1,
+        kind: "repository",
+        match: { include: { names: ["sample"] } },
+        repository: {},
+      },
+    },
+  } satisfies LoadedConfiguration;
+
+  const desired = await resolveDesiredState(
+    loaded,
+    {
+      name: "sample",
+      teams: [],
+      visibility: "private",
+      properties: { lifecycle: "retired" },
+    },
+    () => "",
+  );
+
+  assertEquals(desired.template, "active");
 });
 
 Deno.test("scope matching applies include and exclude selectors", () => {
