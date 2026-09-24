@@ -98,7 +98,7 @@ Deno.test("validate rejects overlapping repository templates", async () => {
         "kind: repository",
         "match:",
         "  include:",
-        '      names: ["*"]',
+        '    names: ["*"]',
         "repository: {}",
         "",
       ].join("\n"),
