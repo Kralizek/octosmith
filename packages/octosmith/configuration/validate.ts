@@ -8,8 +8,8 @@ import {
   type RepositorySelector,
   type RepositoryTemplate,
   resolveDesiredState,
-  runtimeReferenceWarnings,
   type RuntimeReferenceDiagnostic,
+  runtimeReferenceWarnings,
 } from "../mod.ts";
 
 /**
