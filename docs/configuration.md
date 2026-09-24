@@ -63,10 +63,9 @@ repositories:
 ```
 
 Repository scope requires an `include` selector and may define an `exclude`
-selector with the same shape. A repository is in scope when it matches
-`include` and does not match `exclude`. Selectors may use names, teams,
-visibility, and custom properties. Name selectors support `*` and `?` glob
-patterns.
+selector with the same shape. A repository is in scope when it matches `include`
+and does not match `exclude`. Selectors may use names, teams, visibility, and
+custom properties. Name selectors support `*` and `?` glob patterns.
 
 By default, every repository discovered in scope must match exactly one
 template. Set `repositories.settings.unmatched_repositories` to `ignore` to
