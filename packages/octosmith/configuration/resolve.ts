@@ -9,9 +9,9 @@ import type {
   RepositorySelector,
   RepositorySettingsConfiguration,
   RepositoryTemplate,
-  Scope,
   RulesetConfiguration,
   RulesetRuleConfiguration,
+  Scope,
 } from "./types.ts";
 import type {
   DesiredMergeSettings,
