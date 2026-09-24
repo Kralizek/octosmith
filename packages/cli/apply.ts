@@ -3,6 +3,7 @@ import {
   buildPlan,
   type DesiredState,
   type LoadedConfiguration,
+  matchesScope,
   matchesSelector,
   type Plan,
   reportAppliedRepository,
@@ -141,7 +142,7 @@ export async function apply(
   for (const repository of discovery.repositories) {
     const matchingTemplates = Object.values(loaded.templates).filter((
       template,
-    ) => matchesSelector(template.match, repository));
+    ) => matchesScope(template.match, repository, matchesSelector));
 
     if (
       matchingTemplates.length === 0 &&
