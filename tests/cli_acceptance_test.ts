@@ -765,7 +765,7 @@ Deno.test("CLI preflights environment secrets before any strict mutation", async
   }
 });
 
-Deno.test("CLI plan identifies strict deletion targets and changed settings", async () => {
+Deno.test("CLI plan preflights secrets and identifies strict deletion targets", async () => {
   const root = await safetyConfigurationDirectory(
     {
       code: {
@@ -801,7 +801,7 @@ Deno.test("CLI plan identifies strict deletion targets and changed settings", as
       0,
     );
     assertEquals(mutations(requests), []);
-    assertEquals(secretCalls, 0);
+    assertEquals(secretCalls, 1);
     const rendered = output.join("\n");
     for (
       const detail of [
