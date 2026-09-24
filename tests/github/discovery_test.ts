@@ -88,6 +88,44 @@ Deno.test("targeted discovery fetches only the requested repository and selector
   ]);
 });
 
+Deno.test("targeted discovery hydrates metadata referenced only by exclude", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+    "/repos/acme/api/teams?page=1&per_page=100": [[{ slug: "archived" }]],
+    "/repos/acme/api/properties/values": [[
+      { property_name: "lifecycle", value: "retired" },
+    ]],
+  });
+
+  const result = await discoverRepositories(
+    client,
+    configuration({
+      scope: {
+        include: { names: ["*"] },
+        exclude: {
+          teams: ["archived"],
+          properties: { lifecycle: "retired" },
+        },
+      },
+    }),
+    "api",
+  );
+
+  assertEquals(result.repositories, []);
+  assertEquals(result.failures.length, 1);
+  assertEquals(
+    result.failures[0].error instanceof Error
+      ? result.failures[0].error.message
+      : String(result.failures[0].error),
+    "Repository api is outside the configured scope",
+  );
+  assertEquals(client.requests.map(requestKeyFromRequest), [
+    "/repos/acme/api",
+    "/repos/acme/api/teams?page=1&per_page=100",
+    "/repos/acme/api/properties/values",
+  ]);
+});
+
 Deno.test("targeted discovery reads repository property values once", async () => {
   const propertyValues = Array.from({ length: 99 }, (_, index) => ({
     property_name: "unrelated-" + index,
