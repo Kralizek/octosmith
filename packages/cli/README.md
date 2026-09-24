@@ -150,7 +150,8 @@ The CLI returns:
 ```
 
 `--verbose`, `--trace`, and `--events-output` apply to `plan` and `apply`.
-`resource list`, `resource create`, `template validate`, and `template permissions` support `--path` and `--format`.
+`resource list`, `resource create`, `template validate`, and
+`template permissions` support `--path` and `--format`.
 
 ## Grouped commands
 
