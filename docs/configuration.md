@@ -27,6 +27,7 @@ The canonical schemas live at the repository root under
 
 - `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/octosmith.schema.json`
 - `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/template.schema.json`
+- `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/fragment.schema.json`
 
 For YAML editors that understand the YAML language-server directive, point each
 file at the corresponding schema:
@@ -104,6 +105,56 @@ repository:
 
 Templates can manage repository settings, teams, custom properties, Actions
 settings and values, Dependabot secrets, rulesets, environments, and files.
+
+### Fragment composition
+
+Repository templates may compose reusable desired-state fragments with
+root-level `includes`. Include paths are resolved relative to the document
+declaring them, so fragments may include other fragments using paths relative to
+their own location.
+
+```yaml
+version: 1
+kind: repository
+
+match:
+  properties:
+    type: backend
+
+includes:
+  - ../fragments/common.yml
+  - ../fragments/dotnet.yml
+
+repository: {}
+```
+
+Fragments are typed documents rather than partial templates:
+
+```yaml
+version: 1
+kind: fragment
+resource: repository
+
+repository:
+  settings:
+    has_wiki: false
+```
+
+A fragment may contain only `includes`, which allows composition bundles. Empty
+fragments are invalid. Repository templates still require their `repository`
+payload; use `repository: {}` when all desired state comes from included
+fragments.
+
+Composition is deterministic. Objects merge recursively, scalar values from
+later inputs replace earlier values, and arrays are replaced wholesale. Includes
+are applied in declaration order and the local template is applied last.
+
+Nested includes are limited to 32 levels and must remain within the
+configuration root after path canonicalization. Cycles are rejected across the
+full include chain. If the same canonical fragment is reached repeatedly while
+composing one root template, it is applied only at its first depth-first
+occurrence. This de-duplication is scoped per root template, so the same
+fragment can be reused by multiple templates independently.
 
 Team permissions accept GitHub's built-in permission names. The user-facing
 aliases `read` and `write` are normalized to GitHub's REST API values `pull` and

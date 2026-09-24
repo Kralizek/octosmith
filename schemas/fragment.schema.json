@@ -1,25 +1,35 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/template.schema.json",
-  "title": "Octosmith template",
+  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/fragment.schema.json",
+  "title": "Octosmith fragment",
   "type": "object",
   "additionalProperties": false,
   "required": [
     "version",
     "kind",
-    "match",
-    "repository"
+    "resource"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "includes"
+      ]
+    },
+    {
+      "required": [
+        "repository"
+      ]
+    }
   ],
   "properties": {
     "version": {
       "const": 1
     },
     "kind": {
-      "const": "repository"
+      "const": "fragment"
     },
-    "name": {
-      "type": "string",
-      "minLength": 1
+    "resource": {
+      "const": "repository"
     },
     "includes": {
       "type": "array",
@@ -28,9 +38,6 @@
         "type": "string",
         "minLength": 1
       }
-    },
-    "match": {
-      "$ref": "./selectors/repository.schema.json"
     },
     "repository": {
       "$ref": "./resources/repository.schema.json"
