@@ -7,6 +7,7 @@ import {
   type RepositoryMetadata,
   type RepositorySelector,
   type RepositoryTemplate,
+  type Scope,
   resolveDesiredState,
 } from "../mod.ts";
 
@@ -33,14 +34,23 @@ export async function validateConfigurationDirectory(
   }
 
   for (const [name, template] of Object.entries(loaded.templates)) {
-    const inScope = selectorsCanOverlap(scope, template.match);
+    const inScope = selectorsCanOverlap(scope.include, template.match.include);
     const repository = repositoryForSelectors(
       name,
-      inScope ? [scope, template.match] : [template.match],
+      inScope
+        ? [scope.include, template.match.include]
+        : [template.match.include],
     );
-    const configuration: LoadedConfiguration = inScope
+    const validationTemplate = template.match.exclude === undefined
+      ? template
+      : {
+        ...template,
+        match: { include: template.match.include },
+      };
+    const configuration: LoadedConfiguration = inScope &&
+        template.match.exclude === undefined
       ? loaded
-      : { ...loaded, templates: { [name]: template } };
+      : { ...loaded, templates: { [name]: validationTemplate } };
     const desired = await resolveDesiredState(
       configuration,
       repository,
@@ -52,7 +62,7 @@ export async function validateConfigurationDirectory(
 }
 
 function assertTemplatesDoNotOverlap(
-  scope: RepositorySelector,
+  scope: Scope<RepositorySelector>,
   templates: Readonly<Record<string, RepositoryTemplate>>,
 ): void {
   const entries = Object.entries(templates);
@@ -67,7 +77,16 @@ function assertTemplatesDoNotOverlap(
     ) {
       const [rightName, right] = entries[rightIndex];
 
-      if (selectorsCanOverlap(scope, left.match, right.match)) {
+      if (
+        scope.exclude === undefined &&
+        left.match.exclude === undefined &&
+        right.match.exclude === undefined &&
+        selectorsCanOverlap(
+          scope.include,
+          left.match.include,
+          right.match.include,
+        )
+      ) {
         throw new Error(
           "Repository templates can overlap within configured scope: " +
             leftName + ", " + rightName,
@@ -78,21 +97,31 @@ function assertTemplatesDoNotOverlap(
 }
 
 function assertScopeCanMatchTemplate(
-  scope: RepositorySelector,
+  scope: Scope<RepositorySelector>,
   templates: Readonly<Record<string, RepositoryTemplate>>,
 ): void {
+  // Exclusions introduce negation. The current static overlap checker only
+  // proves intersections of positive selectors, so defer those cases to the
+  // richer semantic validation tracked separately rather than report false
+  // failures here.
+  if (
+    scope.exclude !== undefined ||
+    Object.values(templates).some((template) => template.match.exclude !== undefined)
+  ) {
+    return;
+  }
   const templateSelectors = Object.values(templates).map((template) =>
-    template.match
+    template.match.include
   );
 
-  for (const name of scope.names ?? []) {
+  for (const name of scope.include.names ?? []) {
     if (name.includes("*") || name.includes("?")) {
       continue;
     }
 
     const literalName: RepositorySelector = { names: [name] };
     const possible = templateSelectors.some((selector) =>
-      selectorsCanOverlap(scope, literalName, selector)
+      selectorsCanOverlap(scope.include, literalName, selector)
     );
 
     if (!possible) {
@@ -105,7 +134,9 @@ function assertScopeCanMatchTemplate(
 
   if (
     templateSelectors.length === 0 ||
-    !templateSelectors.some((selector) => selectorsCanOverlap(scope, selector))
+    !templateSelectors.some((selector) =>
+      selectorsCanOverlap(scope.include, selector)
+    )
   ) {
     throw new Error("Configured repository scope cannot match any template");
   }
