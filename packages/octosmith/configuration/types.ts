@@ -20,9 +20,15 @@ export interface Configuration {
   readonly repositories: RepositoriesConfiguration;
 }
 
+/** Describes include/exclude selection semantics. */
+export interface Scope<TSelector> {
+  readonly include: TSelector;
+  readonly exclude?: TSelector;
+}
+
 /** Describes repositories configuration. */
 export interface RepositoriesConfiguration {
-  readonly scope: RepositorySelector;
+  readonly scope: Scope<RepositorySelector>;
   readonly settings?: RepositoryManagementSettings;
   readonly fileChanges?: FileChangesConfiguration;
 }
@@ -70,7 +76,7 @@ export interface RepositoryTemplate {
   readonly version: 1;
   readonly kind: "repository";
   readonly name?: string;
-  readonly match: RepositorySelector;
+  readonly match: Scope<RepositorySelector>;
   readonly repository: RepositoryConfiguration;
 }
 
