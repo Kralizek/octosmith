@@ -5,6 +5,7 @@ import {
   type LoadedConfiguration,
   matchesSelector,
   type Plan,
+  preflightRuntimeReferences,
   reportAppliedRepository,
   reportFailedRepository,
   reportPlannedRepository,
@@ -28,6 +29,8 @@ export type ApplyMode = "plan" | "apply";
 
 /** Describes apply runtime. */
 export interface ApplyRuntime {
+  readonly value?: RuntimeValueProvider;
+
   discover(
     loaded: LoadedConfiguration,
     resource?: string,
@@ -65,6 +68,8 @@ export function createGitHubRuntime(
   let sink: GitHubRepositoryMutationSink | undefined;
 
   return {
+    value: secretValue,
+
     async discover(loaded, repository) {
       options.traceGroup?.("organization");
       source = new GitHubRepositoryStateSource(
@@ -124,7 +129,7 @@ export async function apply(
   }
 
   const discovery = await runtime.discover(loaded, options.resource);
-  const values = options.values ?? environmentValue;
+  const values = options.values ?? runtime.value ?? environmentValue;
 
   const addResult = async (
     result: import("@octosmith/octosmith").RepositoryReport,
@@ -139,9 +144,9 @@ export async function apply(
   }
 
   for (const repository of discovery.repositories) {
-    const matchingTemplates = Object.values(loaded.templates).filter((
-      template,
-    ) => matchesSelector(template.match, repository));
+    const matchingTemplates = Object.entries(loaded.templates).filter((
+      [, candidate],
+    ) => matchesSelector(candidate.match, repository));
 
     if (
       matchingTemplates.length === 0 &&
@@ -156,9 +161,26 @@ export async function apply(
     let result: import("@octosmith/octosmith").RepositoryReport;
 
     try {
-      const desired = await resolveDesiredState(loaded, repository, values);
+      let runtimeValues = values;
+
+      if (matchingTemplates.length === 1) {
+        template = matchingTemplates[0][0];
+        runtimeValues = preflightRuntimeReferences(
+          template,
+          matchingTemplates[0][1],
+          repository,
+          values,
+        );
+      }
+
+      const desired = await resolveDesiredState(
+        loaded,
+        repository,
+        runtimeValues,
+      );
       template = desired.template;
       templateName = desired.templateName;
+
       const current = await runtime.read(desired);
       const plan = buildPlan(current, desired);
       const evaluations = buildApplyEvaluations(

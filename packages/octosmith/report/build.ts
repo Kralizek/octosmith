@@ -1,3 +1,4 @@
+import { RuntimeReferenceError } from "../configuration/runtime_references.ts";
 import type { ApplyEvaluation, Plan } from "../plan/types.ts";
 import type {
   AppliedOperationLike,
@@ -97,5 +98,8 @@ export function reportFailedRepository(
     status: "failed",
     items: [],
     error: error instanceof Error ? error.message : String(error),
+    ...(error instanceof RuntimeReferenceError && {
+      diagnostics: [error.diagnostic],
+    }),
   };
 }

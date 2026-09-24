@@ -8,6 +8,8 @@ import {
   type RepositorySelector,
   type RepositoryTemplate,
   resolveDesiredState,
+  type RuntimeReferenceDiagnostic,
+  runtimeReferenceWarnings,
 } from "../mod.ts";
 
 /**
@@ -20,8 +22,9 @@ import {
  */
 export async function validateConfigurationDirectory(
   root: string,
-): Promise<void> {
+): Promise<readonly RuntimeReferenceDiagnostic[]> {
   const loaded = await loadConfigurationDirectory(root);
+  const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
   const scope = loaded.configuration.repositories.scope;
   assertTemplatesDoNotOverlap(scope, loaded.templates);
@@ -33,6 +36,7 @@ export async function validateConfigurationDirectory(
   }
 
   for (const [name, template] of Object.entries(loaded.templates)) {
+    diagnostics.push(...runtimeReferenceWarnings(name, template));
     const inScope = selectorsCanOverlap(scope, template.match);
     const repository = repositoryForSelectors(
       name,
@@ -49,6 +53,8 @@ export async function validateConfigurationDirectory(
 
     buildPlan(emptyCurrentState(repository.name), desired);
   }
+
+  return diagnostics;
 }
 
 function assertTemplatesDoNotOverlap(
