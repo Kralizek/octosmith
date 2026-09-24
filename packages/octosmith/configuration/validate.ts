@@ -7,8 +7,8 @@ import {
   type RepositoryMetadata,
   type RepositorySelector,
   type RepositoryTemplate,
-  type Scope,
   resolveDesiredState,
+  type Scope,
 } from "../mod.ts";
 
 /**
@@ -106,7 +106,9 @@ function assertScopeCanMatchTemplate(
   // failures here.
   if (
     scope.exclude !== undefined ||
-    Object.values(templates).some((template) => template.match.exclude !== undefined)
+    Object.values(templates).some((template) =>
+      template.match.exclude !== undefined
+    )
   ) {
     return;
   }
