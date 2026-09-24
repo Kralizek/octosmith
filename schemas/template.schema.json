@@ -22,7 +22,7 @@
       "minLength": 1
     },
     "match": {
-      "$ref": "#/$defs/selector"
+      "$ref": "#/$defs/scope"
     },
     "repository": {
       "$ref": "#/$defs/repository"
@@ -746,6 +746,21 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/variableBinding"
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "include"
+      ],
+      "properties": {
+        "include": {
+          "$ref": "#/$defs/selector"
+        },
+        "exclude": {
+          "$ref": "#/$defs/selector"
+        }
       }
     }
   }
