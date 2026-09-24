@@ -187,7 +187,6 @@ async function* walkTemplateFiles(directory: string): AsyncGenerator<string> {
   }
 }
 
-
 async function composeRepositoryTemplate(
   configurationRoot: string,
   templatePath: string,
