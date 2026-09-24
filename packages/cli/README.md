@@ -61,7 +61,7 @@ Apply is not transactional. If one operation fails, earlier operations for that
 repository may already have been applied. Remaining operations for that
 repository are skipped, while other repositories can continue.
 
-## Target one repository
+## Target one resource
 
 `plan` and `apply` accept an optional resource target immediately after the
 command:
@@ -146,11 +146,11 @@ The CLI returns:
 --format <text|json>     Output format (default: text)
 -v, --verbose            Include unchanged text items in reports
 --trace                  Emit GitHub API traces to stderr
---events-output <path>   Write repository events as NDJSON
+--events-output <path>   Write resource events as NDJSON
 ```
 
 `--verbose`, `--trace`, and `--events-output` apply to `plan` and `apply`.
-`template validate` supports `--path` and `--format`.
+`resource list`, `resource create`, `template validate`, and `template permissions` support `--path` and `--format`.
 
 ## Grouped commands
 
