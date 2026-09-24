@@ -62,8 +62,11 @@ repositories:
     unmatched_repositories: ignore
 ```
 
-Repository scope may use names, teams, visibility, and custom properties. Name
-selectors support `*` and `?` glob patterns.
+Repository scope requires an `include` selector and may define an `exclude`
+selector with the same shape. A repository is in scope when it matches
+`include` and does not match `exclude`. Selectors may use names, teams,
+visibility, and custom properties. Name selectors support `*` and `?` glob
+patterns.
 
 By default, every repository discovered in scope must match exactly one
 template. Set `repositories.settings.unmatched_repositories` to `ignore` to
@@ -103,6 +106,10 @@ repository:
       ensure: exact
       source: files/CODEOWNERS
 ```
+
+Template `match` uses the same required `include` and optional `exclude`
+structure. Excluding a repository from one template does not remove it from the
+configuration scope or prevent another template from matching it.
 
 Templates can manage repository settings, teams, custom properties, Actions
 settings and values, Dependabot secrets, rulesets, environments, and files.
