@@ -37,7 +37,7 @@ Deno.test("create scaffolder uses conservative defaults", () => {
 
   assertStringIncludes(
     configuration?.content ?? "",
-    'names:\n      - "github-config"',
+    'names:\n        - "github-config"',
   );
   assertStringIncludes(
     configuration?.content ?? "",
@@ -542,7 +542,7 @@ Deno.test("create scaffolder infers repository name for parent directory", async
     const configuration = files.find((file) => file.path === "octosmith.yml");
     assertStringIncludes(
       configuration?.content ?? "",
-      'names:\n      - "parent-control"',
+      'names:\n        - "parent-control"',
     );
   } finally {
     Deno.chdir(previousWorkingDirectory);
@@ -571,7 +571,7 @@ Deno.test("create scaffolder infers repository name in current directory", async
     const configuration = files.find((file) => file.path === "octosmith.yml");
     assertStringIncludes(
       configuration?.content ?? "",
-      'names:\n      - "control-repo"',
+      'names:\n        - "control-repo"',
     );
   } finally {
     Deno.chdir(previousWorkingDirectory);
