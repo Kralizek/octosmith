@@ -244,7 +244,7 @@ Deno.test("create scaffolder serializes interpolated YAML scalars", () => {
   const scope = repositories.scope as Record<string, unknown>;
 
   assertEquals(configuration.organization, "false");
-  assertEquals(scope.names, ["true"]);
+  assertEquals((scope.include as Record<string, unknown>).names, ["true"]);
 
   const applyWorkflow = parse(applyWorkflowFile?.content ?? "") as Record<
     string,
