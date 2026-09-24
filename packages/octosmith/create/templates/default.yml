@@ -1,6 +1,7 @@
 version: 1
 kind: repository
 match:
-  names:
-    - @@REPOSITORY_NAME@@
+  include:
+    names:
+      - @@REPOSITORY_NAME@@
 repository: {}
