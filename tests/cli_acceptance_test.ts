@@ -488,7 +488,7 @@ Deno.test("missing repository variable value fails before mutation", async () =>
     );
     assertStringIncludes(
       output.join("\n"),
-      "Missing environment value: DESIRED",
+      'Required variable "DESIRED" is not available in the current context.',
     );
     assertEquals(mutations(requests), []);
   } finally {
@@ -523,7 +523,10 @@ Deno.test("missing repository secret value fails before secret mutation", async 
       ),
       1,
     );
-    assertStringIncludes(output.join("\n"), "Missing environment value: TOKEN");
+    assertStringIncludes(
+      output.join("\n"),
+      'Required secret "TOKEN" is not available in the current context.',
+    );
     assertEquals(mutations(requests), []);
   } finally {
     if (previous === undefined) {
