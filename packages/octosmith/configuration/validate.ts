@@ -3,7 +3,6 @@ import {
   type CurrentState,
   loadConfigurationDirectory,
   type LoadedConfiguration,
-  matchesScope,
   matchesSelector,
   type PropertyValue,
   type RepositoryMetadata,
