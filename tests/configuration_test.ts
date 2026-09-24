@@ -145,6 +145,75 @@ Deno.test("loads nested templates with kind-scoped path identities", async () =>
   }
 });
 
+Deno.test("template exclusion falls through to another matching template", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "primary.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        '    names: ["service-*"]',
+        "  exclude:",
+        '    names: ["service-legacy"]',
+        "repository:",
+        "  settings:",
+        "    description: primary",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "legacy.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        '    names: ["service-legacy"]',
+        "repository:",
+        "  settings:",
+        "    description: legacy",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    const primary = await resolveDesiredState(
+      loaded,
+      { name: "service-api", teams: [], properties: {} },
+      (name) => name,
+    );
+    assertEquals(primary.template, "repository:primary");
+    assertEquals(primary.repository.settings?.description, "primary");
+
+    const legacy = await resolveDesiredState(
+      loaded,
+      { name: "service-legacy", teams: [], properties: {} },
+      (name) => name,
+    );
+    assertEquals(legacy.template, "repository:legacy");
+    assertEquals(legacy.repository.settings?.description, "legacy");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("rejects nameless YAML template files", async () => {
   const root = await Deno.makeTempDir();
 
