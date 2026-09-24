@@ -279,7 +279,8 @@ function nameConstraintWitness(
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    const key = current.states.map((state) => state.join(",")).join("|");
+    const key = current.states.map((state) => state.join(",")).join("|") +
+      ":" + (current.value.length > 0 ? "non-empty" : "empty");
     if (visited.has(key)) {
       continue;
     }
