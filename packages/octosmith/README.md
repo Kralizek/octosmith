@@ -73,8 +73,10 @@ repositories:
     collection_management: explicit
 ```
 
-Scope selectors can use repository names, teams, visibility, and custom
-properties. Name selectors support `*` and `?` glob patterns.
+Repository scope requires an `include` selector and may define an `exclude`
+selector with the same shape. Matching is `include AND NOT exclude`. Selectors
+can use repository names, teams, visibility, and custom properties. Name
+selectors support `*` and `?` glob patterns.
 
 ### Repository templates
 
@@ -106,6 +108,9 @@ repository:
       ensure: exact
       source: files/dependabot.yml
 ```
+
+Template `match` uses the same required `include` and optional `exclude`
+structure. An exclusion applies only to that template.
 
 A repository template can manage:
 
