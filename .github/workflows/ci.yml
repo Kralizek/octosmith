@@ -21,6 +21,12 @@ jobs:
           deno-version: v2.x
           cache: true
 
+      - name: Install OpenCLI
+        run: go install github.com/bcdxn/opencli/cmd/ocli@v1.3.0
+
+      - name: Validate OpenCLI contract
+        run: ocli check opencli.ocs.yaml
+
       - name: Check
         run: deno task check
 
