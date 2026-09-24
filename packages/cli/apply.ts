@@ -141,8 +141,8 @@ export async function apply(
 
   for (const repository of discovery.repositories) {
     const matchingTemplates = Object.entries(loaded.templates).filter((
-      [, template],
-    ) => matchesSelector(template.match, repository));
+      [, candidate],
+    ) => matchesSelector(candidate.match, repository));
 
     if (
       matchingTemplates.length === 0 &&
@@ -157,67 +157,49 @@ export async function apply(
     let result: import("@octosmith/octosmith").RepositoryReport;
 
     try {
+      let runtimeValues = values;
+
       if (matchingTemplates.length === 1) {
         template = matchingTemplates[0][0];
-        const selectedTemplate = matchingTemplates[0][1];
-        const resolvedValues = preflightRuntimeReferences(
+        runtimeValues = preflightRuntimeReferences(
           template,
-          selectedTemplate,
+          matchingTemplates[0][1],
           repository,
           values,
         );
-        const desired = await resolveDesiredState(
-          loaded,
-          repository,
-          resolvedValues,
-        );
-        template = desired.template;
-        templateName = desired.templateName;
-        const current = await runtime.read(desired);
-        const plan = buildPlan(current, desired);
-        const evaluations = buildApplyEvaluations(
-          desired,
-          plan.operations,
-        );
+      }
 
-        if (options.mode === "plan") {
-          result = reportPlannedRepository(
+      const desired = await resolveDesiredState(
+        loaded,
+        repository,
+        runtimeValues,
+      );
+      template = desired.template;
+      templateName = desired.templateName;
+
+      const current = await runtime.read(desired);
+      const plan = buildPlan(current, desired);
+      const evaluations = buildApplyEvaluations(
+        desired,
+        plan.operations,
+      );
+
+      if (options.mode === "plan") {
+        result = reportPlannedRepository(
           desired.template,
           plan,
           evaluations,
-            desired.templateName,
-          );
-        } else {
-          const applied = await runtime.apply(plan);
-          result = reportAppliedRepository(
-            desired.template,
-            desired.repository,
-            evaluations,
-            applied.operations,
-            desired.templateName,
-          );
-        }
+          desired.templateName,
+        );
       } else {
-        const desired = await resolveDesiredState(loaded, repository, values);
-        template = desired.template;
-        templateName = desired.templateName;
-        const current = await runtime.read(desired);
-        const plan = buildPlan(current, desired);
-        const evaluations = buildApplyEvaluations(desired, plan.operations);
-        result = options.mode === "plan"
-          ? reportPlannedRepository(
-            desired.template,
-            plan,
-            evaluations,
-            desired.templateName,
-          )
-          : reportAppliedRepository(
-            desired.template,
-            desired.repository,
-            evaluations,
-            (await runtime.apply(plan)).operations,
-            desired.templateName,
-          );
+        const applied = await runtime.apply(plan);
+        result = reportAppliedRepository(
+          desired.template,
+          desired.repository,
+          evaluations,
+          applied.operations,
+          desired.templateName,
+        );
       }
     } catch (error) {
       result = reportFailedRepository(
