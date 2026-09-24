@@ -974,7 +974,7 @@ Deno.test("runtime preflight snapshots each source name once", () => {
   const template = {
     version: 1,
     kind: "repository",
-    match: { names: ["sample"] },
+    match: { include: { names: ["sample"] } },
     repository: {
       actions: {
         variables: [
