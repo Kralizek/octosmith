@@ -217,7 +217,10 @@ Deno.test("CLI rejects an explicitly empty resource target without discovery", a
     );
 
     assertEquals(requests, []);
-    assertStringIncludes(errors.join("\n"), "Resource target must not be empty");
+    assertStringIncludes(
+      errors.join("\n"),
+      "Resource target must not be empty",
+    );
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
@@ -249,7 +252,10 @@ Deno.test("CLI rejects an explicitly empty resource target after options", async
     );
 
     assertEquals(requests, []);
-    assertStringIncludes(errors.join("\n"), "Resource target must not be empty");
+    assertStringIncludes(
+      errors.join("\n"),
+      "Resource target must not be empty",
+    );
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });
@@ -281,7 +287,10 @@ Deno.test("CLI rejects an explicitly empty resource target after format option",
     );
 
     assertEquals(requests, []);
-    assertStringIncludes(errors.join("\n"), "Resource target must not be empty");
+    assertStringIncludes(
+      errors.join("\n"),
+      "Resource target must not be empty",
+    );
   } finally {
     console.error = originalError;
     await Deno.remove(root, { recursive: true });

@@ -41,7 +41,10 @@ Deno.test("OpenCLI contract reserves -v for verbose and omits a short version al
     readonly commands: readonly OpenCliCommand[];
   };
 
-  assertEquals(document.options.some((option) => option.name === "--version"), true);
+  assertEquals(
+    document.options.some((option) => option.name === "--version"),
+    true,
+  );
   assertEquals(
     document.options.some((option) =>
       option.name === "--version" && option.aliases?.includes("-V")
@@ -49,9 +52,11 @@ Deno.test("OpenCLI contract reserves -v for verbose and omits a short version al
     false,
   );
 
-  for (const command of document.commands.filter((command) =>
-    command.name === "plan" || command.name === "apply"
-  )) {
+  for (
+    const command of document.commands.filter((command) =>
+      command.name === "plan" || command.name === "apply"
+    )
+  ) {
     assertEquals(
       command.options?.some((option) =>
         option.name === "--verbose" && option.aliases?.includes("-v")

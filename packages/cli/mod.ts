@@ -69,9 +69,7 @@ function createCli(
   for (const mode of ["plan", "apply"] as const) {
     const command = new Command()
       .description(
-        mode === "plan"
-          ? "Show required changes."
-          : "Apply required changes.",
+        mode === "plan" ? "Show required changes." : "Apply required changes.",
       )
       .arguments("[resource:string]")
       .option("-p, --path <path:string>", "Configuration directory.", {
@@ -170,8 +168,9 @@ function createCli(
           renderOutput(
             format,
             report,
-            (value) =>
-              renderReport(value, { verbose: commandOptions.verbose }),
+            (value) => renderReport(value, {
+              verbose: commandOptions.verbose,
+            }),
           ),
         );
 

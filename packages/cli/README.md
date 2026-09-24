@@ -71,8 +71,8 @@ octosmith plan api-service --path ./configuration
 octosmith apply api-service --path ./configuration
 ```
 
-The target narrows the configured scope; it does not override it. Today the
-only supported top-level resource target is a repository, so a resource outside
+The target narrows the configured scope; it does not override it. Today the only
+supported top-level resource target is a repository, so a resource outside
 `repositories.scope` is rejected and never mutated.
 
 ## Authentication
@@ -104,9 +104,9 @@ octosmith apply --format json --path ./configuration
 JSON contains the full structured report. Text hides unchanged items unless
 `--verbose` is supplied.
 
-Use `--trace` to write GitHub API trace lines to stderr. Traces contain the
-HTTP method, endpoint path, and status only; they do not include bodies,
-headers, query parameters, or credentials. The final report remains on stdout.
+Use `--trace` to write GitHub API trace lines to stderr. Traces contain the HTTP
+method, endpoint path, and status only; they do not include bodies, headers,
+query parameters, or credentials. The final report remains on stdout.
 
 ## Resource events
 
