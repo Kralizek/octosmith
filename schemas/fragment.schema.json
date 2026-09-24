@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/fragment.schema.json",
+  "title": "Octosmith fragment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "kind",
+    "resource"
+  ],
+  "anyOf": [
+    {
+      "required": [
+        "includes"
+      ]
+    },
+    {
+      "required": [
+        "repository"
+      ]
+    }
+  ],
+  "properties": {
+    "version": {
+      "const": 1
+    },
+    "kind": {
+      "const": "fragment"
+    },
+    "resource": {
+      "const": "repository"
+    },
+    "includes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "repository": {
+      "$ref": "./resources/repository.schema.json"
+    }
+  }
+}
