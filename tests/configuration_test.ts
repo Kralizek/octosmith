@@ -200,7 +200,7 @@ Deno.test("template exclusion falls through to another matching template", async
       (name) => name,
     );
     assertEquals(primary.template, "repository:primary");
-    assertEquals(primary.repository.settings?.description, "primary");
+    assertEquals(primary.settings?.description, "primary");
 
     const legacy = await resolveDesiredState(
       loaded,
@@ -208,7 +208,7 @@ Deno.test("template exclusion falls through to another matching template", async
       (name) => name,
     );
     assertEquals(legacy.template, "repository:legacy");
-    assertEquals(legacy.repository.settings?.description, "legacy");
+    assertEquals(legacy.settings?.description, "legacy");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
