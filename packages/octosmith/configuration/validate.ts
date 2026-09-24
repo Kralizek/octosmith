@@ -3,14 +3,14 @@ import {
   type CurrentState,
   loadConfigurationDirectory,
   type LoadedConfiguration,
+  matchesScope,
   type PropertyValue,
   type RepositoryMetadata,
   type RepositorySelector,
   type RepositoryTemplate,
   resolveDesiredState,
-  type Scope,
-  matchesScope,
   type RuntimeReferenceDiagnostic,
+  type Scope,
   runtimeReferenceWarnings,
 } from "../mod.ts";
 
@@ -84,7 +84,9 @@ function assertTemplatesDoNotOverlap(
       rightIndex++
     ) {
       const [rightName, right] = entries[rightIndex];
-      const leftInclude = left.match.include === "all" ? {} : left.match.include;
+      const leftInclude = left.match.include === "all"
+        ? {}
+        : left.match.include;
       const rightInclude = right.match.include === "all"
         ? {}
         : right.match.include;
@@ -150,7 +152,9 @@ function assertScopeCanMatchTemplate(
 
   if (
     templateSelectors.length === 0 ||
-    !templateSelectors.some((selector) => selectorsCanOverlap(scopeInclude, selector))
+    !templateSelectors.some((selector) =>
+      selectorsCanOverlap(scopeInclude, selector)
+    )
   ) {
     throw new Error("Configured repository scope cannot match any template");
   }
