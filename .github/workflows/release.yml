@@ -102,15 +102,21 @@ jobs:
             }
 
             const contractFile = "opencli.ocs.yaml";
-            const contract = await Deno.readTextFile(contractFile);
-            const updatedContract = contract.replace(
-              /(?<=^info:\n(?:.*\n)*?  version: ")[^"]+(?="$)/m,
-              version,
-            );
-            if (updatedContract === contract) {
-              throw new Error("Could not update OpenCLI contract version");
+            const contractLines = (await Deno.readTextFile(contractFile)).split("\n");
+            const infoIndex = contractLines.findIndex((line) => line === "info:");
+            if (infoIndex < 0) {
+              throw new Error("OpenCLI contract is missing info");
             }
-            await Deno.writeTextFile(contractFile, updatedContract);
+
+            const versionIndex = contractLines.findIndex(
+              (line, index) => index > infoIndex && line.startsWith("  version: "),
+            );
+            if (versionIndex < 0) {
+              throw new Error("OpenCLI contract is missing info.version");
+            }
+
+            contractLines[versionIndex] = `  version: "${version}"`;
+            await Deno.writeTextFile(contractFile, contractLines.join("\n"));
           '
 
       - name: Synchronize package schemas
