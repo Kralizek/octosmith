@@ -39,6 +39,7 @@ validator.addSchema(repositorySelectorSchema);
 const validateConfiguration = validator.compile(configurationSchema);
 const validateTemplate = validator.compile(templateSchema);
 const validateFragment = validator.compile(fragmentSchema);
+const validateRepository = validator.compile(repositorySchema);
 
 /** Describes loaded configuration. */
 export interface LoadedConfiguration {
@@ -214,9 +215,15 @@ async function composeRepositoryTemplate(
     );
   }
 
+  const effectiveRepository = mergeRepositoryConfigurations(
+    repository,
+    template.repository,
+  );
+  validateEffectiveRepository(effectiveRepository, templatePath);
+
   return {
     ...template,
-    repository: mergeRepositoryConfigurations(repository, template.repository),
+    repository: effectiveRepository,
   };
 }
 
@@ -329,6 +336,58 @@ function mergeValues(earlier: unknown, later: unknown): unknown {
   }
 
   return later;
+}
+
+function validateEffectiveRepository(
+  repository: RepositoryConfiguration,
+  templatePath: string,
+): void {
+  const value = denormalizeYaml(repository);
+
+  if (!validateRepository(value)) {
+    const errors = validateRepository.errors?.map((error) =>
+      (error.instancePath || "/") + " " + error.message +
+      (error.keyword === "additionalProperties"
+        ? ": " + error.params.additionalProperty
+        : "")
+    ).join("; ");
+    throw new Error(
+      "Invalid effective repository configuration in " + templatePath +
+        ": " + errors,
+    );
+  }
+}
+
+function denormalizeYaml(
+  value: unknown,
+  path: readonly string[] = [],
+): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => denormalizeYaml(item, path));
+  }
+
+  if (value === null || typeof value !== "object") {
+    return value;
+  }
+
+  const preserveKeys = path.at(-1) === "properties" ||
+    path.at(-1) === "customProperties" ||
+    path.at(-1) === "files";
+
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>).map(([key, child]) => {
+      const denormalizedKey = preserveKeys ? key : snakeCaseKey(key);
+
+      return [
+        denormalizedKey,
+        denormalizeYaml(child, [...path, key]),
+      ];
+    }),
+  );
+}
+
+function snakeCaseKey(key: string): string {
+  return key.replace(/[A-Z]/g, (letter) => "_" + letter.toLowerCase());
 }
 
 function isWithinConfigurationRoot(root: string, path: string): boolean {
