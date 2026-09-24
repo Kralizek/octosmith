@@ -146,8 +146,17 @@ secrets:
     to: DEPLOY_TOKEN
 ```
 
-Plan does not require secret values. Apply resolves all required secret values
-for a repository before mutating it.
+`template validate` remains fully offline: it validates reference shape and reports
+runtime-backed values as warnings without reading their values.
+
+`plan` resolves variables and checks secret availability only for resources and
+templates participating in the current plan. Missing required values fail that
+resource before current GitHub state is read. References used only by unmatched
+templates do not fail planning.
+
+Secret values are never materialized into desired state, reports, or plans.
+`apply` resolves required secrets again immediately before mutation so a future
+persisted plan can be applied safely in a different runtime context.
 
 ## Managed files
 
