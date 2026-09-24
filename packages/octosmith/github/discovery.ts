@@ -3,8 +3,8 @@ import type {
   PropertyValue,
   RepositoryMetadata,
   RepositorySelector,
-  Scope,
   RepositoryVisibility,
+  Scope,
 } from "../mod.ts";
 import { matchesScope, matchesSelector } from "../mod.ts";
 import type { GitHubClient, GitHubQueryValue } from "./client.ts";
