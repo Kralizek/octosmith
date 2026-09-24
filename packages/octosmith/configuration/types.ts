@@ -71,7 +71,17 @@ export interface RepositoryTemplate {
   readonly kind: "repository";
   readonly name?: string;
   readonly match: RepositorySelector;
+  readonly includes?: readonly string[];
   readonly repository: RepositoryConfiguration;
+}
+
+/** Describes a reusable repository configuration fragment. */
+export interface RepositoryFragment {
+  readonly version: 1;
+  readonly kind: "fragment";
+  readonly resource: "repository";
+  readonly includes?: readonly string[];
+  readonly repository?: RepositoryConfiguration;
 }
 
 /** Describes repository configuration. */
