@@ -138,8 +138,7 @@ function assertScopeCanMatchTemplate(
           scope.exclude,
           template.match.exclude,
         ].filter(
-          (selector): selector is RepositorySelector =>
-            selector !== undefined,
+          (selector): selector is RepositorySelector => selector !== undefined,
         ),
         templateName,
       ) !== undefined;
@@ -164,8 +163,7 @@ function assertScopeCanMatchTemplate(
         scope.exclude,
         template.match.exclude,
       ].filter(
-        (selector): selector is RepositorySelector =>
-          selector !== undefined,
+        (selector): selector is RepositorySelector => selector !== undefined,
       ),
       templateName,
     ) !== undefined;
