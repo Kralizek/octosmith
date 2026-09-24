@@ -29,6 +29,8 @@ export type ApplyMode = "plan" | "apply";
 
 /** Describes apply runtime. */
 export interface ApplyRuntime {
+  readonly value?: RuntimeValueProvider;
+
   discover(
     loaded: LoadedConfiguration,
     resource?: string,
@@ -66,6 +68,8 @@ export function createGitHubRuntime(
   let sink: GitHubRepositoryMutationSink | undefined;
 
   return {
+    value: secretValue,
+
     async discover(loaded, repository) {
       options.traceGroup?.("organization");
       source = new GitHubRepositoryStateSource(
@@ -125,7 +129,7 @@ export async function apply(
   }
 
   const discovery = await runtime.discover(loaded, options.resource);
-  const values = options.values ?? environmentValue;
+  const values = options.values ?? runtime.value ?? environmentValue;
 
   const addResult = async (
     result: import("@octosmith/octosmith").RepositoryReport,
