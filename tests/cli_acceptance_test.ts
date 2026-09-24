@@ -1102,7 +1102,7 @@ Deno.test("CLI verbose text includes unchanged apply items", async () => {
 
     assertEquals(
       await main(
-        ["plan", "--verbose", "--path", root],
+        ["plan", "-v", "--path", root],
         { runtime, write: (value) => output.push(value) },
       ),
       0,
