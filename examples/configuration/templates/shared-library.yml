@@ -5,7 +5,6 @@ kind: repository
 
 match:
   include:
-    include:
       properties:
         distribution: shared-library
 
