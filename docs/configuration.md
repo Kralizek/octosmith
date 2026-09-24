@@ -146,8 +146,8 @@ secrets:
     to: DEPLOY_TOKEN
 ```
 
-`template validate` remains fully offline: it validates reference shape and reports
-runtime-backed values as warnings without reading their values.
+`template validate` remains fully offline: it validates reference shape and
+reports runtime-backed values as warnings without reading their values.
 
 `plan` resolves variables and checks secret availability only for resources and
 templates participating in the current plan. Missing required values fail that
