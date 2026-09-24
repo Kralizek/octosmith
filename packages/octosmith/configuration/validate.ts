@@ -260,10 +260,6 @@ function nameConstraintWitness(
     (names): names is readonly string[] => names !== undefined,
   );
 
-  if (positiveGroups.length === 0 && negativeSelectors.length === 0) {
-    return "";
-  }
-
   const patternGroups = [...positiveGroups, ...negativeSelectors];
   const patterns = patternGroups.flatMap((group) => group);
   const groupOffsets: number[] = [];
@@ -303,7 +299,7 @@ function nameConstraintWitness(
       .slice(positiveGroups.length)
       .some(Boolean);
 
-    if (positiveMatches && !negativeMatches) {
+    if (positiveMatches && !negativeMatches && current.value.length > 0) {
       return current.value;
     }
 
