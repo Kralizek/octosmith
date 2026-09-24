@@ -10,8 +10,8 @@ import {
   type RepositoryTemplate,
   resolveDesiredState,
   type RuntimeReferenceDiagnostic,
-  type Scope,
   runtimeReferenceWarnings,
+  type Scope,
 } from "../mod.ts";
 
 /**
