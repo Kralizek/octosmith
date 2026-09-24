@@ -1,5 +1,9 @@
 import type { RepositoryMetadata } from "./resolve.ts";
-import type { RepositoryTemplate, SecretConfiguration, VariableConfiguration } from "./types.ts";
+import type {
+  RepositoryTemplate,
+  SecretConfiguration,
+  VariableConfiguration,
+} from "./types.ts";
 
 /** Describes a runtime-backed value reference in a template. */
 export interface RuntimeReference {
@@ -57,8 +61,8 @@ export function collectRuntimeReferences(
   );
 
   for (
-    const [environmentIndex, environment] of
-      (template.repository.environments ?? []).entries()
+    const [environmentIndex, environment]
+      of (template.repository.environments ?? []).entries()
   ) {
     collectVariables(
       references,
