@@ -6,5 +6,6 @@ organization: example-org
 
 repositories:
   scope:
-    teams:
-      - platform-team
+    include:
+      teams:
+        - platform-team

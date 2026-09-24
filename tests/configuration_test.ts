@@ -23,7 +23,9 @@ Deno.test("loads example configuration and templates", async () => {
     organization: "example-org",
     repositories: {
       scope: {
-        teams: ["platform-team"],
+        include: {
+          teams: ["platform-team"],
+        },
       },
     },
   });
@@ -96,8 +98,9 @@ Deno.test("loads nested templates with kind-scoped path identities", async () =>
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - '*'",
+        "    include:",
+        "      names:",
+        "        - '*'",
         "",
       ].join("\n"),
     );
@@ -110,8 +113,9 @@ Deno.test("loads nested templates with kind-scoped path identities", async () =>
           "kind: repository",
           "name: Backend services",
           "match:",
-          "  names:",
-          "    - " + team + "-backend",
+          "  include:",
+          "    names:",
+          "      - " + team + "-backend",
           "repository: {}",
           "",
         ].join("\n"),
@@ -141,6 +145,75 @@ Deno.test("loads nested templates with kind-scoped path identities", async () =>
   }
 });
 
+Deno.test("template exclusion falls through to another matching template", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "primary.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        '    names: ["service-*"]',
+        "  exclude:",
+        '    names: ["service-legacy"]',
+        "repository:",
+        "  settings:",
+        "    description: primary",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "legacy.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        '    names: ["service-legacy"]',
+        "repository:",
+        "  settings:",
+        "    description: legacy",
+        "",
+      ].join("\n"),
+    );
+
+    const loaded = await loadConfigurationDirectory(root);
+
+    const primary = await resolveDesiredState(
+      loaded,
+      { name: "service-api", teams: [], properties: {} },
+      (name) => name,
+    );
+    assertEquals(primary.template, "repository:primary");
+    assertEquals(primary.settings?.description, "primary");
+
+    const legacy = await resolveDesiredState(
+      loaded,
+      { name: "service-legacy", teams: [], properties: {} },
+      (name) => name,
+    );
+    assertEquals(legacy.template, "repository:legacy");
+    assertEquals(legacy.settings?.description, "legacy");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("rejects nameless YAML template files", async () => {
   const root = await Deno.makeTempDir();
 
@@ -153,8 +226,9 @@ Deno.test("rejects nameless YAML template files", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -164,8 +238,9 @@ Deno.test("rejects nameless YAML template files", async () => {
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository: {}",
         "",
       ].join("\n"),
@@ -193,8 +268,9 @@ Deno.test("rejects colliding template identities across yaml extensions", async 
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -203,8 +279,9 @@ Deno.test("rejects colliding template identities across yaml extensions", async 
       "version: 1",
       "kind: repository",
       "match:",
-      "  names:",
-      "    - sample",
+      "  include:",
+      "    names:",
+      "      - sample",
       "repository: {}",
       "",
     ].join("\n");
@@ -234,8 +311,9 @@ Deno.test("template version is required", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -244,8 +322,9 @@ Deno.test("template version is required", async () => {
       [
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository: {}",
         "",
       ].join("\n"),
@@ -273,8 +352,9 @@ Deno.test("normalizes read and write team permission aliases", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -284,8 +364,9 @@ Deno.test("normalizes read and write team permission aliases", async () => {
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  teams:",
         "    - name: readers",
@@ -330,8 +411,9 @@ Deno.test("preserves inherited object keys as custom team permissions", async ()
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -341,8 +423,9 @@ Deno.test("preserves inherited object keys as custom team permissions", async ()
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  teams:",
         "    - name: maintainers",
@@ -390,8 +473,9 @@ Deno.test("validation allows literal scope entries without templates when unmatc
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - unmatched",
+        "    include:",
+        "      names:",
+        "        - unmatched",
         "  settings:",
         "    unmatched_repositories: ignore",
         "",
@@ -417,8 +501,9 @@ Deno.test("rejects symlinked root configuration file", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -447,8 +532,9 @@ Deno.test("rejects symlinked templates directory", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -505,8 +591,9 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    properties:",
-        "      repository_type: code",
+        "    include:",
+        "      properties:",
+        "        repository_type: code",
         "",
       ].join("\n"),
     );
@@ -517,8 +604,9 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
         "version: 1",
         "kind: repository",
         "match:",
-        "  properties:",
-        "    repository_type: code",
+        "  include:",
+        "    properties:",
+        "      repository_type: code",
         "repository:",
         "  custom_properties:",
         "    deployment_region: eu-north-1",
@@ -537,11 +625,15 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
 
     const loaded = await loadConfigurationDirectory(root);
 
-    assertEquals(loaded.configuration.repositories.scope.properties, {
-      repository_type: "code",
+    assertEquals(loaded.configuration.repositories.scope.include, {
+      properties: {
+        repository_type: "code",
+      },
     });
-    assertEquals(loaded.templates["repository:code"].match.properties, {
-      repository_type: "code",
+    assertEquals(loaded.templates["repository:code"].match.include, {
+      properties: {
+        repository_type: "code",
+      },
     });
     assertEquals(
       loaded.templates["repository:code"].repository?.customProperties,
@@ -613,8 +705,9 @@ for (
           "organization: example-org",
           "repositories:",
           "  scope:",
-          "    names:",
-          "      - sample",
+          "    include:",
+          "      names:",
+          "        - sample",
           "",
         ].join("\n"),
       );
@@ -634,8 +727,9 @@ for (
           "version: 1",
           "kind: repository",
           "match:",
-          "  names:",
-          "    - sample",
+          "  include:",
+          "    names:",
+          "      - sample",
           "repository:",
           "  files:",
           "    README.md:",
@@ -679,8 +773,9 @@ Deno.test("rejects aggregate configuration file sources larger than 50 MiB", asy
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -712,8 +807,9 @@ Deno.test("rejects aggregate configuration file sources larger than 50 MiB", asy
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  files:",
         ...fileEntries,
@@ -751,8 +847,9 @@ Deno.test("rejects configuration file sources larger than 10 MiB", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -762,8 +859,9 @@ Deno.test("rejects configuration file sources larger than 10 MiB", async () => {
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  files:",
         "    README.md:",
@@ -816,8 +914,9 @@ Deno.test("rejects symlinked configuration file sources escaping root", async ()
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -827,8 +926,9 @@ Deno.test("rejects symlinked configuration file sources escaping root", async ()
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  files:",
         "    README.md:",
@@ -869,8 +969,9 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -881,8 +982,9 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  actions:",
         "    enabled: true",
@@ -941,7 +1043,7 @@ Deno.test("runtime preflight snapshots each source name once", () => {
   const template = {
     version: 1,
     kind: "repository",
-    match: { names: ["sample"] },
+    match: { include: { names: ["sample"] } },
     repository: {
       actions: {
         variables: [
@@ -989,8 +1091,9 @@ Deno.test("resolves variable and secret binding forms", async () => {
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -1000,8 +1103,9 @@ Deno.test("resolves variable and secret binding forms", async () => {
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  actions:",
         "    variables:",
@@ -1084,8 +1188,9 @@ Deno.test("preserves omitted environment members in desired state", async () => 
         "organization: example-org",
         "repositories:",
         "  scope:",
-        "    names:",
-        "      - sample",
+        "    include:",
+        "      names:",
+        "        - sample",
         "",
       ].join("\n"),
     );
@@ -1096,8 +1201,9 @@ Deno.test("preserves omitted environment members in desired state", async () => 
         "version: 1",
         "kind: repository",
         "match:",
-        "  names:",
-        "    - sample",
+        "  include:",
+        "    names:",
+        "      - sample",
         "repository:",
         "  environments:",
         "    - name: production",
@@ -1171,8 +1277,9 @@ for (
           "organization: example-org",
           "repositories:",
           "  scope:",
-          "    names:",
-          "      - sample",
+          "    include:",
+          "      names:",
+          "        - sample",
           "",
         ].join("\n"),
       );
@@ -1182,8 +1289,9 @@ for (
           "version: 1",
           "kind: repository",
           "match:",
-          "  names:",
-          "    - sample",
+          "  include:",
+          "    names:",
+          "      - sample",
           "repository:",
           "  rulesets:",
           "    - name: policy",

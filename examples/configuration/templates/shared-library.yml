@@ -4,8 +4,9 @@ version: 1
 kind: repository
 
 match:
-  properties:
-    distribution: shared-library
+  include:
+    properties:
+      distribution: shared-library
 
 repository:
   settings:

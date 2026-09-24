@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/scopes/repository.schema.json",
+  "title": "Octosmith repository scope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "include"
+  ],
+  "properties": {
+    "include": {
+      "oneOf": [
+        {
+          "const": "all"
+        },
+        {
+          "$ref": "../selectors/repository.schema.json"
+        }
+      ]
+    },
+    "exclude": {
+      "$ref": "../selectors/repository.schema.json"
+    }
+  }
+}

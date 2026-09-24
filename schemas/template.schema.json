@@ -30,7 +30,7 @@
       }
     },
     "match": {
-      "$ref": "./selectors/repository.schema.json"
+      "$ref": "./scopes/repository.schema.json"
     },
     "repository": {
       "$ref": "./resources/repository.schema.json"

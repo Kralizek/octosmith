@@ -22,7 +22,7 @@ export interface Configuration {
 
 /** Describes repositories configuration. */
 export interface RepositoriesConfiguration {
-  readonly scope: RepositorySelector;
+  readonly scope: Scope<RepositorySelector>;
   readonly settings?: RepositoryManagementSettings;
   readonly fileChanges?: FileChangesConfiguration;
 }
@@ -57,6 +57,15 @@ export interface RepositoryManagementSettings {
   readonly unmatchedRepositories?: "error" | "ignore";
 }
 
+/** Describes the inclusive side of a selection scope. */
+export type Include<TSelector> = TSelector | "all";
+
+/** Describes include/exclude selection semantics. */
+export interface Scope<TSelector> {
+  readonly include: Include<TSelector>;
+  readonly exclude?: TSelector;
+}
+
 /** Describes repository selector. */
 export interface RepositorySelector {
   readonly names?: readonly string[];
@@ -70,7 +79,7 @@ export interface RepositoryTemplate {
   readonly version: 1;
   readonly kind: "repository";
   readonly name?: string;
-  readonly match: RepositorySelector;
+  readonly match: Scope<RepositorySelector>;
   readonly includes?: readonly string[];
   readonly repository: RepositoryConfiguration;
 }

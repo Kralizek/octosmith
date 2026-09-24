@@ -5,12 +5,12 @@ import { loadConfigurationDirectory } from "../packages/octosmith/mod.ts";
 const configuration = {
   version: 1,
   organization: "acme",
-  repositories: { scope: { names: ["sample"] } },
+  repositories: { scope: { include: { names: ["sample"] } } },
 };
 const template = {
   version: 1,
   kind: "repository",
-  match: { names: ["*"] },
+  match: { include: { names: ["*"] } },
   repository: {},
 };
 
@@ -46,7 +46,7 @@ Deno.test("configuration rejects an empty scope", async () => {
 Deno.test("configuration rejects missing template kind", async () => {
   await withConfiguration(
     configuration,
-    { match: { names: ["*"] }, repository: {} },
+    { match: { include: { names: ["*"] } }, repository: {} },
     (root) =>
       assertRejects(
         () => loadConfigurationDirectory(root),
@@ -59,7 +59,11 @@ Deno.test("configuration rejects missing template kind", async () => {
 Deno.test("configuration rejects unsupported template kind", async () => {
   await withConfiguration(
     configuration,
-    { kind: "organization", match: { names: ["*"] }, repository: {} },
+    {
+      kind: "organization",
+      match: { include: { names: ["*"] } },
+      repository: {},
+    },
     (root) =>
       assertRejects(
         () => loadConfigurationDirectory(root),
@@ -69,10 +73,34 @@ Deno.test("configuration rejects unsupported template kind", async () => {
   );
 });
 
+Deno.test("configuration accepts include all", async () => {
+  await withConfiguration(
+    {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: "all" } },
+    },
+    {
+      version: 1,
+      kind: "repository",
+      match: { include: "all", exclude: { names: ["legacy-*"] } },
+      repository: {},
+    },
+    async (root) => {
+      const loaded = await loadConfigurationDirectory(root);
+      assertEquals(loaded.configuration.repositories.scope.include, "all");
+      assertEquals(
+        loaded.templates["repository:code"].match.include,
+        "all",
+      );
+    },
+  );
+});
+
 Deno.test("configuration rejects repository template without repository body", async () => {
   await withConfiguration(
     configuration,
-    { version: 1, kind: "repository", match: { names: ["*"] } },
+    { version: 1, kind: "repository", match: { include: { names: ["*"] } } },
     (root) =>
       assertRejects(
         () => loadConfigurationDirectory(root),
@@ -88,7 +116,7 @@ Deno.test("configuration accepts Actions and Dependabot value blocks", async () 
     {
       version: 1,
       kind: "repository",
-      match: { names: ["*"] },
+      match: { include: { names: ["*"] } },
       repository: {
         actions: {
           secrets: [
@@ -141,7 +169,7 @@ Deno.test("configuration rejects empty file_changes", async () => {
     {
       ...configuration,
       repositories: {
-        scope: { names: ["sample"] },
+        scope: { include: { names: ["sample"] } },
         file_changes: {},
       },
     },
@@ -160,7 +188,7 @@ Deno.test("configuration rejects pull_request settings in direct mode", async ()
     {
       ...configuration,
       repositories: {
-        scope: { names: ["sample"] },
+        scope: { include: { names: ["sample"] } },
         file_changes: {
           mode: "direct",
           pull_request: { title: "Not allowed" },

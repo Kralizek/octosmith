@@ -65,8 +65,9 @@ organization: acme
 
 repositories:
   scope:
-    names:
-      - "service-*"
+    include:
+      names:
+        - "service-*"
 
   settings:
     collection_management: explicit
@@ -88,8 +89,9 @@ version: 1
 kind: repository
 
 match:
-  names:
-    - "service-*"
+  include:
+    names:
+      - "service-*"
 
 repository:
   settings:
@@ -228,3 +230,7 @@ Useful options are:
 
 The generated repository starts scoped to itself so the initial apply cannot
 unexpectedly manage an entire organization.
+
+`include` is required and may be either a selector or the literal `all`. Use
+`include: all` when the scope starts from every resource and only `exclude`
+narrows it.
