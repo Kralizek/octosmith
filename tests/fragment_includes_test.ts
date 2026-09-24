@@ -427,7 +427,6 @@ Deno.test("rejects fragment include chains deeper than 32 levels", async () => {
   }
 });
 
-
 Deno.test("rejects invalid effective configurations produced by merging variants", async () => {
   const root = await createRoot();
   try {
