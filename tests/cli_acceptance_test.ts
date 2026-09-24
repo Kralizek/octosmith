@@ -834,7 +834,7 @@ async function safetyConfigurationDirectory(
       version: 1,
       organization: "acme",
       repositories: {
-        scope,
+        scope: { include: scope },
         ...(collections && {
           settings: { collection_management: collections },
         }),
@@ -856,7 +856,7 @@ async function safetyConfigurationDirectory(
       JSON.stringify({
         version: 1,
         kind: "repository",
-        match: value.match,
+        match: { include: value.match },
         repository,
       }),
     );
@@ -1560,7 +1560,7 @@ async function configurationDirectory(
         "repositories:",
         "  scope:",
         "    include:",
-        '    names: ["*"]',
+        '      names: ["*"]',
         ...(collections
           ? [
             "  settings:",
