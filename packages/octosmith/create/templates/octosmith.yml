@@ -2,7 +2,8 @@ version: 1
 organization: @@ORGANIZATION@@
 repositories:
   scope:
-    names:
-      - @@REPOSITORY_NAME@@
+    include:
+      names:
+        - @@REPOSITORY_NAME@@
   settings:
     collection_management: @@COLLECTION_MANAGEMENT@@
