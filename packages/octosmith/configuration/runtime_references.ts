@@ -91,14 +91,15 @@ export function preflightRuntimeReferences(
   repository: RepositoryMetadata,
   values: (name: string) => string,
 ): (name: string) => string {
-  const variables = new Map<string, string>();
+  const resolved = new Map<string, string>();
 
   for (const reference of collectRuntimeReferences(template)) {
+    if (resolved.has(reference.name)) {
+      continue;
+    }
+
     try {
-      const value = values(reference.name);
-      if (reference.kind === "variable") {
-        variables.set(reference.name, value);
-      }
+      resolved.set(reference.name, values(reference.name));
     } catch {
       throw new RuntimeReferenceError({
         severity: "error",
@@ -117,7 +118,7 @@ export function preflightRuntimeReferences(
   }
 
   return (name) => {
-    const value = variables.get(name);
+    const value = resolved.get(name);
     return value === undefined ? values(name) : value;
   };
 }
