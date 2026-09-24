@@ -101,8 +101,12 @@ function createCli(
       mode,
       command.action(async (commandOptions, resource?: string) => {
         assertResourcePosition(args, mode, resource);
+        const modeOptions = commandOptions as typeof commandOptions & {
+          readonly plan?: string;
+          readonly out?: string;
+        };
 
-        if (mode === "apply" && commandOptions.plan !== undefined) {
+        if (mode === "apply" && modeOptions.plan !== undefined) {
           if (resource !== undefined) {
             throw new Error(
               "Cannot combine a resource target with --plan",
@@ -112,7 +116,7 @@ function createCli(
           throw new Error("Persisted plan apply is not implemented yet");
         }
 
-        if (mode === "plan" && commandOptions.out !== undefined) {
+        if (mode === "plan" && modeOptions.out !== undefined) {
           throw new Error("Persisted plan output is not implemented yet");
         }
 
