@@ -61,7 +61,7 @@ jobs:
           mode: plan
           path: ${{ runner.temp }}/octosmith-action-smoke
           github-token: ${{ github.token }}
-          repository: octosmith
+          resource: octosmith
           format: json
 
       - name: Validate packages
