@@ -303,7 +303,7 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
       "match:",
       "  include:",
       "    names:",
-      "    - sample",
+      "      - sample",
       "repository:",
       "  actions:",
       "    variables:",

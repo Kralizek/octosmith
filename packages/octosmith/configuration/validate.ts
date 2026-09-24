@@ -119,18 +119,7 @@ function assertScopeCanMatchTemplate(
   templates: Readonly<Record<string, RepositoryTemplate>>,
 ): void {
   const scopeInclude = scope.include === "all" ? {} : scope.include;
-  const templateSelectors = Object.values(templates).map((template) =>
-    template.match.include === "all" ? {} : template.match.include
-  );
-
-  if (
-    scope.exclude !== undefined ||
-    Object.values(templates).some((template) =>
-      template.match.exclude !== undefined
-    )
-  ) {
-    return;
-  }
+  const entries = Object.entries(templates);
 
   for (const name of scopeInclude.names ?? []) {
     if (name.includes("*") || name.includes("?")) {
@@ -138,9 +127,23 @@ function assertScopeCanMatchTemplate(
     }
 
     const literalName: RepositorySelector = { names: [name] };
-    const possible = templateSelectors.some((selector) =>
-      selectorsCanOverlap(scopeInclude, literalName, selector)
-    );
+    const possible = entries.some(([templateName, template]) => {
+      const templateInclude = template.match.include === "all"
+        ? {}
+        : template.match.include;
+
+      return scopeIntersectionWitness(
+        [scopeInclude, literalName, templateInclude],
+        [
+          scope.exclude,
+          template.match.exclude,
+        ].filter(
+          (selector): selector is RepositorySelector =>
+            selector !== undefined,
+        ),
+        templateName,
+      ) !== undefined;
+    });
 
     if (!possible) {
       throw new Error(
@@ -150,12 +153,25 @@ function assertScopeCanMatchTemplate(
     }
   }
 
-  if (
-    templateSelectors.length === 0 ||
-    !templateSelectors.some((selector) =>
-      selectorsCanOverlap(scopeInclude, selector)
-    )
-  ) {
+  const anyTemplateReachable = entries.some(([templateName, template]) => {
+    const templateInclude = template.match.include === "all"
+      ? {}
+      : template.match.include;
+
+    return scopeIntersectionWitness(
+      [scopeInclude, templateInclude],
+      [
+        scope.exclude,
+        template.match.exclude,
+      ].filter(
+        (selector): selector is RepositorySelector =>
+          selector !== undefined,
+      ),
+      templateName,
+    ) !== undefined;
+  });
+
+  if (!anyTemplateReachable) {
     throw new Error("Configured repository scope cannot match any template");
   }
 }

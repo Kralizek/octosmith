@@ -65,7 +65,9 @@ organization: acme
 
 repositories:
   scope:
-    include: all
+    include:
+      names:
+        - "service-*"
 
   settings:
     collection_management: explicit

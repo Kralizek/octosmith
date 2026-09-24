@@ -390,6 +390,54 @@ Deno.test("validate detects overlap through an alternate visibility witness", as
   }
 });
 
+Deno.test("validate rejects scope when exclusions make every template unreachable", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/default.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include: all",
+        "  exclude:",
+        '    names: ["*"]',
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    const errors: string[] = [];
+    const originalError = console.error;
+    try {
+      console.error = (...values: unknown[]) =>
+        errors.push(values.map(String).join(" "));
+      assertEquals(await main(["template", "validate", "--path", root]), 1);
+      assertStringIncludes(
+        errors.join("\n"),
+        "Configured repository scope cannot match any template",
+      );
+    } finally {
+      console.error = originalError;
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate materializes templates independently from exclusions", async () => {
   const root = await Deno.makeTempDir();
 
