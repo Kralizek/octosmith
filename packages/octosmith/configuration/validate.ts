@@ -4,6 +4,7 @@ import {
   loadConfigurationDirectory,
   type LoadedConfiguration,
   matchesScope,
+  matchesSelector,
   type PropertyValue,
   type RepositoryMetadata,
   type RepositorySelector,
@@ -91,19 +92,19 @@ function assertTemplatesDoNotOverlap(
         ? {}
         : right.match.include;
 
-      if (!selectorsCanOverlap(scopeInclude, leftInclude, rightInclude)) {
-        continue;
-      }
-
-      const witness = repositoryForSelectors(
-        leftName + "-" + rightName,
-        [scopeInclude, leftInclude, rightInclude],
-      );
-
       if (
-        matchesScope(scope, witness) &&
-        matchesScope(left.match, witness) &&
-        matchesScope(right.match, witness)
+        scopeIntersectionWitness(
+          [scopeInclude, leftInclude, rightInclude],
+          [
+            scope.exclude,
+            left.match.exclude,
+            right.match.exclude,
+          ].filter(
+            (selector): selector is RepositorySelector =>
+              selector !== undefined,
+          ),
+          leftName + "-" + rightName,
+        ) !== undefined
       ) {
         throw new Error(
           "Repository templates can overlap within configured scope: " +
@@ -158,6 +159,211 @@ function assertScopeCanMatchTemplate(
   ) {
     throw new Error("Configured repository scope cannot match any template");
   }
+}
+
+function scopeIntersectionWitness(
+  positiveSelectors: readonly RepositorySelector[],
+  negativeSelectors: readonly RepositorySelector[],
+  fallbackName: string,
+): RepositoryMetadata | undefined {
+  if (!selectorsCanOverlap(...positiveSelectors)) {
+    return undefined;
+  }
+
+  const properties = mergeProperties(
+    positiveSelectors.map((selector) => selector.properties),
+  );
+  const teams = [
+    ...new Set(
+      positiveSelectors.flatMap((selector) => selector.teams ?? []),
+    ),
+  ];
+  const visibilityCandidates = visibilityIntersectionCandidates(
+    positiveSelectors.map((selector) => selector.visibility),
+  );
+
+  for (const visibility of visibilityCandidates) {
+    const base: RepositoryMetadata = {
+      name: "",
+      teams,
+      visibility,
+      properties,
+    };
+    const activeNegativeNameSelectors = negativeSelectors
+      .filter((selector) =>
+        matchesSelector({ ...selector, names: undefined }, base)
+      )
+      .map((selector) => selector.names);
+
+    if (activeNegativeNameSelectors.some((names) => names === undefined)) {
+      continue;
+    }
+
+    const name = nameConstraintWitness(
+      positiveSelectors.map((selector) => selector.names),
+      activeNegativeNameSelectors as readonly (readonly string[])[],
+    ) ?? (
+      positiveSelectors.every((selector) => selector.names === undefined) &&
+        activeNegativeNameSelectors.length === 0
+        ? "validation-" + fallbackName
+        : undefined
+    );
+
+    if (name !== undefined) {
+      return { ...base, name };
+    }
+  }
+
+  return undefined;
+}
+
+function visibilityIntersectionCandidates(
+  selectors: readonly RepositorySelector["visibility"][],
+): readonly ("public" | "private" | "internal")[] {
+  const constrained = selectors.filter(
+    (visibility): visibility is Exclude<
+      RepositorySelector["visibility"],
+      undefined
+    > => visibility !== undefined,
+  );
+
+  if (constrained.length === 0) {
+    return ["public", "private", "internal"];
+  }
+
+  return ["public", "private", "internal"].filter((candidate) =>
+    constrained.every((visibility) => {
+      const allowed = Array.isArray(visibility) ? visibility : [visibility];
+      return allowed.includes(candidate);
+    })
+  ) as readonly ("public" | "private" | "internal")[];
+}
+
+function nameConstraintWitness(
+  positiveSelectors: readonly (readonly string[] | undefined)[],
+  negativeSelectors: readonly (readonly string[])[],
+): string | undefined {
+  const positiveGroups = positiveSelectors.filter(
+    (names): names is readonly string[] => names !== undefined,
+  );
+
+  if (positiveGroups.length === 0 && negativeSelectors.length === 0) {
+    return "";
+  }
+
+  const patternGroups = [...positiveGroups, ...negativeSelectors];
+  const patterns = patternGroups.flatMap((group) => group);
+  const groupOffsets: number[] = [];
+  let offset = 0;
+  for (const group of patternGroups) {
+    groupOffsets.push(offset);
+    offset += group.length;
+  }
+
+  const alphabet = globAlphabet(patterns);
+  const initial = patterns.map((pattern) => globEpsilonClosure(pattern, [0]));
+  const queue: Array<{
+    readonly states: readonly (readonly number[])[];
+    readonly value: string;
+  }> = [{ states: initial, value: "" }];
+  const visited = new Set<string>();
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const key = current.states.map((state) => state.join(",")).join("|");
+    if (visited.has(key)) {
+      continue;
+    }
+    visited.add(key);
+
+    const groupMatches = patternGroups.map((group, groupIndex) => {
+      const start = groupOffsets[groupIndex];
+      return group.some((pattern, patternIndex) =>
+        current.states[start + patternIndex].includes(pattern.length)
+      );
+    });
+
+    const positiveMatches = groupMatches
+      .slice(0, positiveGroups.length)
+      .every(Boolean);
+    const negativeMatches = groupMatches
+      .slice(positiveGroups.length)
+      .some(Boolean);
+
+    if (positiveMatches && !negativeMatches) {
+      return current.value;
+    }
+
+    for (const character of alphabet) {
+      const nextStates = patterns.map((pattern, index) =>
+        globTransition(pattern, current.states[index], character)
+      );
+      if (nextStates.every((state) => state.length === 0)) {
+        continue;
+      }
+      queue.push({
+        states: nextStates,
+        value: current.value + character,
+      });
+    }
+  }
+
+  return undefined;
+}
+
+function globAlphabet(patterns: readonly string[]): readonly string[] {
+  const literals = new Set<string>();
+  for (const pattern of patterns) {
+    for (const character of pattern) {
+      if (character !== "*" && character !== "?") {
+        literals.add(character);
+      }
+    }
+  }
+
+  let other = "§";
+  while (literals.has(other)) {
+    other += "§";
+  }
+
+  return [...literals, other];
+}
+
+function globEpsilonClosure(
+  pattern: string,
+  positions: readonly number[],
+): readonly number[] {
+  const result = new Set(positions);
+  const queue = [...positions];
+
+  while (queue.length > 0) {
+    const position = queue.shift()!;
+    if (pattern[position] === "*" && !result.has(position + 1)) {
+      result.add(position + 1);
+      queue.push(position + 1);
+    }
+  }
+
+  return [...result].sort((left, right) => left - right);
+}
+
+function globTransition(
+  pattern: string,
+  state: readonly number[],
+  character: string,
+): readonly number[] {
+  const next = new Set<number>();
+
+  for (const position of state) {
+    const token = pattern[position];
+    if (token === "*") {
+      next.add(position);
+    } else if (token === "?" || token === character) {
+      next.add(position + 1);
+    }
+  }
+
+  return globEpsilonClosure(pattern, [...next]);
 }
 
 function selectorsCanOverlap(
