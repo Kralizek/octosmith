@@ -13,6 +13,7 @@ import {
   renderReport,
   type Report,
   type RepositoryReport,
+  renderRuntimeReferenceDiagnostic,
   validateConfigurationDirectory,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
@@ -46,12 +47,18 @@ function createCli(
     }
 
     const format = parseOutputFormat(commandOptions.format);
-    await validateConfigurationDirectory(commandOptions.path);
+    const diagnostics = await validateConfigurationDirectory(commandOptions.path);
+    const result = { valid: true, diagnostics };
     write(
       renderOutput(
         format,
-        { valid: true },
-        () => "Configuration is valid.",
+        result,
+        (value) => {
+          const warnings = value.diagnostics.map((diagnostic) =>
+            "Warning: " + renderRuntimeReferenceDiagnostic(diagnostic)
+          );
+          return ["Configuration is valid.", ...warnings].join("\n\n");
+        },
       ),
     );
   };
