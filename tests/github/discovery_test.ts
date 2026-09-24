@@ -128,7 +128,7 @@ Deno.test("targeted discovery rejects an empty repository target", async () => {
         "",
       ),
     Error,
-    "Repository target must not be empty",
+    "Resource target must not be empty",
   );
 
   assertEquals(client.requests, []);

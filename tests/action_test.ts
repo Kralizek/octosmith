@@ -81,7 +81,8 @@ Deno.test("action wrapper supports offline validate", async () => {
   });
 
   assertEquals(result.code, 0);
-  assertEquals(result.args.slice(-5), [
+  assertEquals(result.args.slice(-6), [
+    "template",
     "validate",
     "--path",
     ".",

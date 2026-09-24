@@ -76,12 +76,12 @@ deno install -A -n octosmith jsr:@octosmith/cli@0
 Then validate, plan, or apply:
 
 ```sh
-octosmith validate --path .
+octosmith template validate --path .
 octosmith plan --path .
 octosmith apply --path .
 ```
 
-`plan` and `apply` use `GITHUB_TOKEN`. `validate` is fully offline.
+`plan` and `apply` use `GITHUB_TOKEN`. `template validate` is fully offline.
 
 See the [CLI package README](packages/cli/README.md) for command options,
 targeted runs, output formats, exit behavior, and event output.
@@ -127,7 +127,7 @@ Detailed documentation lives under [`docs/`](docs/README.md):
 | Package                                                | Purpose                                                                                                                     |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | [`@octosmith/octosmith`](packages/octosmith/README.md) | Configuration, desired/current state models, planning, reporting, GitHub integration, and the control-repository scaffolder |
-| [`@octosmith/cli`](packages/cli/README.md)             | Command-line interface for validate, plan, apply, reporting, and event output                                               |
+| [`@octosmith/cli`](packages/cli/README.md)             | Command-line interface for grouped template/resource commands, plan/apply, reporting, and event output                      |
 
 ## Examples
 

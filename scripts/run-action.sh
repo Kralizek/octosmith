@@ -77,7 +77,11 @@ if [[ "$mode" == "validate" ]]; then
   fi
 fi
 
-args=("$mode")
+if [[ "$mode" == "validate" ]]; then
+  args=(template validate)
+else
+  args=("$mode")
+fi
 if [[ -n "$repository" ]]; then
   args+=("$repository")
 fi

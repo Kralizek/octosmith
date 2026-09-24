@@ -14,7 +14,7 @@ inputs:
     required: false
     default: ""
   repository:
-    description: Optional repository target
+    description: Optional resource target
     required: false
     default: ""
   format:
@@ -22,7 +22,7 @@ inputs:
     required: false
     default: text
   verbose:
-    description: Include unchanged items and GitHub API response traces
+    description: Include unchanged report items
     required: false
     default: "false"
   events-output:

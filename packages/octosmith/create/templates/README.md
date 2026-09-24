@@ -28,7 +28,7 @@ more repositories.
 Validation is offline and does not require `GITHUB_TOKEN`:
 
 ```sh
-deno run -A jsr:@octosmith/cli validate --path .
+deno run -A jsr:@octosmith/cli template validate --path .
 ```
 
 Set `GITHUB_TOKEN` before running plan or apply locally:

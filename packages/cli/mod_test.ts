@@ -5,7 +5,10 @@ Deno.test("usage identifies Octosmith", () => {
   assertStringIncludes(usage(), "octosmith");
   assertStringIncludes(usage(), "plan");
   assertStringIncludes(usage(), "apply");
-  assertStringIncludes(usage(), "validate");
+  assertStringIncludes(usage(), "template");
+  assertStringIncludes(usage(), "resource");
+  assertStringIncludes(usage(), "-v, --verbose");
+  assertEquals(usage().includes("-v, --version"), false);
 });
 
 Deno.test("version comes from package metadata", async () => {
@@ -44,5 +47,24 @@ Deno.test("missing GITHUB_TOKEN returns a clear CLI failure", async () => {
     } else {
       Deno.env.set("GITHUB_TOKEN", previous);
     }
+  }
+});
+
+Deno.test("apply rejects combining a resource target with --plan", async () => {
+  const errors: string[] = [];
+  const originalError = console.error;
+
+  try {
+    console.error = (...values: unknown[]) => {
+      errors.push(values.map(String).join(" "));
+    };
+
+    assertEquals(await main(["apply", "sample", "--plan", "plan.json"]), 1);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Cannot combine a resource target with --plan",
+    );
+  } finally {
+    console.error = originalError;
   }
 });
