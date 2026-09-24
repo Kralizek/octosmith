@@ -16,7 +16,10 @@ const template = {
 
 Deno.test("configuration rejects misspelled scope selectors", async () => {
   await withConfiguration(
-    { ...configuration, repositories: { scope: { include: { nmaes: ["sample"] } } } },
+    {
+      ...configuration,
+      repositories: { scope: { include: { nmaes: ["sample"] } } },
+    },
     template,
     async (root) => {
       const error = await assertRejects(
@@ -59,7 +62,11 @@ Deno.test("configuration rejects missing template kind", async () => {
 Deno.test("configuration rejects unsupported template kind", async () => {
   await withConfiguration(
     configuration,
-    { kind: "organization", match: { include: { names: ["*"] } }, repository: {} },
+    {
+      kind: "organization",
+      match: { include: { names: ["*"] } },
+      repository: {},
+    },
     (root) =>
       assertRejects(
         () => loadConfigurationDirectory(root),
