@@ -937,7 +937,6 @@ Deno.test("resolves Actions settings and ruleset bypass actors", async () => {
   }
 });
 
-
 Deno.test("runtime preflight snapshots each source name once", () => {
   const template = {
     version: 1,
