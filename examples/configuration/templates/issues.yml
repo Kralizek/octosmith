@@ -5,8 +5,8 @@ kind: repository
 
 match:
   include:
-      properties:
-        repository-type: issues
+    properties:
+      repository-type: issues
 
 repository:
   settings:
