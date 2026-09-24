@@ -53,8 +53,9 @@ organization: acme
 
 repositories:
   scope:
-    names:
-      - "service-*"
+    include:
+      names:
+        - "service-*"
 
   settings:
     collection_management: explicit
@@ -85,8 +86,9 @@ version: 1
 kind: repository
 
 match:
-  names:
-    - "service-*"
+  include:
+    names:
+      - "service-*"
 
 repository:
   settings:
