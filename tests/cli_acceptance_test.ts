@@ -1776,3 +1776,129 @@ function json(value: unknown, status = 200): Response {
     headers: { "content-type": "application/json" },
   });
 }
+
+
+Deno.test("template validate reports unresolved runtime references without reading environment values", async () => {
+  const root = await secretConfigurationDirectory();
+  const previous = Deno.env.get("TOKEN");
+  const output: string[] = [];
+
+  try {
+    Deno.env.delete("TOKEN");
+
+    assertEquals(
+      await main(
+        ["template", "validate", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const result = JSON.parse(output.join("\n"));
+    assertEquals(result.valid, true);
+    assertEquals(result.diagnostics, [{
+      severity: "warning",
+      code: "unresolved_secret",
+      name: "TOKEN",
+      template: "repository:code",
+      path: "repository.actions.secrets[0]",
+    }]);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("TOKEN");
+    } else {
+      Deno.env.set("TOKEN", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("plan reports a structured missing secret before repository state is read", async () => {
+  const root = await secretConfigurationDirectory();
+  const previous = Deno.env.get("TOKEN");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.delete("TOKEN");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeSecretGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--format", "json", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    const report = JSON.parse(output.join("\n"));
+    assertEquals(report.repositories[0].diagnostics, [{
+      severity: "error",
+      code: "missing_secret",
+      name: "TOKEN",
+      template: "repository:code",
+      path: "repository.actions.secrets[0]",
+      resource: {
+        type: "repository",
+        name: "sample",
+      },
+    }]);
+    assertEquals(
+      requests.some((request) =>
+        request.url.pathname === "/api/v3/repos/acme/sample/actions/secrets"
+      ),
+      false,
+    );
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("TOKEN");
+    } else {
+      Deno.env.set("TOKEN", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("plan does not resolve runtime values from unmatched templates", async () => {
+  const root = await safetyConfigurationDirectory({
+    code: {
+      match: { names: ["sample"] },
+      repository: { settings: { has_issues: false } },
+    },
+    unused: {
+      match: { names: ["unused"] },
+      repository: { actions: { secrets: ["UNUSED_TOKEN"] } },
+    },
+  });
+  const previous = Deno.env.get("UNUSED_TOKEN");
+  const output: string[] = [];
+
+  try {
+    Deno.env.delete("UNUSED_TOKEN");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub([]),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+    assertStringIncludes(output.join("\n"), "sample [repository:code] — planned");
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("UNUSED_TOKEN");
+    } else {
+      Deno.env.set("UNUSED_TOKEN", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
