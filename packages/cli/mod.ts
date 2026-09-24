@@ -194,7 +194,13 @@ function createCli(
         "list",
         new Command()
           .description("List resources within configured scope.")
-          .action(() => {
+          .option("-p, --path <path:string>", "Configuration directory.", {
+            default: ".",
+          })
+          .option("--format <format:string>", "Output format: text or json.", {
+            default: "text",
+          })
+          .action((_commandOptions) => {
             throw new Error("resource list is not implemented yet");
           }),
       )
