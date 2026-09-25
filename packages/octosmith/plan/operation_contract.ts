@@ -133,15 +133,33 @@ export function persistedOperationContract(
           if (changes.bypassActors === undefined) {
             dependency.bypassActors = existing.bypassActors;
           }
-          if (
-            effectiveTarget !== "push" &&
-            changes.conditions === undefined
-          ) {
-            dependency.conditions = existing.target === "push"
+          if (effectiveTarget !== "push") {
+            const currentConditions = existing.target === "push"
               ? { refName: { include: [], exclude: [] } }
               : existing.conditions;
+            if (changes.conditions === undefined) {
+              dependency.conditions = currentConditions;
+            } else {
+              const preserved = projectPreserved(
+                currentConditions,
+                changes.conditions,
+              );
+              if (preserved !== undefined) {
+                dependency.conditions = preserved;
+              }
+            }
           }
-          dependency.rules = existing.rules;
+          if (changes.rules === undefined) {
+            dependency.rules = existing.rules;
+          } else {
+            const preserved = projectPreservedRules(
+              existing.rules,
+              changes.rules,
+            );
+            if (preserved.length > 0) {
+              dependency.rules = preserved;
+            }
+          }
         }
 
         rulesets.push(dependency);
@@ -416,6 +434,69 @@ export function persistedOperationSecretSources(
   }
 
   return [...sources].sort();
+}
+
+function projectPreserved(current: unknown, replay: unknown): unknown {
+  if (Object.is(current, replay)) {
+    return current;
+  }
+
+  if (
+    current === null ||
+    replay === null ||
+    typeof current !== "object" ||
+    typeof replay !== "object" ||
+    Array.isArray(current) ||
+    Array.isArray(replay)
+  ) {
+    if (
+      Array.isArray(current) &&
+      Array.isArray(replay) &&
+      JSON.stringify(current) === JSON.stringify(replay)
+    ) {
+      return current;
+    }
+    return undefined;
+  }
+
+  const entries = Object.entries(replay as Record<string, unknown>).flatMap(
+    ([key, value]) => {
+      if (!Object.hasOwn(current as object, key)) {
+        return [];
+      }
+      const preserved = projectPreserved(
+        Reflect.get(current as object, key),
+        value,
+      );
+      return preserved === undefined ? [] : [[key, preserved] as const];
+    },
+  );
+
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function projectPreservedRules(
+  current: CurrentState["rulesets"][number]["rules"],
+  replay: NonNullable<
+    Extract<Operation, { readonly type: "update-ruleset" }>["changes"]["rules"]
+  >,
+): readonly unknown[] {
+  const currentByType = new Map(current.map((rule) => [rule.type, rule]));
+
+  return replay.flatMap((rule) => {
+    const existing = currentByType.get(rule.type);
+    if (existing === undefined) {
+      return [];
+    }
+    const preserved = projectPreserved(existing, rule);
+    if (preserved === undefined) {
+      return [];
+    }
+    return [{
+      type: rule.type,
+      ...preserved as Record<string, unknown>,
+    }];
+  });
 }
 
 function requireNonEmpty(value: string, label: string): void {

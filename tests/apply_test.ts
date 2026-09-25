@@ -22,6 +22,7 @@ class FakeRuntime implements ApplyRuntime {
     readonly repositories: readonly RepositoryMetadata[],
     readonly failRead = new Set<string>(),
     readonly discoveryFailures: readonly RepositoryDiscoveryFailure[] = [],
+    readonly staleOnRecheck = new Set<string>(),
   ) {}
 
   discover(_loaded: LoadedConfiguration, repository?: string) {
@@ -118,6 +119,24 @@ Deno.test("apply apply executes the fresh plan", async () => {
 
     assertEquals(results[0].status, "applied");
     assertEquals(runtime.applied.length, 1);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("fresh apply rechecks the first resource after all resources are prepared", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime(
+      [metadata("sample"), metadata("broken")],
+      new Set(),
+      [],
+      new Set(["sample"]),
+    );
+    const results = await applyResults(runtime, root, "apply");
+
+    assertEquals(runtime.applied, []);
+    assertEquals(results[0].status, "failed");
   } finally {
     await Deno.remove(root, { recursive: true });
   }

@@ -95,6 +95,107 @@ Deno.test("replay contract captures sparse apply-time live state", () => {
   }]);
 });
 
+Deno.test("replay contract tracks ruleset fields copied into stored updates", () => {
+  const current = currentState({
+    rulesets: [{
+      id: 7,
+      name: "main",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: {
+        refName: {
+          include: ["~DEFAULT_BRANCH"],
+          exclude: ["refs/heads/legacy"],
+        },
+      },
+      rules: [
+        { type: "required-linear-history" },
+        {
+          type: "required-status-checks",
+          doNotEnforceOnCreate: false,
+          checks: [{ context: "build" }],
+          strict: false,
+        },
+      ],
+    }],
+  });
+  const plan = buildPlan(current, {
+    repository: "sample",
+    template: "repository:sample",
+    rulesets: [{
+      name: "main",
+      conditions: {
+        refName: { include: ["refs/heads/main"] },
+      },
+      rules: [{
+        type: "required-status-checks",
+        strict: true,
+      }],
+    }],
+  });
+  const update = plan.operations[0];
+  if (update?.type !== "update-ruleset") {
+    throw new Error("Expected update-ruleset");
+  }
+
+  const dependency = persistedOperationContract(current, [update]).state
+    .rulesets as readonly Record<string, unknown>[];
+
+  assertEquals(dependency[0].conditions, {
+    refName: { exclude: ["refs/heads/legacy"] },
+  });
+  assertEquals(dependency[0].rules, [{
+    type: "required-linear-history",
+  }, {
+    type: "required-status-checks",
+    doNotEnforceOnCreate: false,
+    checks: [{ context: "build" }],
+  }]);
+});
+
+Deno.test("strict rule removal ignores unrelated rule contents", () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    collections: "strict",
+    rulesets: [{ name: "main", rules: [] }],
+  };
+  const left = currentState({
+    rulesets: [{
+      id: 7,
+      name: "main",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: { refName: { include: [], exclude: [] } },
+      rules: [{
+        type: "required-status-checks",
+        doNotEnforceOnCreate: false,
+        checks: [],
+        strict: false,
+      }],
+    }],
+  });
+  const right = currentState({
+    rulesets: [{
+      ...left.rulesets[0],
+      rules: [{
+        type: "required-status-checks",
+        doNotEnforceOnCreate: false,
+        checks: [],
+        strict: true,
+      }],
+    }],
+  });
+  const operations = buildPlan(left, desired).operations;
+
+  assertEquals(
+    projectOwnedCurrentState(left, desired, operations),
+    projectOwnedCurrentState(right, desired, operations),
+  );
+});
+
 Deno.test("replay contract tracks create-time absence and file branch dependencies", () => {
   const current = currentState();
   const contract = persistedOperationContract(current, [

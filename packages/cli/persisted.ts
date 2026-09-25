@@ -64,10 +64,6 @@ export async function applyPersistedPlan(
 
   const resources: PersistedResourcePreflight[] = [];
   const prepared: ExecutableResourcePlan[] = [];
-  const persistedByName = new Map(
-    artifact.resources.map((resource) => [resource.name, resource]),
-  );
-
   for (const resource of artifact.resources) {
     const inspected = await inspectResource(runtime, loaded, resource);
     resources.push({
@@ -109,22 +105,6 @@ export async function applyPersistedPlan(
     runtime,
     prepared,
     onResourceApplied,
-    async (resource) => {
-      const persisted = persistedByName.get(resource.desired.repository);
-      if (persisted === undefined) {
-        throw new Error(
-          "Persisted resource disappeared before execution: " +
-            resource.desired.repository,
-        );
-      }
-
-      const rechecked = await inspectResource(runtime, loaded, persisted);
-      if (rechecked.state !== "valid") {
-        throw new Error(
-          "Resource precondition changed after persisted-plan preflight",
-        );
-      }
-    },
   );
   return preflight;
 }

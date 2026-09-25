@@ -916,6 +916,19 @@ function diffActionsSettings(
 
   if (desired.selectedActions) {
     if (
+      current.allowedActions !== "selected" &&
+      (
+        desired.selectedActions.githubOwnedAllowed === undefined ||
+        desired.selectedActions.verifiedAllowed === undefined ||
+        desired.selectedActions.patternsAllowed === undefined
+      )
+    ) {
+      throw new Error(
+        "Selected Actions settings must be complete when enabling selected actions",
+      );
+    }
+
+    if (
       desired.allowedActions === undefined &&
       current.allowedActions !== "selected"
     ) {

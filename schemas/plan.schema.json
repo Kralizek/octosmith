@@ -1420,7 +1420,7 @@
     },
     "dismissalRestriction": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "enabled",
         "allowedActors"

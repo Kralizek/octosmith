@@ -270,7 +270,7 @@ function projectRules(
     const owned = desiredByType.get(rule.type);
 
     if (owned === undefined) {
-      return strict ? [rule] : [];
+      return strict ? [{ type: rule.type }] : [];
     }
 
     return [{

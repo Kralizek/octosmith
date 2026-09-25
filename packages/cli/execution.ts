@@ -2,7 +2,6 @@ import {
   type ApplyOperationResult,
   type ApplyPlanResult,
   type ExecutableResourcePlan,
-  type Plan,
   reportAppliedRepository,
   reportFailedRepository,
   type RepositoryReport,
@@ -10,13 +9,10 @@ import {
 
 /** Minimal runtime capability required to execute an already-built plan. */
 export interface ExecutablePlanRuntime {
-  apply(plan: Plan): Promise<ApplyPlanResult>;
+  prepare(resource: ExecutableResourcePlan): void | Promise<void>;
+  recheck(resource: ExecutableResourcePlan): void | Promise<void>;
+  apply(resource: ExecutableResourcePlan): Promise<ApplyPlanResult>;
 }
-
-/** Hook run immediately before one resource starts mutating. */
-export type BeforeExecutableResource = (
-  resource: ExecutableResourcePlan,
-) => void | Promise<void>;
 
 /** Execute already-built resource plans without rebuilding or reinterpreting them. */
 export async function executeExecutableResources(
@@ -25,13 +21,16 @@ export async function executeExecutableResources(
   onRepositoryApplied: (
     report: RepositoryReport,
   ) => void | Promise<void>,
-  beforeResource?: BeforeExecutableResource,
 ): Promise<void> {
   for (const resource of resources) {
-    try {
-      await beforeResource?.(resource);
+    await runtime.prepare(resource);
+  }
 
-      const applied = await runtime.apply(resource.plan);
+  for (const resource of resources) {
+    try {
+      await runtime.recheck(resource);
+
+      const applied = await runtime.apply(resource);
       await onRepositoryApplied(
         reportAppliedRepository(
           resource.desired.template,

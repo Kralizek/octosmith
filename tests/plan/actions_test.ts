@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 import { buildPlan } from "../../packages/octosmith/mod.ts";
 import { currentState } from "./fixtures.ts";
 
@@ -104,5 +104,22 @@ Deno.test("actions OIDC emits only owned drift", () => {
         },
       }],
     },
+  );
+});
+
+Deno.test("selected actions transition requires complete unavailable settings", () => {
+  assertThrows(
+    () =>
+      buildPlan(currentState(), {
+        repository: "sample",
+        template: "code",
+        actions: {
+          selectedActions: {
+            githubOwnedAllowed: true,
+          },
+        },
+      }),
+    Error,
+    "Selected Actions settings must be complete when enabling selected actions",
   );
 });
