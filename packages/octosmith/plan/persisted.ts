@@ -146,7 +146,7 @@ function normalizeConfigurationForHash(
         branchPrefix: fileChanges.pullRequest?.branchPrefix ?? "octosmith/",
         title: fileChanges.pullRequest?.title ??
           "Octosmith: reconcile managed files",
-        labels: fileChanges.pullRequest?.labels ?? [],
+        labels: [...new Set(fileChanges.pullRequest?.labels ?? [])].sort(),
       },
     };
 

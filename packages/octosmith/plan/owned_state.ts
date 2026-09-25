@@ -61,7 +61,7 @@ export function projectOwnedCurrentState(
     const strictUnowned = strict
       ? Object.entries(current.customProperties)
         .filter(([name, value]) =>
-          !(name in desired.customProperties!) && value !== null
+          !Object.hasOwn(desired.customProperties!, name) && value !== null
         )
         .map(([name]) => name)
         .sort()

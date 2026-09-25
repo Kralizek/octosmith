@@ -512,6 +512,36 @@ Deno.test("strict custom-property preconditions track unowned presence, not valu
   );
 });
 
+Deno.test("strict custom-property preconditions track prototype-like unowned names", () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    collections: "strict",
+    customProperties: {},
+  };
+  const before = currentState({ customProperties: {} });
+  const added = currentState({ customProperties: { toString: "platform" } });
+
+  assertNotEquals(
+    projectOwnedCurrentState(before, desired),
+    projectOwnedCurrentState(added, desired),
+  );
+  assertEquals(projectOwnedCurrentState(added, desired).customProperties, {
+    owned: {},
+    strictUnowned: ["toString"],
+  });
+  assertEquals(
+    projectOwnedCurrentState(added, {
+      ...desired,
+      customProperties: { toString: "platform" },
+    }).customProperties,
+    {
+      owned: { toString: { present: true, value: "platform" } },
+      strictUnowned: [],
+    },
+  );
+});
+
 Deno.test("ruleset preconditions include fields materialized into stored updates", () => {
   const leftRuleset = {
     id: 7,
@@ -951,6 +981,49 @@ Deno.test("configuration precondition normalizes execution defaults", async () =
   const right = await createPersistedPlanArtifact(explicitLoaded, []);
 
   assertEquals(left.configuration, right.configuration);
+});
+
+Deno.test("configuration precondition treats pull-request labels as an unordered set", async () => {
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: { names: ["sample"] } },
+        fileChanges: {
+          mode: "pull_request",
+          pullRequest: { labels: ["automation", "managed"] },
+        },
+      },
+    },
+    templates: {},
+  };
+  const saved = await createPersistedPlanArtifact(loaded, []);
+  for (
+    const labels of [
+      ["managed", "automation"],
+      ["automation", "managed", "automation"],
+      ["managed", "automation", "managed"],
+      ["automation", "different"],
+    ]
+  ) {
+    const candidate = await createPersistedPlanArtifact({
+      ...loaded,
+      configuration: {
+        ...loaded.configuration,
+        repositories: {
+          ...loaded.configuration.repositories,
+          fileChanges: { mode: "pull_request", pullRequest: { labels } },
+        },
+      },
+    }, []);
+    if (labels.includes("different")) {
+      assertNotEquals(saved.configuration, candidate.configuration);
+    } else {
+      assertEquals(saved.configuration, candidate.configuration);
+    }
+  }
 });
 
 Deno.test("empty environment variable ownership tracks the whole collection", () => {
