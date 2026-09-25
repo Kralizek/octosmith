@@ -147,10 +147,20 @@ Deno.test("replay contract tracks ruleset fields copied into stored updates", ()
   });
   assertEquals(dependency[0].rules, [{
     type: "required-linear-history",
+    shape: {},
   }, {
     type: "required-status-checks",
-    doNotEnforceOnCreate: false,
-    checks: [{ context: "build" }],
+    shape: {
+      doNotEnforceOnCreate: { present: true, value: false },
+      checks: {
+        present: true,
+        value: [{ context: "build" }],
+      },
+      strict: {
+        present: true,
+        value: { overwritten: true },
+      },
+    },
   }]);
 });
 
