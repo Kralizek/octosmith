@@ -1054,16 +1054,6 @@ function diffRuleset(
     }
   }
 
-  if (
-    desired.target !== undefined &&
-    desired.target !== current.target &&
-    desired.rules === undefined
-  ) {
-    for (const rule of current.rules) {
-      materializeRule(rule, effectiveTarget);
-    }
-  }
-
   if (desired.rules !== undefined) {
     const merged = mergeRules(
       current.rules,
@@ -1082,6 +1072,12 @@ function diffRuleset(
     (changes.rules !== undefined || changes.conditions !== undefined)
   ) {
     changes.target = effectiveTarget;
+  }
+
+  if (changes.target !== undefined && changes.rules === undefined) {
+    changes.rules = current.rules.map((rule) =>
+      materializeRule(rule, effectiveTarget)
+    );
   }
 
   return Object.keys(changes).length > 1

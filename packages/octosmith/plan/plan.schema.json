@@ -850,6 +850,11 @@
       "required": [
         "name"
       ],
+      "dependentRequired": {
+        "target": [
+          "rules"
+        ]
+      },
       "properties": {
         "name": {
           "type": "string"

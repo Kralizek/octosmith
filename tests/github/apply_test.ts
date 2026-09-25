@@ -1,4 +1,4 @@
-import { assertEquals } from "@std/assert";
+import { assertEquals, assertRejects } from "@std/assert";
 import type { Operation, Plan } from "@octosmith/octosmith";
 import { applyPlan, type RepositoryMutationSink } from "@octosmith/octosmith";
 
@@ -116,6 +116,32 @@ Deno.test("applyPlan can continue after a failed operation", async () => {
     ["applied", "failed", "applied"],
   );
 });
+
+for (const target of ["push", "branch", "tag"] as const) {
+  Deno.test(`applyPlan rejects target-only ${target} updates before earlier mutations`, async () => {
+    const sink = new FakeSink();
+    await assertRejects(
+      () =>
+        applyPlan(sink, {
+          repository: "sample",
+          operations: [
+            {
+              type: "update-repository-settings",
+              settings: { hasIssues: false },
+            },
+            {
+              type: "update-ruleset",
+              id: 7,
+              changes: { name: "main", target },
+            },
+          ],
+        }),
+      Error,
+      "ruleset",
+    );
+    assertEquals(sink.calls, []);
+  });
+}
 
 Deno.test("applyPlan handles empty plans", async () => {
   const sink = new FakeSink();

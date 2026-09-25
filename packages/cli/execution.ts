@@ -1,6 +1,7 @@
 import {
   type ApplyOperationResult,
   type ApplyPlanResult,
+  assertPersistedOperationsExecutable,
   type ExecutableResourcePlan,
   reportAppliedRepository,
   reportFailedRepository,
@@ -23,6 +24,7 @@ export async function executeExecutableResources(
   ) => void | Promise<void>,
 ): Promise<void> {
   for (const resource of resources) {
+    assertPersistedOperationsExecutable(resource.plan.operations);
     await runtime.prepare(resource);
   }
 

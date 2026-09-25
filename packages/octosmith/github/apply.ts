@@ -1,4 +1,5 @@
 import type { Operation, Plan } from "../mod.ts";
+import { assertPersistedOperationsExecutable } from "../plan/operation_contract.ts";
 
 /** Describes apply operation status. */
 export type ApplyOperationStatus = "applied" | "failed" | "skipped";
@@ -36,6 +37,7 @@ export async function applyPlan(
   plan: Plan,
   options: ApplyPlanOptions = {},
 ): Promise<ApplyPlanResult> {
+  assertPersistedOperationsExecutable(plan.operations);
   const preparedSink = sink.prepare
     ? await sink.prepare(plan.repository, plan.operations)
     : sink;

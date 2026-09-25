@@ -274,6 +274,7 @@ Deno.test("ruleset bypass actors and target drift are planned", () => {
         changes: {
           name: "protect",
           target: "tag",
+          rules: [],
           bypassActors: [{
             actorType: "team",
             actorId: 7,
@@ -591,6 +592,7 @@ Deno.test("ruleset conditions validate against the effective target", () => {
         changes: {
           name: "protect",
           target: "branch",
+          rules: [],
           conditions: {
             refName: {
               include: ["~DEFAULT_BRANCH"],
@@ -1009,6 +1011,7 @@ Deno.test("push to ref target transition materializes empty ref conditions", () 
     changes: {
       name: "protect",
       target: "branch",
+      rules: [],
       conditions: {
         refName: {
           include: [],

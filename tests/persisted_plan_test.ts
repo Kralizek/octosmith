@@ -1,9 +1,15 @@
-import { assertEquals, assertNotEquals, assertThrows } from "@std/assert";
+import {
+  assertEquals,
+  assertNotEquals,
+  assertRejects,
+  assertThrows,
+} from "@std/assert";
 import {
   buildApplyEvaluations,
   buildPlan,
   createPersistedPlanArtifact,
   type DesiredState,
+  type ExecutableResourcePlan,
   hashCanonical,
   hashEffectiveTemplate,
   type LoadedConfiguration,
@@ -13,6 +19,7 @@ import {
 } from "../packages/octosmith/mod.ts";
 import { currentState } from "./plan/fixtures.ts";
 import { applyPersistedPlan } from "../packages/cli/persisted.ts";
+import { executeExecutableResources } from "../packages/cli/execution.ts";
 
 Deno.test("canonical hashing is independent of object key order", async () => {
   assertEquals(
@@ -600,6 +607,176 @@ Deno.test("ruleset preconditions include fields materialized into stored updates
   );
 });
 
+for (
+  const [source, target] of [
+    ["branch", "push"],
+    ["tag", "push"],
+    ["push", "branch"],
+    ["push", "tag"],
+  ] as const
+) {
+  Deno.test(`executable ${source} to ${target} updates reject unsafe payloads before any resource mutates`, async () => {
+    const loaded: LoadedConfiguration = {
+      root: ".",
+      configuration: {
+        version: 1,
+        organization: "acme",
+        repositories: { scope: { include: "all" } },
+      },
+      templates: {
+        code: {
+          version: 1,
+          kind: "repository",
+          match: { include: "all" },
+          repository: {
+            settings: { hasIssues: false },
+            rulesets: [{ name: "main", target }],
+          },
+        },
+      },
+    };
+    const current = currentState({
+      rulesets: [
+        source === "push"
+          ? {
+            id: 7,
+            name: "main",
+            target: source,
+            enforcement: "active",
+            bypassActors: [],
+            rules: [{ type: "max-file-size", maxFileSizeMb: 1 }],
+          }
+          : {
+            id: 7,
+            name: "main",
+            target: source,
+            enforcement: "active",
+            bypassActors: [],
+            conditions: { refName: { include: [], exclude: [] } },
+            rules: [{ type: "deletion" }],
+          },
+      ],
+    });
+    const desired: DesiredState = {
+      repository: "sample",
+      template: "code",
+      settings: { hasIssues: false },
+      rulesets: [{ name: "main", target }],
+    };
+    const applied: string[] = [];
+    const runtime = {
+      discover: (_loaded: LoadedConfiguration, repository?: string) =>
+        Promise.resolve({
+          repositories: [{
+            name: repository!,
+            teams: [],
+            visibility: "private" as const,
+            properties: {},
+          }],
+          failures: [],
+        }),
+      read: (state: DesiredState) =>
+        Promise.resolve({ ...current, repository: state.repository }),
+      prepare: () => {},
+      recheck: () => {},
+      apply: (resource: ExecutableResourcePlan) => {
+        applied.push(resource.plan.repository);
+        return Promise.resolve({
+          repository: resource.plan.repository,
+          operations: [],
+        });
+      },
+    };
+    const earlier: ExecutableResourcePlan = {
+      desired: { ...desired, repository: "earlier" },
+      current: { ...current, repository: "earlier" },
+      plan: {
+        repository: "earlier",
+        operations: [{
+          type: "update-repository-settings",
+          settings: { hasIssues: false },
+        }],
+      },
+      evaluations: [],
+    };
+    for (
+      const rules of [
+        undefined,
+        current.rulesets[0].rules,
+        target === "push"
+          ? [{ type: "max-file-size" as const }]
+          : [{ type: "update" as const }],
+      ]
+    ) {
+      const resource: ExecutableResourcePlan = {
+        desired,
+        current,
+        evaluations: [],
+        plan: {
+          repository: "sample",
+          operations: [
+            {
+              type: "update-repository-settings",
+              settings: { hasIssues: false },
+            },
+            {
+              type: "update-ruleset",
+              id: 7,
+              changes: {
+                name: "main",
+                target,
+                ...(rules !== undefined && { rules }),
+              },
+            },
+          ],
+        },
+      };
+      const resources = [earlier, resource];
+      const artifact = await createPersistedPlanArtifact(loaded, resources);
+      assertThrows(
+        () => parsePersistedPlanArtifact(JSON.parse(JSON.stringify(artifact))),
+        Error,
+        "Invalid persisted plan",
+      );
+      await assertRejects(
+        () => executeExecutableResources(runtime, resources, () => {}),
+        Error,
+        "Invalid executable ruleset update",
+      );
+      await assertRejects(
+        () => applyPersistedPlan(runtime, loaded, artifact, () => {}),
+        Error,
+        "Invalid executable ruleset update",
+      );
+      assertEquals(applied, []);
+    }
+
+    const compatibleCurrent = {
+      ...current,
+      rulesets: current.rulesets.map((ruleset) => ({ ...ruleset, rules: [] })),
+    };
+    const plan = buildPlan(compatibleCurrent, desired);
+    const artifact = await createPersistedPlanArtifact(loaded, [{
+      desired,
+      current: compatibleCurrent,
+      plan,
+      evaluations: [],
+    }]);
+    assertEquals(
+      parsePersistedPlanArtifact(JSON.parse(JSON.stringify(artifact)))
+        .resources[0].operations,
+      plan.operations,
+    );
+    await executeExecutableResources(runtime, [{
+      desired,
+      current: compatibleCurrent,
+      plan,
+      evaluations: [],
+    }], () => {});
+    assertEquals(applied, ["sample"]);
+  });
+}
+
 Deno.test("target-only ruleset updates depend on current rules", () => {
   const desired: DesiredState = {
     repository: "sample",
@@ -636,6 +813,9 @@ Deno.test("target-only ruleset updates depend on current rules", () => {
   const plan = buildPlan(left, desired);
 
   assertEquals(plan.operations[0]?.type, "update-ruleset");
+  if (plan.operations[0]?.type === "update-ruleset") {
+    assertEquals(plan.operations[0].changes.rules, baseRuleset.rules);
+  }
   assertNotEquals(
     projectOwnedCurrentState(left, desired, plan.operations),
     projectOwnedCurrentState(right, desired, plan.operations),

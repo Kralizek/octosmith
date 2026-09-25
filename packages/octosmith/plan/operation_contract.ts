@@ -1,4 +1,15 @@
+import { Ajv2020 } from "ajv/2020";
 import type { CurrentState, Operation } from "../mod.ts";
+import planSchema from "./plan.schema.json" with { type: "json" };
+
+const validateExecutableRulesetChanges = new Ajv2020({
+  allErrors: true,
+  strict: false,
+  validateFormats: false,
+}).compile({
+  $defs: planSchema.$defs,
+  $ref: "#/$defs/desiredRuleset",
+});
 
 /** Runtime and remote-state dependencies consumed while replaying stored operations. */
 export interface PersistedOperationContract {
@@ -375,6 +386,14 @@ export function assertPersistedOperationsExecutable(
       case "update-ruleset":
         requirePositiveInteger(operation.id, "ruleset id");
         requireNonEmpty(operation.changes.name, "ruleset name");
+        if (!validateExecutableRulesetChanges(operation.changes)) {
+          throw new Error(
+            "Invalid executable ruleset update: " +
+              validateExecutableRulesetChanges.errors?.map((error) =>
+                (error.instancePath || "/") + " " + error.message
+              ).join("; "),
+          );
+        }
         break;
 
       case "delete-ruleset":

@@ -107,6 +107,12 @@ inferring field ownership from equality with the saved replacement. Create and
 update artifacts share ref/push rule schemas; known fields remain validated,
 while rule payloads and nested helper objects allow preserved extension fields.
 
+Executable ruleset updates that specify a target must include a complete,
+target-compatible rules payload, even when the template only changes the target
+or conditions. The planner materializes retained rules into that payload. The
+same schema invariant is enforced during artifact parsing, shared preflight for
+all resources, and reusable `applyPlan` execution before any mutation.
+
 Managed-file snapshots record their execution branch separately from the current
 repository default branch. Fresh planning reads the desired default branch;
 persisted preflight derives the branch from the ordered saved operations. Branch
