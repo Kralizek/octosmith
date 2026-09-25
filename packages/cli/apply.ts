@@ -72,6 +72,7 @@ export function createGitHubRuntime(
   const secretValue = options.secretValue ?? environmentValue;
   let source: GitHubRepositoryStateSource | undefined;
   let sink: GitHubRepositoryMutationSink | undefined;
+  let loadedConfiguration: LoadedConfiguration | undefined;
   let fileChanges:
     LoadedConfiguration["configuration"]["repositories"]["fileChanges"];
   const preparedSinks = new Map<
@@ -84,6 +85,7 @@ export function createGitHubRuntime(
 
     async discover(loaded, repository) {
       options.traceGroup?.("organization");
+      loadedConfiguration = loaded;
       source = new GitHubRepositoryStateSource(
         client,
         loaded.configuration.organization,
@@ -125,8 +127,27 @@ export function createGitHubRuntime(
     },
 
     async recheck(resource) {
-      if (!source) {
+      if (!source || !loadedConfiguration) {
         throw new Error("GitHub runtime has not discovered repositories yet");
+      }
+
+      const discovery = await discoverRepositories(
+        client,
+        loadedConfiguration,
+        resource.desired.repository,
+      );
+      if (discovery.failures.length > 0 || discovery.repositories.length !== 1) {
+        throw new Error("Resource selection changed after apply preparation");
+      }
+      const metadata = discovery.repositories[0];
+      const matches = Object.entries(loadedConfiguration.templates).filter(
+        ([, template]) => matchesScope(template.match, metadata),
+      );
+      if (
+        matches.length !== 1 ||
+        matches[0][0] !== resource.desired.template
+      ) {
+        throw new Error("Resource template changed after apply preparation");
       }
 
       const current = await readCurrentState(source, resource.desired);
@@ -325,7 +346,15 @@ function validateFileDeliveryPreconditions(
 
   const branch = (effective.pullRequest?.branchPrefix ?? "octosmith/") +
     "reconcile";
-  if (branch === resource.current.settings.defaultBranch) {
+  const effectiveDefaultBranch = resource.plan.operations.reduce(
+    (current, operation) =>
+      operation.type === "update-repository-settings" &&
+        operation.settings.defaultBranch !== undefined
+        ? operation.settings.defaultBranch
+        : current,
+    resource.current.settings.defaultBranch,
+  );
+  if (branch === effectiveDefaultBranch) {
     throw new Error(
       "Managed file pull-request branch must not match default branch: " +
         branch,

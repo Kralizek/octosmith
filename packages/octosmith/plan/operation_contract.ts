@@ -491,15 +491,35 @@ function projectPreservedRules(
     if (existing === undefined) {
       return [];
     }
-    const preserved = projectPreserved(existing, rule);
-    if (preserved === undefined) {
-      return [];
-    }
     return [{
       type: rule.type,
-      ...preserved as Record<string, unknown>,
+      shape: projectReplayShape(existing, rule),
     }];
   });
+}
+
+function projectReplayShape(current: object, replay: object): unknown {
+  const currentRecord = current as Record<string, unknown>;
+  const replayRecord = replay as Record<string, unknown>;
+
+  return Object.fromEntries(
+    Object.entries(replayRecord)
+      .filter(([key]) => key !== "type")
+      .map(([key, replayValue]) => [
+        key,
+        {
+          present: Object.hasOwn(currentRecord, key),
+          ...(Object.hasOwn(currentRecord, key) && {
+            value: projectReplayValue(currentRecord[key], replayValue),
+          }),
+        },
+      ]),
+  );
+}
+
+function projectReplayValue(current: unknown, replay: unknown): unknown {
+  const preserved = projectPreserved(current, replay);
+  return preserved === undefined ? { overwritten: true } : preserved;
 }
 
 function requireNonEmpty(value: string, label: string): void {

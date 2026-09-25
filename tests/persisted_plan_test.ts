@@ -154,6 +154,53 @@ Deno.test("replay contract tracks ruleset fields copied into stored updates", ()
   }]);
 });
 
+Deno.test("replay contract tracks newly populated fields overwritten by materialized rules", () => {
+  const baseRule = {
+    type: "pull-request" as const,
+    allowedMergeMethods: ["squash" as const],
+    dismissStaleReviewsOnPush: false,
+    dismissalRestriction: { enabled: false, allowedActors: [] },
+    requireCodeOwnerReview: false,
+    requiredApprovingReviewCount: 0,
+    requiredReviewThreadResolution: false,
+    requiredReviewers: [],
+  };
+  const left = currentState({
+    rulesets: [{
+      id: 7,
+      name: "main",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: { refName: { include: [], exclude: [] } },
+      rules: [baseRule as never],
+    }],
+  });
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    rulesets: [{
+      name: "main",
+      rules: [{
+        type: "pull-request",
+        allowedMergeMethods: ["merge"],
+      }],
+    }],
+  };
+  const operations = buildPlan(left, desired).operations;
+  const right = currentState({
+    rulesets: [{
+      ...left.rulesets[0],
+      rules: [{ ...baseRule, requireLastPushApproval: true } as never],
+    }],
+  });
+
+  assertNotEquals(
+    projectOwnedCurrentState(left, desired, operations),
+    projectOwnedCurrentState(right, desired, operations),
+  );
+});
+
 Deno.test("strict rule removal ignores unrelated rule contents", () => {
   const desired: DesiredState = {
     repository: "sample",
