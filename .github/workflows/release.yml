@@ -46,7 +46,7 @@ jobs:
       - name: Calculate next release
         if: steps.resume.outputs.resume != 'true'
         id: calculated
-        uses: Kralizek/github-actions/actions/calculate-next-version@v0.3
+        uses: Kralizek/github-actions/actions/calculate-next-version@v0.4
         with:
           bump: ${{ inputs.bump }}
 
@@ -60,7 +60,7 @@ jobs:
           RESUMED_PREVIOUS_TAG: ${{ steps.resume.outputs['previous-tag'] }}
           CALCULATED_VERSION: ${{ steps.calculated.outputs.version }}
           CALCULATED_TAG: ${{ steps.calculated.outputs.tag }}
-          CALCULATED_PREVIOUS_TAG: ${{ steps.calculated.outputs['previous-tag'] }}
+          CALCULATED_RELEASE_NOTES_START_TAG: ${{ steps.calculated.outputs['release-notes-start-tag'] }}
         run: |
           set -euo pipefail
 
@@ -71,7 +71,7 @@ jobs:
           else
             version="$CALCULATED_VERSION"
             tag="$CALCULATED_TAG"
-            previous_tag="$CALCULATED_PREVIOUS_TAG"
+            previous_tag="$CALCULATED_RELEASE_NOTES_START_TAG"
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
