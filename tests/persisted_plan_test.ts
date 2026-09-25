@@ -698,7 +698,8 @@ Deno.test("persisted apply rechecks state immediately before mutation", async ()
         }],
         failures: [],
       }),
-    read: () => Promise.resolve(reads++ === 0 ? plannedCurrent : changedCurrent),
+    read: () =>
+      Promise.resolve(reads++ === 0 ? plannedCurrent : changedCurrent),
     apply: () => {
       applies++;
       throw new Error("apply must not be called after recheck drift");
