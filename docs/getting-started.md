@@ -45,14 +45,41 @@ GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 plan --path ./github-config
 Review the plan before applying, especially when strict collection management is
 enabled.
 
+To persist the exact reviewed operations:
+
+```sh
+GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 plan \
+  --path ./github-config \
+  --out plan.json
+```
+
+The artifact contains resolved non-secret operation values, but never resolved
+secret values. Treat it as potentially sensitive configuration data.
+
 ## Apply
 
 ```sh
 GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 apply --path ./github-config
 ```
 
-Apply reads fresh GitHub state and creates a new plan. It does not replay an
-earlier plan.
+Without `--plan`, apply reads fresh GitHub state and creates a new plan.
+
+To execute a persisted plan exactly as reviewed:
+
+```sh
+GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 apply \
+  --path ./github-config \
+  --plan plan.json
+```
+
+Persisted apply verifies the root configuration, the effective template for each
+resource, and the remote state owned by that template before making any
+mutation. If preflight finds drift, no changes are applied and the resource
+summary reports `valid`, `template`, or `state`.
+
+Each resource state precondition is checked again immediately before that
+resource is mutated. Persisted operations are never rebuilt or silently
+replanned.
 
 Apply is not transactional. Earlier operations for a repository may already be
 applied when a later operation fails.

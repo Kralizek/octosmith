@@ -48,18 +48,39 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration
 `plan` reads GitHub and reports the operations required to reach the desired
 state. It does not mutate GitHub and does not require secret runtime values.
 
+Use `--out <file>` to persist the exact executable operations:
+
+```sh
+GITHUB_TOKEN=... octosmith plan --path ./configuration --out plan.json
+```
+
+The persisted artifact is distinct from `--format json` output. It may contain
+resolved variables and managed-file contents, but never resolved secret values.
+
 ### apply
 
 ```sh
 GITHUB_TOKEN=... octosmith apply --path ./configuration
 ```
 
-`apply` reads fresh GitHub state, builds a new plan, and applies that plan. It
-never replays a previously displayed plan.
+`apply` reads fresh GitHub state, builds a new plan, and applies that plan by
+default.
+
+Use `--plan <file>` to execute a persisted plan:
+
+```sh
+GITHUB_TOKEN=... octosmith apply --path ./configuration --plan plan.json
+```
+
+Persisted apply verifies root configuration, effective resource templates, and
+template-owned remote state before the first mutation. A stale preflight reports
+each resource as `valid`, `template`, or `state` and applies nothing. Resource
+state is checked again immediately before mutation. Stored operations are
+executed exactly and are never rebuilt.
 
 Apply is not transactional. If one operation fails, earlier operations for that
 repository may already have been applied. Remaining operations for that
-repository are skipped, while other repositories can continue.
+repository are skipped, and Octosmith stops before mutating later repositories.
 
 ## Target one resource
 

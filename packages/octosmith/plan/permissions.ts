@@ -52,6 +52,9 @@ export type GitHubPermissionRequirement =
 /** Identifies a planner operation type. */
 export type OperationType = Operation["type"];
 
+/** Identifies how managed file operations are delivered. */
+export type FileDeliveryMode = "direct" | "pull_request";
+
 const repositoryPermissionDescriptors = {
   actions: { apiName: "actions", displayName: "Actions" },
   administration: { apiName: "administration", displayName: "Administration" },
@@ -163,25 +166,20 @@ const operationPermissions = {
   "delete-environment": [
     repository("administration", "write"),
   ],
-  "create-file": [
-    repository("contents", "write"),
-    repository("issues", "write"),
-    repository("pull_requests", "write"),
-  ],
-  "update-file": [
-    repository("contents", "write"),
-    repository("issues", "write"),
-    repository("pull_requests", "write"),
-  ],
-  "delete-file": [
-    repository("contents", "write"),
-    repository("issues", "write"),
-    repository("pull_requests", "write"),
-  ],
 } as const satisfies Record<
-  OperationType,
+  Exclude<OperationType, "create-file" | "update-file" | "delete-file">,
   readonly GitHubPermissionRequirement[]
 >;
+
+const directFileOperationPermissions = [
+  repository("contents", "write"),
+] as const satisfies readonly GitHubPermissionRequirement[];
+
+const pullRequestFileOperationPermissions = [
+  repository("contents", "write"),
+  repository("issues", "write"),
+  repository("pull_requests", "write"),
+] as const satisfies readonly GitHubPermissionRequirement[];
 
 /** Returns display metadata for a normalized GitHub permission requirement. */
 export function getGitHubPermissionDescriptor(
@@ -226,15 +224,27 @@ export function getGitHubPermissionDescriptor(
 /** Returns the GitHub permissions required by an operation type. */
 export function requiredPermissionsForOperationType(
   type: OperationType,
+  fileDelivery: FileDeliveryMode = "pull_request",
 ): readonly GitHubPermissionRequirement[] {
+  if (
+    type === "create-file" ||
+    type === "update-file" ||
+    type === "delete-file"
+  ) {
+    return fileDelivery === "pull_request"
+      ? pullRequestFileOperationPermissions
+      : directFileOperationPermissions;
+  }
+
   return operationPermissions[type];
 }
 
 /** Returns the GitHub permissions required by an operation. */
 export function requiredPermissionsForOperation(
   operation: Operation,
+  fileDelivery?: FileDeliveryMode,
 ): readonly GitHubPermissionRequirement[] {
-  return requiredPermissionsForOperationType(operation.type);
+  return requiredPermissionsForOperationType(operation.type, fileDelivery);
 }
 
 /**
@@ -267,9 +277,12 @@ export function aggregateGitHubPermissionRequirements(
 /** Returns the aggregated GitHub permissions required by a plan. */
 export function requiredPermissionsForPlan(
   plan: Plan,
+  fileDelivery?: FileDeliveryMode,
 ): readonly GitHubPermissionRequirement[] {
   return aggregateGitHubPermissionRequirements(
-    plan.operations.flatMap(requiredPermissionsForOperation),
+    plan.operations.flatMap((operation) =>
+      requiredPermissionsForOperation(operation, fileDelivery)
+    ),
   );
 }
 

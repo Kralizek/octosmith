@@ -28,6 +28,7 @@ The canonical schemas live at the repository root under
 - `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/octosmith.schema.json`
 - `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/template.schema.json`
 - `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/fragment.schema.json`
+- `https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/plan.schema.json`
 
 For YAML editors that understand the YAML language-server directive, point each
 file at the corresponding schema:

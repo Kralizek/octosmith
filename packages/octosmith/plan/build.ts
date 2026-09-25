@@ -46,6 +46,16 @@ export function buildPlan(
   const operations: Operation[] = [];
   const collections = desired.collections ?? "explicit";
 
+  if (
+    desired.files?.length &&
+    (current.filesBranch ?? current.settings.defaultBranch) !==
+      (desired.settings?.defaultBranch ?? current.settings.defaultBranch)
+  ) {
+    throw new Error(
+      "Managed file snapshot does not match the execution branch",
+    );
+  }
+
   planRepositorySettings(current, desired, operations);
   planCustomProperties(current, desired, operations, collections);
   planActions(current, desired, operations, collections);
@@ -916,6 +926,19 @@ function diffActionsSettings(
 
   if (desired.selectedActions) {
     if (
+      current.allowedActions !== "selected" &&
+      (
+        desired.selectedActions.githubOwnedAllowed === undefined ||
+        desired.selectedActions.verifiedAllowed === undefined ||
+        desired.selectedActions.patternsAllowed === undefined
+      )
+    ) {
+      throw new Error(
+        "Selected Actions settings must be complete when enabling selected actions",
+      );
+    }
+
+    if (
       desired.allowedActions === undefined &&
       current.allowedActions !== "selected"
     ) {
@@ -1031,16 +1054,6 @@ function diffRuleset(
     }
   }
 
-  if (
-    desired.target !== undefined &&
-    desired.target !== current.target &&
-    desired.rules === undefined
-  ) {
-    for (const rule of current.rules) {
-      materializeRule(rule, effectiveTarget);
-    }
-  }
-
   if (desired.rules !== undefined) {
     const merged = mergeRules(
       current.rules,
@@ -1052,6 +1065,19 @@ function diffRuleset(
     if (!deepEqual(current.rules, merged)) {
       changes.rules = merged;
     }
+  }
+
+  if (
+    changes.target === undefined &&
+    (changes.rules !== undefined || changes.conditions !== undefined)
+  ) {
+    changes.target = effectiveTarget;
+  }
+
+  if (changes.target !== undefined && changes.rules === undefined) {
+    changes.rules = current.rules.map((rule) =>
+      materializeRule(rule, effectiveTarget)
+    );
   }
 
   return Object.keys(changes).length > 1

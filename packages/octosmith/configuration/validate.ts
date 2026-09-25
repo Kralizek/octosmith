@@ -43,18 +43,24 @@ export async function validateConfigurationDirectory(
     const templateInclude = template.match.include === "all"
       ? {}
       : template.match.include;
-    const inScope = selectorsCanOverlap(scopeInclude, templateInclude);
-    const repository = repositoryForSelectors(
+    const repository = scopeIntersectionWitness(
+      [scopeInclude, templateInclude],
+      [
+        scope.exclude,
+        template.match.exclude,
+      ].filter(
+        (selector): selector is RepositorySelector => selector !== undefined,
+      ),
       name,
-      inScope ? [scopeInclude, templateInclude] : [templateInclude],
     );
-    const validationTemplate: RepositoryTemplate = {
-      ...template,
-      match: { include: template.match.include },
-    };
+
+    if (repository === undefined) {
+      continue;
+    }
+
     const configuration: LoadedConfiguration = {
       ...loaded,
-      templates: { [name]: validationTemplate },
+      templates: { [name]: template },
     };
     const desired = await resolveDesiredState(
       configuration,
@@ -202,19 +208,25 @@ function scopeIntersectionWitness(
       visibility,
       properties,
     };
-    const activeNegativeNameSelectors = negativeSelectors
-      .filter((selector) =>
-        matchesSelector({ ...selector, names: undefined }, base)
-      )
-      .map((selector) => selector.names);
+    const blockedByNamelessSelector = negativeSelectors.some((selector) =>
+      selector.names === undefined && matchesSelector(selector, base)
+    );
 
-    if (activeNegativeNameSelectors.some((names) => names === undefined)) {
+    if (blockedByNamelessSelector) {
       continue;
     }
 
+    const activeNegativeNameSelectors = negativeSelectors
+      .filter((selector) =>
+        selector.names !== undefined &&
+        matchesSelector({ ...selector, names: undefined }, base)
+      )
+      .map((selector) => selector.names)
+      .filter((names): names is readonly string[] => names !== undefined);
+
     const name = nameConstraintWitness(
       positiveSelectors.map((selector) => selector.names),
-      activeNegativeNameSelectors as readonly (readonly string[])[],
+      activeNegativeNameSelectors,
     ) ?? (
       positiveSelectors.every((selector) => selector.names === undefined) &&
         activeNegativeNameSelectors.length === 0
@@ -276,9 +288,10 @@ function nameConstraintWitness(
     readonly value: string;
   }> = [{ states: initial, value: "" }];
   const visited = new Set<string>();
+  let queueIndex = 0;
 
-  while (queue.length > 0) {
-    const current = queue.shift()!;
+  while (queueIndex < queue.length) {
+    const current = queue[queueIndex++]!;
     const key = current.states.map((state) => state.join(",")).join("|") +
       ":" + (current.value.length > 0 ? "non-empty" : "empty");
     if (visited.has(key)) {
@@ -309,6 +322,9 @@ function nameConstraintWitness(
         globTransition(pattern, current.states[index], character)
       );
       if (nextStates.every((state) => state.length === 0)) {
+        if (positiveGroups.length === 0) {
+          return current.value + character;
+        }
         continue;
       }
       queue.push({
@@ -331,12 +347,14 @@ function globAlphabet(patterns: readonly string[]): readonly string[] {
     }
   }
 
-  let other = "§";
-  while (literals.has(other)) {
-    other += "§";
+  for (let codePoint = 0xE000; codePoint <= 0xF8FF; codePoint++) {
+    const other = String.fromCharCode(codePoint);
+    if (!literals.has(other)) {
+      return [...literals, other];
+    }
   }
 
-  return [...literals, other];
+  throw new Error("Exhausted glob wildcard sentinel space");
 }
 
 function globEpsilonClosure(
@@ -573,84 +591,6 @@ function tokensCanMatchSameCharacter(
   return literals.length === 0 ||
     literals.every((token) => token === literals[0]);
 }
-
-function repositoryForSelectors(
-  fallbackName: string,
-  selectors: readonly RepositorySelector[],
-): RepositoryMetadata {
-  const name = nameIntersectionWitness(
-    selectors.map((selector) => selector.names),
-  ) ?? "validation-" + fallbackName;
-  const visibility = visibilityIntersectionWitness(
-    selectors.map((selector) => selector.visibility),
-  );
-  const teams = [
-    ...new Set(selectors.flatMap((selector) => selector.teams ?? [])),
-  ];
-  const properties = mergeProperties(
-    selectors.map((selector) => selector.properties),
-  );
-
-  return {
-    name,
-    teams,
-    ...(visibility !== undefined && { visibility }),
-    properties,
-  };
-}
-
-function nameIntersectionWitness(
-  selectors: readonly (readonly string[] | undefined)[],
-): string | undefined {
-  const constrained = selectors.filter(
-    (names): names is readonly string[] => names !== undefined,
-  );
-
-  if (constrained.length === 0) {
-    return undefined;
-  }
-
-  return globChoiceWitness(constrained, 0, []);
-}
-
-function globChoiceWitness(
-  choices: readonly (readonly string[])[],
-  index: number,
-  selected: readonly string[],
-): string | undefined {
-  if (index === choices.length) {
-    return globPatternsIntersectionWitness(...selected);
-  }
-
-  for (const pattern of choices[index]) {
-    const witness = globChoiceWitness(choices, index + 1, [
-      ...selected,
-      pattern,
-    ]);
-    if (witness !== undefined) {
-      return witness;
-    }
-  }
-
-  return undefined;
-}
-
-function visibilityIntersectionWitness(
-  selectors: readonly RepositorySelector["visibility"][],
-): "public" | "private" | "internal" | undefined {
-  const candidates = ["public", "private", "internal"] as const;
-
-  return candidates.find((candidate) =>
-    selectors.every((visibility) => {
-      if (visibility === undefined) {
-        return true;
-      }
-      const allowed = Array.isArray(visibility) ? visibility : [visibility];
-      return allowed.includes(candidate);
-    })
-  );
-}
-
 function mergeProperties(
   selectors: readonly (
     Readonly<Record<string, PropertyValue>> | undefined

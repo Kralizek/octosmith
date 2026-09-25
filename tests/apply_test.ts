@@ -22,6 +22,7 @@ class FakeRuntime implements ApplyRuntime {
     readonly repositories: readonly RepositoryMetadata[],
     readonly failRead = new Set<string>(),
     readonly discoveryFailures: readonly RepositoryDiscoveryFailure[] = [],
+    readonly staleOnRecheck = new Set<string>(),
   ) {}
 
   discover(_loaded: LoadedConfiguration, repository?: string) {
@@ -62,7 +63,21 @@ class FakeRuntime implements ApplyRuntime {
     });
   }
 
-  apply(plan: Plan): Promise<ApplyPlanResult> {
+  prepare(_resource: import("@octosmith/octosmith").ExecutableResourcePlan) {}
+
+  async recheck(
+    resource: import("@octosmith/octosmith").ExecutableResourcePlan,
+  ) {
+    await this.read(resource.desired);
+    if (this.staleOnRecheck.has(resource.desired.repository)) {
+      throw new Error("Resource state changed after apply preparation");
+    }
+  }
+
+  apply(
+    resource: import("@octosmith/octosmith").ExecutableResourcePlan,
+  ): Promise<ApplyPlanResult> {
+    const plan = resource.plan;
     this.applied.push(plan);
 
     return Promise.resolve({
@@ -118,6 +133,50 @@ Deno.test("apply apply executes the fresh plan", async () => {
 
     assertEquals(results[0].status, "applied");
     assertEquals(runtime.applied.length, 1);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("fresh apply rechecks the first resource after all resources are prepared", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime(
+      [metadata("sample"), metadata("broken")],
+      new Set(),
+      [],
+      new Set(["sample"]),
+    );
+    const results = await applyResults(runtime, root, "apply");
+
+    assertEquals(runtime.applied, []);
+    assertEquals(results[0].status, "failed");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("fresh apply prepares all resources before the first mutation", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime(
+      [metadata("sample"), metadata("broken")],
+      new Set(["broken"]),
+    );
+    const results = await applyResults(runtime, root, "apply");
+
+    assertEquals(runtime.applied, []);
+    assertEquals(
+      results.map((item) => [item.repository, item.status]),
+      [
+        ["broken", "failed"],
+        ["sample", "failed"],
+      ],
+    );
+    assertEquals(
+      results.find((item) => item.repository === "sample")?.error,
+      "Apply aborted before mutation because another resource failed during preparation",
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }

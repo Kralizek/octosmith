@@ -1,10 +1,16 @@
-import type { CurrentState, DesiredState } from "../mod.ts";
+import {
+  type CurrentState,
+  type DesiredState,
+  fileExecutionBranch,
+  type Operation,
+} from "../mod.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
 
 /** Read the current GitHub state needed for the supplied desired state. */
 export async function readCurrentState(
   source: RepositoryStateSource,
   desired: DesiredState,
+  operations?: readonly Operation[],
 ): Promise<CurrentState> {
   const repository = desired.repository;
   const strict = desired.collections === "strict";
@@ -20,7 +26,6 @@ export async function readCurrentState(
     teams,
     rulesets,
     environments,
-    files,
   ] = await Promise.all([
     source.getRepositorySettings(repository),
     desired.customProperties !== undefined
@@ -51,8 +56,28 @@ export async function readCurrentState(
     desired.environments !== undefined
       ? source.getEnvironments(repository)
       : Promise.resolve([]),
-    readOwnedFiles(source, desired),
   ]);
+
+  const filesBranch = operations === undefined
+    ? desired.settings?.defaultBranch ?? settings.defaultBranch
+    : fileExecutionBranch(settings.defaultBranch, operations);
+  const paths = [
+    ...new Set([
+      ...(desired.files ?? []).map((file) => file.path),
+      ...(operations ?? []).flatMap((operation) => {
+        switch (operation.type) {
+          case "create-file":
+          case "update-file":
+            return [operation.file.path];
+          case "delete-file":
+            return [operation.path];
+          default:
+            return [];
+        }
+      }),
+    ]),
+  ];
+  const files = await readOwnedFiles(source, repository, paths, filesBranch);
 
   return {
     repository,
@@ -110,6 +135,7 @@ export async function readCurrentState(
       : strict
       ? environments
       : filterSparseEnvironments(environments, desired.environments),
+    ...(paths.length > 0 && { filesBranch }),
     files,
   };
 }
@@ -151,14 +177,17 @@ function filterSparseEnvironments(
 
 async function readOwnedFiles(
   source: RepositoryStateSource,
-  desired: DesiredState,
+  repository: string,
+  paths: readonly string[],
+  branch: string,
 ): Promise<CurrentState["files"]> {
-  if (!desired.files?.length) {
+  if (paths.length === 0) {
     return [];
   }
 
+  await source.getBranchHead(repository, branch);
   const files = await Promise.all(
-    desired.files.map((file) => source.getFile(desired.repository, file.path)),
+    paths.map((path) => source.getFile(repository, path, branch)),
   );
 
   return files.filter((file): file is NonNullable<typeof file> =>

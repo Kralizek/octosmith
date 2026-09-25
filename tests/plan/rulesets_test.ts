@@ -145,6 +145,7 @@ Deno.test("ruleset explicit updates preserve unowned fields and sibling rules", 
         id: 1,
         changes: {
           name: "protect",
+          target: "branch",
           enforcement: "evaluate",
           conditions: {
             refName: {
@@ -219,6 +220,7 @@ Deno.test("buildPlan does not mutate ruleset inputs during explicit merges", () 
     id: 1,
     changes: {
       name: "protect",
+      target: "branch",
       conditions: {
         refName: {
           include: ["~DEFAULT_BRANCH"],
@@ -272,6 +274,7 @@ Deno.test("ruleset bypass actors and target drift are planned", () => {
         changes: {
           name: "protect",
           target: "tag",
+          rules: [],
           bypassActors: [{
             actorType: "team",
             actorId: 7,
@@ -360,6 +363,7 @@ Deno.test("rulesets and nested rules are explicit by default and authoritative i
       id: 1,
       changes: {
         name: "keep",
+        target: "push",
         rules: [
           { type: "max-file-size", maxFileSizeMb: 20 },
           {
@@ -380,6 +384,7 @@ Deno.test("rulesets and nested rules are explicit by default and authoritative i
         id: 1,
         changes: {
           name: "keep",
+          target: "push",
           rules: [{ type: "max-file-size", maxFileSizeMb: 20 }],
         },
       },
@@ -461,7 +466,7 @@ Deno.test("strict empty rulesets and rules clear owned collections", () => {
       operations: [{
         type: "update-ruleset",
         id: 1,
-        changes: { name: "protect", rules: [] },
+        changes: { name: "protect", target: "push", rules: [] },
       }],
     },
   );
@@ -587,6 +592,7 @@ Deno.test("ruleset conditions validate against the effective target", () => {
         changes: {
           name: "protect",
           target: "branch",
+          rules: [],
           conditions: {
             refName: {
               include: ["~DEFAULT_BRANCH"],
@@ -770,6 +776,7 @@ Deno.test("pull-request updates preserve unsupported fields", () => {
     id: 1,
     changes: {
       name: "protect",
+      target: "branch",
       rules: [
         {
           type: "pull-request",
@@ -1004,6 +1011,7 @@ Deno.test("push to ref target transition materializes empty ref conditions", () 
     changes: {
       name: "protect",
       target: "branch",
+      rules: [],
       conditions: {
         refName: {
           include: [],

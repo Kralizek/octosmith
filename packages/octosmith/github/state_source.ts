@@ -39,5 +39,11 @@ export interface RepositoryStateSource {
 
   getEnvironments(repository: string): Promise<readonly Environment[]>;
 
-  getFile(repository: string, path: string): Promise<CurrentFile | undefined>;
+  getBranchHead(repository: string, branch: string): Promise<string>;
+
+  getFile(
+    repository: string,
+    path: string,
+    branch?: string,
+  ): Promise<CurrentFile | undefined>;
 }

@@ -30,6 +30,8 @@ export interface CurrentState {
   readonly teams: readonly TeamPermission[];
   readonly rulesets: readonly CurrentRuleset[];
   readonly environments: readonly Environment[];
+  /** Branch used for the managed-file snapshot; defaults to settings.defaultBranch. */
+  readonly filesBranch?: string;
   readonly files: readonly CurrentFile[];
 }
 

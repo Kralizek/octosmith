@@ -1,4 +1,5 @@
 import sodium from "libsodium-wrappers";
+import { persistedOperationSecretSources } from "../plan/operation_contract.ts";
 import type {
   DesiredActionsOidcSettings,
   DesiredActionsSettings,
@@ -23,6 +24,7 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly secretValue: SecretValueProvider;
   readonly fileChanges?: FileChangesConfiguration;
   readonly preparedFileChanges?: PreparedFileChanges;
+  readonly fileBranch?: string;
 }
 
 type FileOperation = Extract<
@@ -56,6 +58,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #secretValue: SecretValueProvider;
   readonly #fileChanges: EffectiveFileChanges;
   readonly #preparedFileChanges?: PreparedFileChanges;
+  readonly #fileBranch?: string;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
     this.#client = options.client;
@@ -65,26 +68,15 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       options.fileChanges ?? { mode: "direct" },
     );
     this.#preparedFileChanges = options.preparedFileChanges;
+    this.#fileBranch = options.fileBranch;
   }
 
   prepare(
     _repository: string,
     operations: readonly Operation[],
+    fileBranch?: string,
   ): RepositoryMutationSink {
-    const names = new Set(operations.flatMap((operation) => {
-      switch (operation.type) {
-        case "set-actions-secret":
-        case "set-dependabot-secret":
-          return [operation.secret.source];
-        case "create-environment":
-        case "update-environment":
-          return (operation.environment.secrets ?? []).map((secret) =>
-            secret.source
-          );
-        default:
-          return [];
-      }
-    }));
+    const names = persistedOperationSecretSources(operations);
     const values = new Map<string, string>();
 
     for (const name of names) {
@@ -108,6 +100,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         return value;
       },
       fileChanges: toConfiguration(this.#fileChanges),
+      fileBranch: fileBranch ?? this.#fileBranch,
       ...(fileOperations.length > 0 && {
         preparedFileChanges: {
           operations: fileOperations,
@@ -545,7 +538,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     >(
       repositoryPath,
     );
-    const defaultBranch = metadata.default_branch;
+    const defaultBranch = this.#fileBranch ?? metadata.default_branch;
     const baseRef = await this.#client.get<{
       readonly object: { readonly sha: string };
     }>(
