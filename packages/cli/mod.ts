@@ -154,6 +154,13 @@ function createCli(
           throw new Error("Events output path must not be empty");
         }
 
+        const persistedArtifact =
+          mode === "apply" && modeOptions.plan !== undefined
+            ? parsePersistedPlanArtifact(
+              JSON.parse(await Deno.readTextFile(modeOptions.plan)),
+            )
+            : undefined;
+
         const eventOutput = commandOptions.eventsOutput !== undefined
           ? await openEventOutput(commandOptions.eventsOutput)
           : undefined;
@@ -179,16 +186,12 @@ function createCli(
         };
 
         try {
-          if (mode === "apply" && modeOptions.plan !== undefined) {
-            const artifact = parsePersistedPlanArtifact(
-              JSON.parse(await Deno.readTextFile(modeOptions.plan)),
-            );
-
+          if (mode === "apply" && persistedArtifact !== undefined) {
             try {
               await applyPersistedPlan(
                 runtime,
                 loaded,
-                artifact,
+                persistedArtifact,
                 onRepositoryApplied,
               );
             } catch (error) {

@@ -12,6 +12,7 @@ import {
   projectOwnedCurrentState,
 } from "../packages/octosmith/mod.ts";
 import { currentState } from "./plan/fixtures.ts";
+import { applyPersistedPlan } from "../packages/cli/persisted.ts";
 
 Deno.test("canonical hashing is independent of object key order", async () => {
   assertEquals(
@@ -650,6 +651,65 @@ Deno.test("strict ruleset preconditions include unowned rule contents", () => {
   );
 });
 
+Deno.test("persisted apply rechecks state immediately before mutation", async () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    settings: { hasIssues: false },
+  };
+  const plannedCurrent = currentState();
+  const changedCurrent = currentState({
+    settings: { ...plannedCurrent.settings, hasIssues: false },
+  });
+  const plan = buildPlan(plannedCurrent, desired);
+  const evaluations = buildApplyEvaluations(desired, plan.operations);
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: { names: ["sample"] } } },
+    },
+    templates: {
+      "repository:sample": {
+        version: 1,
+        kind: "repository",
+        match: { include: { names: ["sample"] } },
+        repository: { settings: { hasIssues: false } },
+      },
+    },
+  };
+  const artifact = await createPersistedPlanArtifact(
+    loaded,
+    [{ desired, current: plannedCurrent, plan, evaluations }],
+    new Date("2026-09-24T12:00:00Z"),
+  );
+
+  let reads = 0;
+  let applies = 0;
+  const runtime = {
+    discover: () =>
+      Promise.resolve({
+        repositories: [{
+          name: "sample",
+          teams: [],
+          visibility: "private" as const,
+          properties: {},
+        }],
+        failures: [],
+      }),
+    read: () => Promise.resolve(reads++ === 0 ? plannedCurrent : changedCurrent),
+    apply: () => {
+      applies++;
+      throw new Error("apply must not be called after recheck drift");
+    },
+  };
+
+  await applyPersistedPlan(runtime, loaded, artifact, () => {});
+  assertEquals(reads, 2);
+  assertEquals(applies, 0);
+});
+
 Deno.test("configuration precondition normalizes execution defaults", async () => {
   const baseLoaded: LoadedConfiguration = {
     root: ".",
@@ -783,6 +843,35 @@ Deno.test("configuration precondition normalizes set-valued selectors", async ()
   assertEquals(
     (await createPersistedPlanArtifact(all, [])).configuration,
     (await createPersistedPlanArtifact(empty, [])).configuration,
+  );
+});
+
+Deno.test("configuration precondition normalizes scalar visibility like singleton arrays", async () => {
+  const scalar: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: { visibility: "public" } },
+      },
+    },
+    templates: {},
+  };
+  const array: LoadedConfiguration = {
+    ...scalar,
+    configuration: {
+      ...scalar.configuration,
+      repositories: {
+        ...scalar.configuration.repositories,
+        scope: { include: { visibility: ["public"] } },
+      },
+    },
+  };
+
+  assertEquals(
+    (await createPersistedPlanArtifact(scalar, [])).configuration,
+    (await createPersistedPlanArtifact(array, [])).configuration,
   );
 });
 

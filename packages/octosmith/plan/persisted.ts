@@ -187,9 +187,13 @@ function normalizeSelectorForHash(
       teams: [...new Set(selector.teams)].sort(),
     }),
     ...(selector.visibility !== undefined && {
-      visibility: Array.isArray(selector.visibility)
-        ? [...new Set(selector.visibility)].sort()
-        : selector.visibility,
+      visibility: [
+        ...new Set(
+          Array.isArray(selector.visibility)
+            ? selector.visibility
+            : [selector.visibility],
+        ),
+      ].sort(),
     }),
     ...(selector.properties !== undefined && {
       properties: selector.properties,

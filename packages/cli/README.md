@@ -80,7 +80,7 @@ executed exactly and are never rebuilt.
 
 Apply is not transactional. If one operation fails, earlier operations for that
 repository may already have been applied. Remaining operations for that
-repository are skipped, while other repositories can continue.
+repository are skipped, and Octosmith stops before mutating later repositories.
 
 ## Target one resource
 
