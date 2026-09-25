@@ -31,6 +31,12 @@ export function renderReport(
     }
   }
 
+  for (const resource of report.inspection?.resources ?? []) {
+    if (resource.status === "unmatched") {
+      lines.push(resource.type + " " + resource.name + " - unmatched");
+    }
+  }
+
   const summary = summarize(report);
   lines.push(
     "",
@@ -39,7 +45,8 @@ export function renderReport(
       summary.planned + " planned, " +
       summary.applied + " applied, " +
       summary.partiallyApplied + " partially-applied, " +
-      summary.failed + " failed",
+      summary.failed + " failed, " +
+      (report.inspection?.summary.unmatched ?? 0) + " unmatched",
   );
 
   return lines.join("\n");

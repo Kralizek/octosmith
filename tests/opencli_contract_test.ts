@@ -106,6 +106,10 @@ Deno.test("OpenCLI contract gives resource list configuration and output flags",
     command.flags?.some((flag) => flag.name === "format"),
     true,
   );
+  assertEquals(
+    command.flags?.some((flag) => flag.name === "trace"),
+    true,
+  );
 });
 
 Deno.test("OpenCLI contract documents help alias and current exit behavior", async () => {
@@ -134,6 +138,7 @@ Deno.test("OpenCLI contract includes representative canonical examples", async (
     const commandName of [
       "octosmith plan",
       "octosmith apply",
+      "octosmith resource list",
       "octosmith resource create",
       "octosmith template validate",
     ]

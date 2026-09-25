@@ -1,18 +1,20 @@
 import {
   buildApplyEvaluations,
   buildPlan,
+  classifyResource,
   type DesiredState,
   type ExecutableResourcePlan,
   fileExecutionBranch,
   hashCanonical,
+  inspectResource,
   type LoadedConfiguration,
-  matchesScope,
   type Operation,
   preflightRuntimeReferences,
   projectOwnedCurrentState,
   reportFailedRepository,
   reportPlannedRepository,
   resolveDesiredState,
+  type ResourceInspection,
   type RuntimeValueProvider,
 } from "@octosmith/octosmith";
 import { executeExecutableResources } from "./execution.ts";
@@ -150,12 +152,10 @@ export function createGitHubRuntime(
         throw new Error("Resource selection changed after apply preparation");
       }
       const metadata = discovery.repositories[0];
-      const matches = Object.entries(loadedConfiguration.templates).filter(
-        ([, template]) => matchesScope(template.match, metadata),
-      );
+      const classification = classifyResource(loadedConfiguration, metadata);
       if (
-        matches.length !== 1 ||
-        matches[0][0] !== resource.desired.template
+        classification.status !== "matched" ||
+        classification.template !== resource.desired.template
       ) {
         throw new Error("Resource template changed after apply preparation");
       }
@@ -208,6 +208,7 @@ export interface ApplyOptions {
   readonly mode: ApplyMode;
   readonly resource?: string;
   readonly values?: RuntimeValueProvider;
+  readonly onResourceInspected?: (resource: ResourceInspection) => void;
   readonly onRepositoryApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
   ) => void | Promise<void>;
@@ -238,29 +239,26 @@ export async function apply(
   }
 
   for (const repository of discovery.repositories) {
-    const matchingTemplates = Object.entries(loaded.templates).filter((
-      [, candidate],
-    ) => matchesScope(candidate.match, repository));
-
-    if (
-      matchingTemplates.length === 0 &&
-      loaded.configuration.repositories.settings?.unmatchedRepositories ===
-        "ignore"
-    ) {
-      continue;
-    }
-
     let template: string | undefined;
     let templateName: string | undefined;
 
     try {
+      const inspection = inspectResource(loaded, repository);
+      options.onResourceInspected?.(inspection);
+      if (
+        inspection.status === "unmatched" &&
+        loaded.configuration.repositories.settings?.unmatchedRepositories ===
+          "ignore"
+      ) {
+        continue;
+      }
       let runtimeValues = values;
 
-      if (matchingTemplates.length === 1) {
-        template = matchingTemplates[0][0];
+      if (inspection.status === "matched") {
+        template = inspection.template;
         runtimeValues = preflightRuntimeReferences(
           template,
-          matchingTemplates[0][1],
+          loaded.templates[template],
           repository,
           values,
         );

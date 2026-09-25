@@ -10,6 +10,7 @@ export * from "./report/mod.ts";
 export * from "./state/mod.ts";
 export * from "./types.ts";
 export * from "./github/mod.ts";
+export * from "./inspection.ts";
 
 /** The apply modes supported by Octosmith. */
 export type ApplyMode = "plan" | "apply";

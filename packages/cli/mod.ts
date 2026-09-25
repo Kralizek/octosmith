@@ -10,12 +10,16 @@
 import { Command } from "@cliffy/command";
 import {
   createPersistedPlanArtifact,
+  inspectResource,
   loadConfigurationDirectory,
   parsePersistedPlanArtifact,
   renderReport,
+  renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
   type Report,
   type RepositoryReport,
+  type ResourceInspection,
+  summarizeResourceInspection,
   validateConfigurationDirectory,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
@@ -166,6 +170,7 @@ function createCli(
           : undefined;
         const startedAt = new Date();
         const repositories: RepositoryReport[] = [];
+        const inspectedResources: ResourceInspection[] = [];
         const persistedResources:
           import("@octosmith/octosmith").PersistedResourceInput[] = [];
 
@@ -212,6 +217,8 @@ function createCli(
               mode,
               ...(resource !== undefined && { resource }),
               onRepositoryApplied,
+              onResourceInspected: (resource) =>
+                inspectedResources.push(resource),
               ...(mode === "plan" && modeOptions.out !== undefined && {
                 onPlanBuilt: (plannedResource) => {
                   persistedResources.push(plannedResource);
@@ -228,6 +235,9 @@ function createCli(
           startedAt,
           completedAt: new Date(),
           repositories,
+          ...(persistedArtifact === undefined && {
+            inspection: summarizeResourceInspection(inspectedResources),
+          }),
         };
 
         write(
@@ -273,8 +283,44 @@ function createCli(
           .option("--format <format:string>", "Output format: text or json.", {
             default: "text",
           })
-          .action((_commandOptions) => {
-            throw new Error("resource list is not implemented yet");
+          .option("--trace", "Emit GitHub API request traces to stderr.")
+          .action(async (commandOptions) => {
+            const format = parseOutputFormat(commandOptions.format);
+            const runtime = options.runtime ??
+              createDefaultRuntime(commandOptions.trace ?? false, writeError);
+            const loaded = await loadConfigurationDirectory(
+              commandOptions.path,
+            );
+            const discovery = await runtime.discover(loaded);
+            const result = summarizeResourceInspection(
+              discovery.repositories.map((resource) =>
+                inspectResource(loaded, resource)
+              ),
+            );
+            write(renderOutput(format, result, renderResourceInspection));
+
+            for (const failure of discovery.failures) {
+              const message = failure.error instanceof Error
+                ? failure.error.message
+                : String(failure.error);
+              writeError(
+                "[ERROR] Resource " + failure.repository + ": " + message,
+              );
+            }
+            if (
+              result.summary.unmatched > 0 &&
+              loaded.configuration.repositories.settings
+                  ?.unmatchedRepositories !== "ignore"
+            ) {
+              writeError(
+                "[ERROR] " + result.summary.unmatched +
+                  " resources in the configuration scope did not match a template.",
+              );
+              throw new ApplyFailedError();
+            }
+            if (discovery.failures.length > 0) {
+              throw new ApplyFailedError();
+            }
           }),
       )
       .command(
@@ -401,7 +447,7 @@ export async function main(
     }
 
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[ERROR] ${message}`);
+    (options.writeError ?? console.error)(`[ERROR] ${message}`);
     return 1;
   }
 }

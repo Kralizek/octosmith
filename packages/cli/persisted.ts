@@ -1,4 +1,5 @@
 import {
+  classifyResource,
   collectRuntimeReferences,
   equalContentHash,
   type ExecutableResourcePlan,
@@ -6,7 +7,6 @@ import {
   hashEffectiveConfiguration,
   hashEffectiveTemplate,
   type LoadedConfiguration,
-  matchesScope,
   persistedOperationSecretSources,
   type PersistedPlanArtifact,
   type PersistedResourcePlan,
@@ -194,15 +194,16 @@ async function inspectResource(
   let secretPreflightError: unknown;
 
   try {
-    const matches = Object.entries(loaded.templates).filter(([, template]) =>
-      matchesScope(template.match, metadata)
-    );
+    const classification = classifyResource(loaded, metadata);
 
-    if (matches.length !== 1 || matches[0][0] !== resource.template.id) {
+    if (
+      classification.status !== "matched" ||
+      classification.template !== resource.template.id
+    ) {
       return { state: "template" };
     }
 
-    const [[, template]] = matches;
+    const template = loaded.templates[classification.template];
     const values = runtime.value;
     for (const reference of collectRuntimeReferences(template)) {
       if (reference.kind !== "secret") {
