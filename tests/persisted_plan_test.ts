@@ -702,7 +702,7 @@ Deno.test("explicit materialized rulesets track concurrently added rules", () =>
   );
 });
 
-Deno.test("strict ruleset preconditions include unowned rule contents", () => {
+Deno.test("strict ruleset preconditions ignore contents of rules being removed", () => {
   const desired: DesiredState = {
     repository: "sample",
     template: "repository:sample",
@@ -751,7 +751,7 @@ Deno.test("strict ruleset preconditions include unowned rule contents", () => {
   const right = currentState({ rulesets: [changedRuleset] });
   const plan = buildPlan(left, desired);
 
-  assertNotEquals(
+  assertEquals(
     projectOwnedCurrentState(left, desired, plan.operations),
     projectOwnedCurrentState(right, desired, plan.operations),
   );

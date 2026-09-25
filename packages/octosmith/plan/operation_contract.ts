@@ -152,6 +152,9 @@ export function persistedOperationContract(
           if (changes.rules === undefined) {
             dependency.rules = existing.rules;
           } else {
+            dependency.ruleTypes = existing.rules
+              .map((rule) => rule.type)
+              .sort();
             const preserved = projectPreservedRules(
               existing.rules,
               changes.rules,
