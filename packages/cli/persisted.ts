@@ -240,7 +240,7 @@ async function inspectResource(
   }
 
   try {
-    const current = await runtime.read(desired);
+    const current = await runtime.read(desired, resource.operations);
     const stateHash = await hashCanonical(
       projectOwnedCurrentState(current, desired, resource.operations),
     );

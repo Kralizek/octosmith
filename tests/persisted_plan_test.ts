@@ -147,21 +147,58 @@ Deno.test("replay contract tracks ruleset fields copied into stored updates", ()
   });
   assertEquals(dependency[0].rules, [{
     type: "required-linear-history",
-    shape: {},
   }, {
     type: "required-status-checks",
-    shape: {
-      doNotEnforceOnCreate: { present: true, value: false },
-      checks: {
-        present: true,
-        value: [{ context: "build" }],
-      },
-      strict: {
-        present: true,
-        value: { overwritten: true },
-      },
-    },
+    doNotEnforceOnCreate: false,
+    checks: [{ context: "build" }],
+    strict: false,
   }]);
+});
+
+Deno.test("replacement rule preconditions cover fields outside the saved shape", async () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    rulesets: [{
+      name: "main",
+      rules: [{ type: "commit-message-pattern", pattern: "reviewed" }],
+    }],
+  };
+  const current = currentState({
+    rulesets: [{
+      id: 7,
+      name: "main",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: { refName: { include: [], exclude: [] } },
+      rules: [{
+        type: "commit-message-pattern",
+        operator: "contains",
+        pattern: "original",
+      }],
+    }],
+  });
+  const operations = buildPlan(current, desired).operations;
+  const before = await hashCanonical(
+    projectOwnedCurrentState(current, desired, operations),
+  );
+
+  for (
+    const added of [
+      { negate: true },
+      { futureField: { nested: ["new"] } },
+    ]
+  ) {
+    const changed = structuredClone(current);
+    Object.assign(changed.rulesets[0].rules[0], added);
+    assertNotEquals(
+      before,
+      await hashCanonical(
+        projectOwnedCurrentState(changed, desired, operations),
+      ),
+    );
+  }
 });
 
 Deno.test("replay contract tracks newly populated fields overwritten by materialized rules", () => {
@@ -1216,6 +1253,144 @@ Deno.test("persisted artifact stores exact operations without secret material", 
     ),
     true,
   );
+});
+
+Deno.test("planner-preserved rule fields round-trip through create and update schemas", async () => {
+  const cases = [
+    { target: "branch", rule: { type: "required-linear-history" } },
+    {
+      target: "tag",
+      rule: {
+        type: "commit-message-pattern",
+        operator: "contains",
+        pattern: "expected",
+        negate: true,
+      },
+    },
+    {
+      target: "branch",
+      rule: {
+        type: "pull-request",
+        allowedMergeMethods: ["squash"],
+        dismissalRestriction: {
+          enabled: true,
+          allowedActors: [{ id: 1, type: "team", extension: "actor" }],
+          extension: "restriction",
+        },
+        requiredReviewers: [{
+          reviewerTeamId: 1,
+          filePatterns: ["*"],
+          minimumApprovals: 1,
+          extension: "reviewer",
+        }],
+      },
+    },
+    {
+      target: "branch",
+      rule: {
+        type: "required-status-checks",
+        doNotEnforceOnCreate: false,
+        strict: true,
+        checks: [{ context: "ci", integrationId: 1, extension: "check" }],
+      },
+    },
+    {
+      target: "branch",
+      rule: {
+        type: "workflows",
+        doNotEnforceOnCreate: false,
+        workflows: [{ path: "ci.yml", repositoryId: 1, extension: "workflow" }],
+      },
+    },
+    {
+      target: "branch",
+      rule: {
+        type: "code-scanning",
+        tools: [{
+          tool: "CodeQL",
+          alertsThreshold: "errors",
+          securityAlertsThreshold: "high-or-higher",
+          extension: "tool",
+        }],
+      },
+    },
+    { target: "push", rule: { type: "max-file-size", maxFileSizeMb: 10 } },
+  ];
+  for (const { target, rule } of cases) {
+    const definition = {
+      name: "main",
+      target,
+      enforcement: "active",
+      bypassActors: [],
+      ...(target !== "push" &&
+        { conditions: { refName: { include: [], exclude: [] } } }),
+      rules: [{ ...rule, futureTopLevelField: { nested: ["preserved"] } }],
+    } as unknown as import("../packages/octosmith/mod.ts").DesiredRuleset;
+    const desired: DesiredState = {
+      repository: "sample",
+      template: "repository:sample",
+      rulesets: [definition],
+    };
+    const loaded: LoadedConfiguration = {
+      root: ".",
+      configuration: {
+        version: 1,
+        organization: "acme",
+        repositories: { scope: { include: "all" } },
+      },
+      templates: {
+        "repository:sample": {
+          version: 1,
+          kind: "repository",
+          match: { include: "all" },
+          repository: {},
+        },
+      },
+    };
+    const empty = currentState();
+    const create = buildPlan(empty, desired);
+    const operation = create.operations[0];
+    if (operation.type !== "create-ruleset") {
+      throw new Error("Expected create-ruleset");
+    }
+    const existing = currentState({
+      rulesets: [{ ...operation.ruleset, id: 7 }],
+    });
+    const updateDesired: DesiredState = {
+      ...desired,
+      rulesets: [{
+        ...definition,
+        rules: [
+          ...definition.rules!,
+          {
+            type: target === "push"
+              ? "file-path-restriction"
+              : "required-signatures",
+            ...(target === "push" && { restrictedFilePaths: ["private/**"] }),
+          } as import("../packages/octosmith/mod.ts").DesiredRulesetRule,
+        ],
+      }],
+    };
+    const update = buildPlan(existing, updateDesired);
+    for (
+      const [current, resolved, plan] of [[empty, desired, create], [
+        existing,
+        updateDesired,
+        update,
+      ]] as const
+    ) {
+      const artifact = await createPersistedPlanArtifact(loaded, [{
+        desired: resolved,
+        current,
+        plan,
+        evaluations: buildApplyEvaluations(resolved, plan.operations),
+      }]);
+      const parsed = parsePersistedPlanArtifact(
+        JSON.parse(JSON.stringify(artifact)),
+      );
+      assertEquals(parsed.resources[0].operations, plan.operations);
+    }
+  }
 });
 
 Deno.test("persisted artifact parsing rejects unsupported versions and invalid indexes", () => {

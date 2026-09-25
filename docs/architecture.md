@@ -81,9 +81,11 @@ This keeps the planner testable without GitHub.
 
 ## Persisted executable plans
 
-Persisted plans add a stricter execution boundary than normal in-process
-plan/apply. A saved plan is an executable artifact: after preflight, Octosmith
-must replay the stored operations rather than reinterpret them from live state.
+Fresh and persisted apply share an executable-resource boundary that prepares
+all resources before mutation and rechecks selection and state before each
+resource executes. A saved plan adds configuration, template, and state hash
+preconditions: after preflight, Octosmith must replay the stored operations
+rather than reinterpret them from live state.
 
 Resource state preconditions therefore combine two independent projections:
 
@@ -98,6 +100,21 @@ stored operations. Persisted-plan preflight and the mutation sink share that
 contract so adding a new operation type requires an explicit dependency
 decision.
 
+For ruleset replacements, replay dependencies include the full current payload
+of every retained rule, including unknown and newly appearing fields. Removed
+rules contribute only their identities, not discarded contents. This avoids
+inferring field ownership from equality with the saved replacement. Create and
+update artifacts share ref/push rule schemas; known fields remain validated,
+while rule payloads and nested helper objects allow preserved extension fields.
+
+Managed-file snapshots record their execution branch separately from the current
+repository default branch. Fresh planning reads the desired default branch;
+persisted preflight derives the branch from the ordered saved operations. Branch
+existence and file expectations are checked before mutation, and delivery is
+pinned to that branch. All batched file operations must use one execution
+branch. Preconditions include managed paths and their replay SHAs, not unrelated
+files or the branch's whole commit history.
+
 The persisted apply boundary is:
 
 ```text
@@ -105,6 +122,7 @@ parse + schema/semantic validation
 → validate effective configuration/template hashes
 → validate runtime dependencies for stored operations
 → validate planning-owned state + replay dependencies for every resource
+→ prepare every resource, including file delivery and secret snapshots
 → re-check one resource immediately before mutation
 → replay stored operations exactly
 ```
@@ -112,6 +130,10 @@ parse + schema/semantic validation
 The canonical hash function remains generic. Domain-specific semantic
 normalization happens before hashing so the hash layer does not need to know
 about Octosmith fields.
+
+The execution boundary is not a GitHub transaction. A remote failure or change
+after a recheck can still interrupt execution; file writes retain their
+concurrency checks and execution stops on the first failed operation.
 
 ## Reporting
 

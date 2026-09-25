@@ -1,5 +1,9 @@
 import { assertEquals, assertThrows } from "@std/assert";
-import { buildPlan } from "../../packages/octosmith/mod.ts";
+import {
+  buildPlan,
+  fileExecutionBranch,
+  type Operation,
+} from "../../packages/octosmith/mod.ts";
 import { currentState } from "./fixtures.ts";
 
 Deno.test("files create missing exact and exists files", () => {
@@ -115,5 +119,49 @@ Deno.test("files reject duplicate paths", () => {
       }),
     Error,
     "Duplicate file: README.md",
+  );
+});
+
+Deno.test("file planning requires a snapshot of the effective branch", () => {
+  const desired = {
+    repository: "sample",
+    template: "code",
+    settings: { defaultBranch: "release" },
+    files: [{ path: "managed.txt", ensure: "exact" as const, content: "new" }],
+  };
+  assertThrows(
+    () => buildPlan(currentState(), desired),
+    Error,
+    "snapshot does not match",
+  );
+  const plan = buildPlan(
+    currentState({
+      filesBranch: "release",
+      files: [{ path: "managed.txt", content: "old", sha: "release-sha" }],
+    }),
+    desired,
+  );
+  assertEquals(plan.operations[1], {
+    type: "update-file",
+    sha: "release-sha",
+    file: desired.files[0],
+  });
+});
+
+Deno.test("batched file operations consume one ordered execution branch", () => {
+  const file: Operation = {
+    type: "create-file",
+    file: { path: "managed.txt", ensure: "exact", content: "new" },
+  };
+  const change: Operation = {
+    type: "update-repository-settings",
+    settings: { defaultBranch: "release" },
+  };
+  assertEquals(fileExecutionBranch("main", [change, file]), "release");
+  assertEquals(fileExecutionBranch("main", [file, change]), "main");
+  assertThrows(
+    () => fileExecutionBranch("main", [file, change, file]),
+    Error,
+    "one execution branch",
   );
 });

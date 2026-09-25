@@ -288,12 +288,38 @@ export function persistedOperationContract(
   }
   if (needsDefaultBranch) {
     state.defaultBranch = current.settings.defaultBranch;
+    state.filesBranch = current.filesBranch ?? current.settings.defaultBranch;
   }
 
   return {
     secretSources: persistedOperationSecretSources(operations),
     state,
   };
+}
+
+/** Resolve the branch consumed by the stored, batched file operations. */
+export function fileExecutionBranch(
+  defaultBranch: string,
+  operations: readonly Operation[],
+): string {
+  let branch = defaultBranch;
+  let filesBranch: string | undefined;
+  for (const operation of operations) {
+    if (operation.type === "update-repository-settings") {
+      branch = operation.settings.defaultBranch ?? branch;
+    } else if (
+      operation.type === "create-file" || operation.type === "update-file" ||
+      operation.type === "delete-file"
+    ) {
+      if (filesBranch !== undefined && filesBranch !== branch) {
+        throw new Error(
+          "Managed file operations must use one execution branch",
+        );
+      }
+      filesBranch = branch;
+    }
+  }
+  return filesBranch ?? branch;
 }
 
 /** Validate semantic invariants required for safe exact replay. */
@@ -491,35 +517,8 @@ function projectPreservedRules(
     if (existing === undefined) {
       return [];
     }
-    return [{
-      type: rule.type,
-      shape: projectReplayShape(existing, rule),
-    }];
+    return [existing];
   });
-}
-
-function projectReplayShape(current: object, replay: object): unknown {
-  const currentRecord = current as Record<string, unknown>;
-  const replayRecord = replay as Record<string, unknown>;
-
-  return Object.fromEntries(
-    Object.entries(replayRecord)
-      .filter(([key]) => key !== "type")
-      .map(([key, replayValue]) => [
-        key,
-        {
-          present: Object.hasOwn(currentRecord, key),
-          ...(Object.hasOwn(currentRecord, key) && {
-            value: projectReplayValue(currentRecord[key], replayValue),
-          }),
-        },
-      ]),
-  );
-}
-
-function projectReplayValue(current: unknown, replay: unknown): unknown {
-  const preserved = projectPreserved(current, replay);
-  return preserved === undefined ? { overwritten: true } : preserved;
 }
 
 function requireNonEmpty(value: string, label: string): void {

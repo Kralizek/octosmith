@@ -11,6 +11,7 @@ import { currentRepositorySettings } from "../plan/fixtures.ts";
 
 class FakeStateSource implements RepositoryStateSource {
   readonly calls: string[] = [];
+  readonly fileBranches: (string | undefined)[] = [];
 
   getRepositorySettings(repository: string) {
     this.calls.push("settings:" + repository);
@@ -111,8 +112,14 @@ class FakeStateSource implements RepositoryStateSource {
     ]);
   }
 
-  getFile(repository: string, path: string) {
+  getBranchHead(repository: string, branch: string) {
+    this.calls.push("branch:" + repository + ":" + branch);
+    return Promise.resolve("head");
+  }
+
+  getFile(repository: string, path: string, branch?: string) {
     this.calls.push("file:" + repository + ":" + path);
+    this.fileBranches.push(branch);
 
     return Promise.resolve(
       path === "exists.txt"
@@ -144,10 +151,39 @@ Deno.test("current-state reader fetches only desired resource families", async (
   }]);
   assertEquals(source.calls.sort(), [
     "actions-variables:sample",
+    "branch:sample:main",
     "file:sample:exists.txt",
     "file:sample:missing.txt",
     "settings:sample",
   ]);
+});
+
+Deno.test("file reads use the desired execution branch and saved operations override it", async () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    settings: { defaultBranch: "release" },
+    files: [{ path: "exists.txt", ensure: "exists", content: "seed" }],
+  };
+  const freshSource = new FakeStateSource();
+  const fresh = await readCurrentState(freshSource, desired);
+  assertEquals(fresh.filesBranch, "release");
+  assertEquals(freshSource.fileBranches, ["release"]);
+
+  const replaySource = new FakeStateSource();
+  const replay = await readCurrentState(replaySource, desired, [
+    {
+      type: "update-repository-settings",
+      settings: { defaultBranch: "reviewed" },
+    },
+    { type: "delete-file", path: "replay-only.txt", sha: "reviewed-sha" },
+  ]);
+  assertEquals(replay.filesBranch, "reviewed");
+  assertEquals(replaySource.fileBranches, ["reviewed", "reviewed"]);
+  assertEquals(
+    replaySource.calls.includes("file:sample:replay-only.txt"),
+    true,
+  );
 });
 
 Deno.test("OIDC-only ownership reads only the OIDC endpoint family", async () => {

@@ -1308,7 +1308,7 @@
     },
     "requiredStatusCheck": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "context"
       ],
@@ -1323,7 +1323,7 @@
     },
     "requiredWorkflow": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "path",
         "repositoryId"
@@ -1345,7 +1345,7 @@
     },
     "codeScanningTool": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "tool",
         "alertsThreshold",
@@ -1376,7 +1376,7 @@
     },
     "pullRequestDismissalActor": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "id",
         "type"
@@ -1397,7 +1397,7 @@
     },
     "requiredReviewer": {
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "required": [
         "reviewerTeamId",
         "filePatterns",
@@ -1441,7 +1441,7 @@
       "oneOf": [
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type"
           ],
@@ -1453,7 +1453,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "updateAllowsFetchAndMerge"
@@ -1469,7 +1469,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type"
           ],
@@ -1481,7 +1481,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type"
           ],
@@ -1493,7 +1493,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "checkResponseTimeoutMinutes",
@@ -1540,7 +1540,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "environments"
@@ -1559,7 +1559,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type"
           ],
@@ -1625,7 +1625,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "doNotEnforceOnCreate",
@@ -1652,7 +1652,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type"
           ],
@@ -1664,7 +1664,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "operator",
@@ -1695,7 +1695,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "operator",
@@ -1726,7 +1726,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "operator",
@@ -1757,7 +1757,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "operator",
@@ -1788,7 +1788,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "operator",
@@ -1819,7 +1819,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "doNotEnforceOnCreate",
@@ -1842,7 +1842,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "tools"
@@ -1861,7 +1861,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "severity"
@@ -1882,7 +1882,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type"
           ],
@@ -1900,7 +1900,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "reviewDraftPullRequests",
@@ -1920,7 +1920,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type"
           ],
@@ -1936,7 +1936,7 @@
       "oneOf": [
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "restrictedFilePaths"
@@ -1955,7 +1955,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "maxFilePathLength"
@@ -1971,7 +1971,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "restrictedFileExtensions"
@@ -1990,7 +1990,7 @@
         },
         {
           "type": "object",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "required": [
             "type",
             "maxFileSizeMb"
@@ -2009,565 +2009,10 @@
     "persistedRulesetRule": {
       "oneOf": [
         {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "creation"
-            }
-          }
+          "$ref": "#/$defs/refRulesetRule"
         },
         {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "updateAllowsFetchAndMerge"
-          ],
-          "properties": {
-            "type": {
-              "const": "update"
-            },
-            "updateAllowsFetchAndMerge": {
-              "type": "boolean"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "deletion"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "required-linear-history"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "checkResponseTimeoutMinutes",
-            "groupingStrategy",
-            "maxEntriesToBuild",
-            "maxEntriesToMerge",
-            "mergeMethod",
-            "minEntriesToMerge",
-            "minEntriesToMergeWaitMinutes"
-          ],
-          "properties": {
-            "type": {
-              "const": "merge-queue"
-            },
-            "checkResponseTimeoutMinutes": {
-              "type": "integer"
-            },
-            "groupingStrategy": {
-              "enum": [
-                "all-green",
-                "head-green"
-              ]
-            },
-            "maxEntriesToBuild": {
-              "type": "integer"
-            },
-            "maxEntriesToMerge": {
-              "type": "integer"
-            },
-            "mergeMethod": {
-              "enum": [
-                "merge",
-                "squash",
-                "rebase"
-              ]
-            },
-            "minEntriesToMerge": {
-              "type": "integer"
-            },
-            "minEntriesToMergeWaitMinutes": {
-              "type": "integer"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "environments"
-          ],
-          "properties": {
-            "type": {
-              "const": "required-deployments"
-            },
-            "environments": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "required-signatures"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "allowedMergeMethods",
-            "dismissStaleReviewsOnPush",
-            "dismissalRestriction",
-            "requireCodeOwnerReview",
-            "requireLastPushApproval",
-            "requiredApprovingReviewCount",
-            "requiredReviewThreadResolution",
-            "requiredReviewers"
-          ],
-          "properties": {
-            "type": {
-              "const": "pull-request"
-            },
-            "allowedMergeMethods": {
-              "type": "array",
-              "items": {
-                "enum": [
-                  "merge",
-                  "squash",
-                  "rebase"
-                ]
-              }
-            },
-            "dismissStaleReviewsOnPush": {
-              "type": "boolean"
-            },
-            "dismissalRestriction": {
-              "$ref": "#/$defs/dismissalRestriction"
-            },
-            "requireCodeOwnerReview": {
-              "type": "boolean"
-            },
-            "requireLastPushApproval": {
-              "type": "boolean"
-            },
-            "requiredApprovingReviewCount": {
-              "type": "integer"
-            },
-            "requiredReviewThreadResolution": {
-              "type": "boolean"
-            },
-            "requiredReviewers": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/requiredReviewer"
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "doNotEnforceOnCreate",
-            "checks",
-            "strict"
-          ],
-          "properties": {
-            "type": {
-              "const": "required-status-checks"
-            },
-            "doNotEnforceOnCreate": {
-              "type": "boolean"
-            },
-            "checks": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/requiredStatusCheck"
-              }
-            },
-            "strict": {
-              "type": "boolean"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "non-fast-forward"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "operator",
-            "pattern"
-          ],
-          "properties": {
-            "type": {
-              "const": "commit-message-pattern"
-            },
-            "name": {
-              "type": "string"
-            },
-            "negate": {
-              "type": "boolean"
-            },
-            "operator": {
-              "enum": [
-                "starts-with",
-                "ends-with",
-                "contains",
-                "regex"
-              ]
-            },
-            "pattern": {
-              "type": "string"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "operator",
-            "pattern"
-          ],
-          "properties": {
-            "type": {
-              "const": "commit-author-email-pattern"
-            },
-            "name": {
-              "type": "string"
-            },
-            "negate": {
-              "type": "boolean"
-            },
-            "operator": {
-              "enum": [
-                "starts-with",
-                "ends-with",
-                "contains",
-                "regex"
-              ]
-            },
-            "pattern": {
-              "type": "string"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "operator",
-            "pattern"
-          ],
-          "properties": {
-            "type": {
-              "const": "committer-email-pattern"
-            },
-            "name": {
-              "type": "string"
-            },
-            "negate": {
-              "type": "boolean"
-            },
-            "operator": {
-              "enum": [
-                "starts-with",
-                "ends-with",
-                "contains",
-                "regex"
-              ]
-            },
-            "pattern": {
-              "type": "string"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "operator",
-            "pattern"
-          ],
-          "properties": {
-            "type": {
-              "const": "branch-name-pattern"
-            },
-            "name": {
-              "type": "string"
-            },
-            "negate": {
-              "type": "boolean"
-            },
-            "operator": {
-              "enum": [
-                "starts-with",
-                "ends-with",
-                "contains",
-                "regex"
-              ]
-            },
-            "pattern": {
-              "type": "string"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "operator",
-            "pattern"
-          ],
-          "properties": {
-            "type": {
-              "const": "tag-name-pattern"
-            },
-            "name": {
-              "type": "string"
-            },
-            "negate": {
-              "type": "boolean"
-            },
-            "operator": {
-              "enum": [
-                "starts-with",
-                "ends-with",
-                "contains",
-                "regex"
-              ]
-            },
-            "pattern": {
-              "type": "string"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "doNotEnforceOnCreate",
-            "workflows"
-          ],
-          "properties": {
-            "type": {
-              "const": "workflows"
-            },
-            "doNotEnforceOnCreate": {
-              "type": "boolean"
-            },
-            "workflows": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/requiredWorkflow"
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "tools"
-          ],
-          "properties": {
-            "type": {
-              "const": "code-scanning"
-            },
-            "tools": {
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/codeScanningTool"
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "severity"
-          ],
-          "properties": {
-            "type": {
-              "const": "code-quality"
-            },
-            "severity": {
-              "enum": [
-                "errors",
-                "warnings",
-                "notes",
-                "all"
-              ]
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "code-coverage"
-            },
-            "maxCoverageDrop": {
-              "type": "number"
-            },
-            "minimumCoverage": {
-              "type": "number"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "reviewDraftPullRequests",
-            "reviewOnPush"
-          ],
-          "properties": {
-            "type": {
-              "const": "copilot-code-review"
-            },
-            "reviewDraftPullRequests": {
-              "type": "boolean"
-            },
-            "reviewOnPush": {
-              "type": "boolean"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type"
-          ],
-          "properties": {
-            "type": {
-              "const": "license-compliance-scanning"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "restrictedFilePaths"
-          ],
-          "properties": {
-            "type": {
-              "const": "file-path-restriction"
-            },
-            "restrictedFilePaths": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "maxFilePathLength"
-          ],
-          "properties": {
-            "type": {
-              "const": "max-file-path-length"
-            },
-            "maxFilePathLength": {
-              "type": "integer"
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "restrictedFileExtensions"
-          ],
-          "properties": {
-            "type": {
-              "const": "file-extension-restriction"
-            },
-            "restrictedFileExtensions": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        },
-        {
-          "type": "object",
-          "additionalProperties": false,
-          "required": [
-            "type",
-            "maxFileSizeMb"
-          ],
-          "properties": {
-            "type": {
-              "const": "max-file-size"
-            },
-            "maxFileSizeMb": {
-              "type": "number"
-            }
-          }
+          "$ref": "#/$defs/pushRulesetRule"
         }
       ]
     },

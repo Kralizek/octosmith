@@ -24,6 +24,7 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly secretValue: SecretValueProvider;
   readonly fileChanges?: FileChangesConfiguration;
   readonly preparedFileChanges?: PreparedFileChanges;
+  readonly fileBranch?: string;
 }
 
 type FileOperation = Extract<
@@ -57,6 +58,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #secretValue: SecretValueProvider;
   readonly #fileChanges: EffectiveFileChanges;
   readonly #preparedFileChanges?: PreparedFileChanges;
+  readonly #fileBranch?: string;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
     this.#client = options.client;
@@ -66,11 +68,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       options.fileChanges ?? { mode: "direct" },
     );
     this.#preparedFileChanges = options.preparedFileChanges;
+    this.#fileBranch = options.fileBranch;
   }
 
   prepare(
     _repository: string,
     operations: readonly Operation[],
+    fileBranch?: string,
   ): RepositoryMutationSink {
     const names = persistedOperationSecretSources(operations);
     const values = new Map<string, string>();
@@ -96,6 +100,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         return value;
       },
       fileChanges: toConfiguration(this.#fileChanges),
+      fileBranch: fileBranch ?? this.#fileBranch,
       ...(fileOperations.length > 0 && {
         preparedFileChanges: {
           operations: fileOperations,
@@ -533,7 +538,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     >(
       repositoryPath,
     );
-    const defaultBranch = metadata.default_branch;
+    const defaultBranch = this.#fileBranch ?? metadata.default_branch;
     const baseRef = await this.#client.get<{
       readonly object: { readonly sha: string };
     }>(

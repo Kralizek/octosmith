@@ -3,9 +3,11 @@ import {
   buildPlan,
   type DesiredState,
   type ExecutableResourcePlan,
+  fileExecutionBranch,
   hashCanonical,
   type LoadedConfiguration,
   matchesScope,
+  type Operation,
   preflightRuntimeReferences,
   projectOwnedCurrentState,
   reportFailedRepository,
@@ -40,6 +42,7 @@ export interface ApplyRuntime {
 
   read(
     desired: DesiredState,
+    operations?: readonly Operation[],
   ): Promise<import("@octosmith/octosmith").CurrentState>;
 
   prepare(resource: ExecutableResourcePlan): void | Promise<void>;
@@ -104,14 +107,14 @@ export function createGitHubRuntime(
       return await discoverRepositories(client, loaded, repository);
     },
 
-    async read(desired) {
+    async read(desired, operations) {
       options.traceGroup?.("repository: " + desired.repository);
 
       if (!source) {
         throw new Error("GitHub runtime has not discovered repositories yet");
       }
 
-      return await readCurrentState(source, desired);
+      return await readCurrentState(source, desired, operations);
     },
 
     async prepare(resource) {
@@ -121,7 +124,12 @@ export function createGitHubRuntime(
 
       validateFileDeliveryPreconditions(resource, fileChanges);
       const prepared = sink.prepare
-        ? await sink.prepare(resource.plan.repository, resource.plan.operations)
+        ? await sink.prepare(
+          resource.plan.repository,
+          resource.plan.operations,
+          resource.current.filesBranch ??
+            resource.current.settings.defaultBranch,
+        )
         : sink;
       preparedSinks.set(resource.plan.repository, prepared);
     },
@@ -152,7 +160,11 @@ export function createGitHubRuntime(
         throw new Error("Resource template changed after apply preparation");
       }
 
-      const current = await readCurrentState(source, resource.desired);
+      const current = await readCurrentState(
+        source,
+        resource.desired,
+        resource.plan.operations,
+      );
       const before = await hashCanonical(
         projectOwnedCurrentState(
           resource.current,
@@ -341,21 +353,50 @@ function validateFileDeliveryPreconditions(
     return;
   }
 
+  const files = new Map(
+    resource.current.files.map((file) => [file.path, file]),
+  );
+  for (const operation of resource.plan.operations) {
+    if (operation.type === "create-file") {
+      if (files.has(operation.file.path)) {
+        throw new Error(
+          "Managed file already exists before execution: " +
+            operation.file.path,
+        );
+      }
+    } else if (
+      operation.type === "update-file" || operation.type === "delete-file"
+    ) {
+      const path = operation.type === "update-file"
+        ? operation.file.path
+        : operation.path;
+      if (files.get(path)?.sha !== operation.sha) {
+        throw new Error(
+          "Managed file SHA does not match the reviewed operation: " + path,
+        );
+      }
+    }
+  }
+
   const effective = fileChanges ?? { mode: "pull_request" as const };
+  const effectiveDefaultBranch = fileExecutionBranch(
+    resource.current.settings.defaultBranch,
+    resource.plan.operations,
+  );
+  if (
+    effectiveDefaultBranch !==
+      (resource.current.filesBranch ?? resource.current.settings.defaultBranch)
+  ) {
+    throw new Error(
+      "Managed file snapshot does not match the execution branch",
+    );
+  }
   if (effective.mode !== "pull_request") {
     return;
   }
 
   const branch = (effective.pullRequest?.branchPrefix ?? "octosmith/") +
     "reconcile";
-  const effectiveDefaultBranch = resource.plan.operations.reduce(
-    (current, operation) =>
-      operation.type === "update-repository-settings" &&
-        operation.settings.defaultBranch !== undefined
-        ? operation.settings.defaultBranch
-        : current,
-    resource.current.settings.defaultBranch,
-  );
   if (branch === effectiveDefaultBranch) {
     throw new Error(
       "Managed file pull-request branch must not match default branch: " +

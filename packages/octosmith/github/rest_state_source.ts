@@ -311,9 +311,17 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     );
   }
 
+  async getBranchHead(repository: string, branch: string): Promise<string> {
+    const result = await this.client.get<{
+      readonly object: { readonly sha: string };
+    }>(this.repo(repository) + "/git/ref/heads/" + encodePath(branch));
+    return result.object.sha;
+  }
+
   async getFile(
     repository: string,
     path: string,
+    branch?: string,
   ): Promise<CurrentFile | undefined> {
     const result = await this.client.request<
       {
@@ -325,7 +333,10 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
     >(
       "GET",
       this.repo(repository) + "/contents/" + encodePath(path),
-      { allowNotFound: true },
+      {
+        allowNotFound: true,
+        ...(branch !== undefined && { query: { ref: branch } }),
+      },
     );
 
     if (!result) {

@@ -1645,7 +1645,157 @@ Deno.test("CLI rejects invalid output format before apply", async () => {
   }
 });
 
-async function fileConfigurationDirectory(): Promise<string> {
+for (const mode of ["fresh", "persisted"] as const) {
+  Deno.test(
+    mode + " file apply uses the planned default branch snapshot",
+    async () => {
+      const root = await fileConfigurationDirectory("release");
+      const requests: CapturedRequest[] = [];
+      const state: FileDeliveryState = {
+        defaultBranch: "master",
+        branches: {
+          master: { content: "old branch", sha: "master-sha" },
+          release: { content: "destination", sha: "release-sha" },
+        },
+      };
+      const runtime = createGitHubRuntime({
+        token: "test-token",
+        baseUrl: "https://github.example.test/api/v3",
+        fetch: fakeFileDeliveryGitHub(requests, state),
+      });
+      const planPath = root + "/plan.json";
+      try {
+        assertEquals(
+          await main(["plan", "--path", root, "--out", planPath], {
+            runtime,
+            write: () => {},
+          }),
+          0,
+        );
+        const artifact = JSON.parse(await Deno.readTextFile(planPath));
+        assertEquals(
+          artifact.resources[0].operations.find(
+            (operation: { type: string }) => operation.type === "update-file",
+          ).sha,
+          "release-sha",
+        );
+        assertEquals(mutations(requests), []);
+        state.branches.master = {
+          content: "unrelated drift",
+          sha: "new-master-sha",
+        };
+        requests.length = 0;
+        assertEquals(
+          await main([
+            "apply",
+            "--path",
+            root,
+            ...(mode === "persisted" ? ["--plan", planPath] : []),
+          ], { runtime, write: () => {} }),
+          0,
+        );
+        assertEquals(state.defaultBranch, "release");
+        assertEquals(
+          requests.filter((request) =>
+            request.method === "GET" &&
+            request.url.pathname.endsWith("/contents/managed.txt")
+          ).every((request) =>
+            request.url.searchParams.get("ref") === "release"
+          ),
+          true,
+        );
+        assertEquals(
+          requests.find((request) =>
+            request.method === "POST" && request.url.pathname.endsWith("/pulls")
+          )?.body,
+          {
+            title: "Octosmith: reconcile managed files",
+            head: "octosmith/reconcile",
+            base: "release",
+          },
+        );
+      } finally {
+        await Deno.remove(root, { recursive: true });
+      }
+    },
+  );
+}
+
+for (const drift of ["content", "missing-branch"] as const) {
+  Deno.test(
+    "persisted file preflight rejects destination " + drift +
+      " before mutation",
+    async () => {
+      const root = await fileConfigurationDirectory("release");
+      const requests: CapturedRequest[] = [];
+      const state: FileDeliveryState = {
+        defaultBranch: "master",
+        branches: {
+          master: undefined,
+          release: { content: "old", sha: "old-sha" },
+        },
+      };
+      const runtime = createGitHubRuntime({
+        token: "test-token",
+        baseUrl: "https://github.example.test/api/v3",
+        fetch: fakeFileDeliveryGitHub(requests, state),
+      });
+      const planPath = root + "/plan.json";
+      try {
+        assertEquals(
+          await main(["plan", "--path", root, "--out", planPath], {
+            runtime,
+            write: () => {},
+          }),
+          0,
+        );
+        if (drift === "content") {
+          state.branches.release = { content: "changed", sha: "new-sha" };
+        } else {
+          delete state.branches.release;
+        }
+        requests.length = 0;
+        assertEquals(
+          await main(["apply", "--path", root, "--plan", planPath], {
+            runtime,
+            write: () => {},
+          }),
+          1,
+        );
+        assertEquals(mutations(requests), []);
+        assertEquals(state.defaultBranch, "master");
+      } finally {
+        await Deno.remove(root, { recursive: true });
+      }
+    },
+  );
+}
+
+Deno.test("fresh file apply rejects a missing execution branch before mutation", async () => {
+  const root = await fileConfigurationDirectory("missing");
+  const requests: CapturedRequest[] = [];
+  const runtime = createGitHubRuntime({
+    token: "test-token",
+    baseUrl: "https://github.example.test/api/v3",
+    fetch: fakeFileDeliveryGitHub(requests, {
+      defaultBranch: "master",
+      branches: { master: undefined },
+    }),
+  });
+  try {
+    assertEquals(
+      await main(["apply", "--path", root], { runtime, write: () => {} }),
+      1,
+    );
+    assertEquals(mutations(requests), []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+async function fileConfigurationDirectory(
+  defaultBranch?: string,
+): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
   await Deno.mkdir(root + "/files");
@@ -1673,6 +1823,9 @@ async function fileConfigurationDirectory(): Promise<string> {
       "    names:",
       "      - sample",
       "repository:",
+      ...(defaultBranch === undefined
+        ? []
+        : ["  settings:", "    default_branch: " + defaultBranch]),
       "  files:",
       "    managed.txt:",
       "      ensure: exact",
@@ -1683,8 +1836,14 @@ async function fileConfigurationDirectory(): Promise<string> {
   return root;
 }
 
+interface FileDeliveryState {
+  defaultBranch: string;
+  branches: Record<string, { content: string; sha: string } | undefined>;
+}
+
 function fakeFileDeliveryGitHub(
   requests: CapturedRequest[],
+  state?: FileDeliveryState,
 ): typeof globalThis.fetch {
   return async (input, init) => {
     const request = input instanceof Request ? input : undefined;
@@ -1701,12 +1860,40 @@ function fakeFileDeliveryGitHub(
       return json([{ name: "sample", visibility: "private" }]);
     }
     if (method === "GET" && url.pathname === "/api/v3/repos/acme/sample") {
-      return json(repository());
+      return json({
+        ...repository(),
+        ...(state && { default_branch: state.defaultBranch }),
+      });
+    }
+    if (
+      state && method === "PATCH" &&
+      url.pathname === "/api/v3/repos/acme/sample"
+    ) {
+      state.defaultBranch = body.default_branch ?? state.defaultBranch;
+      return json({});
+    }
+    if (state && method === "GET" && url.pathname.includes("/git/ref/heads/")) {
+      const branch = decodeURIComponent(
+        url.pathname.split("/git/ref/heads/")[1],
+      );
+      return Object.hasOwn(state.branches, branch)
+        ? json({ object: { sha: "base-sha" } })
+        : json({ message: "Not Found" }, 404);
     }
     if (
       method === "GET" &&
       url.pathname === "/api/v3/repos/acme/sample/contents/managed.txt"
     ) {
+      const file = state
+        ?.branches[url.searchParams.get("ref") ?? state.defaultBranch];
+      if (file !== undefined) {
+        return json({
+          type: "file",
+          encoding: "base64",
+          content: btoa(file.content),
+          sha: file.sha,
+        });
+      }
       return json({ message: "Not Found" }, 404);
     }
     if (
@@ -1894,6 +2081,12 @@ function fakePartialGitHub(
     }
 
     for (const name of ["sample", "z-next"]) {
+      if (
+        method === "GET" &&
+        url.pathname === `/api/v3/repos/acme/${name}/git/ref/heads/master`
+      ) {
+        return json({ object: { sha: "head" } });
+      }
       if (method === "GET" && url.pathname === `/api/v3/repos/acme/${name}`) {
         return json(repository(name));
       }

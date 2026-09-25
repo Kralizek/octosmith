@@ -161,6 +161,10 @@ export function projectOwnedCurrentState(
 
   if (desired.files !== undefined) {
     projected.files = projectFiles(current.files, desired.files);
+    if (desired.files.length > 0) {
+      projected.filesBranch = current.filesBranch ??
+        current.settings.defaultBranch;
+    }
   }
 
   const replay = persistedOperationContract(current, operations).state;
