@@ -764,9 +764,6 @@ Deno.test("persisted apply rechecks state immediately before mutation", async ()
     settings: { hasIssues: false },
   };
   const plannedCurrent = currentState();
-  const changedCurrent = currentState({
-    settings: { ...plannedCurrent.settings, hasIssues: false },
-  });
   const plan = buildPlan(plannedCurrent, desired);
   const evaluations = buildApplyEvaluations(desired, plan.operations);
   const loaded: LoadedConfiguration = {
