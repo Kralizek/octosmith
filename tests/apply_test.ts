@@ -63,7 +63,21 @@ class FakeRuntime implements ApplyRuntime {
     });
   }
 
-  apply(plan: Plan): Promise<ApplyPlanResult> {
+  prepare(_resource: import("@octosmith/octosmith").ExecutableResourcePlan) {}
+
+  async recheck(
+    resource: import("@octosmith/octosmith").ExecutableResourcePlan,
+  ) {
+    await this.read(resource.desired);
+    if (this.staleOnRecheck.has(resource.desired.repository)) {
+      throw new Error("Resource state changed after apply preparation");
+    }
+  }
+
+  apply(
+    resource: import("@octosmith/octosmith").ExecutableResourcePlan,
+  ): Promise<ApplyPlanResult> {
+    const plan = resource.plan;
     this.applied.push(plan);
 
     return Promise.resolve({

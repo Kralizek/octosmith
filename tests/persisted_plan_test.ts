@@ -179,7 +179,12 @@ Deno.test("strict rule removal ignores unrelated rule contents", () => {
   });
   const right = currentState({
     rulesets: [{
-      ...left.rulesets[0],
+      id: 7,
+      name: "main",
+      target: "branch",
+      enforcement: "active",
+      bypassActors: [],
+      conditions: { refName: { include: [], exclude: [] } },
       rules: [{
         type: "required-status-checks",
         doNotEnforceOnCreate: false,
@@ -799,8 +804,12 @@ Deno.test("persisted apply rechecks state immediately before mutation", async ()
         }],
         failures: [],
       }),
-    read: () =>
-      Promise.resolve(reads++ === 0 ? plannedCurrent : changedCurrent),
+    read: () => Promise.resolve(plannedCurrent),
+    prepare: () => {},
+    recheck: () => {
+      reads++;
+      throw new Error("Resource state changed after apply preparation");
+    },
     apply: () => {
       applies++;
       throw new Error("apply must not be called after recheck drift");
@@ -808,7 +817,7 @@ Deno.test("persisted apply rechecks state immediately before mutation", async ()
   };
 
   await applyPersistedPlan(runtime, loaded, artifact, () => {});
-  assertEquals(reads, 2);
+  assertEquals(reads, 1);
   assertEquals(applies, 0);
 });
 
