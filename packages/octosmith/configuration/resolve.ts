@@ -37,6 +37,30 @@ export interface RepositoryMetadata {
 /** Describes runtime value provider. */
 export type RuntimeValueProvider = (name: string) => string;
 
+/** Classifies a resource independently of its reconciliation outcome. */
+export type ResourceTemplateClassification =
+  | { readonly status: "matched"; readonly template: string }
+  | { readonly status: "unmatched"; readonly template: null }
+  | { readonly status: "invalid"; readonly templates: readonly string[] };
+
+/** Classify an in-scope resource against the configured templates. */
+export function classifyResource(
+  loaded: LoadedConfiguration,
+  resource: RepositoryMetadata,
+): ResourceTemplateClassification {
+  const templates = Object.entries(loaded.templates)
+    .filter(([, template]) => matchesScope(template.match, resource))
+    .map(([name]) => name);
+
+  if (templates.length === 0) {
+    return { status: "unmatched", template: null };
+  }
+  if (templates.length === 1) {
+    return { status: "matched", template: templates[0] };
+  }
+  return { status: "invalid", templates };
+}
+
 const MAX_CONFIGURATION_SOURCE_SIZE = 10 * 1024 * 1024;
 const MAX_CONFIGURATION_SOURCE_TOTAL_SIZE = 50 * 1024 * 1024;
 
@@ -61,19 +85,19 @@ export async function resolveDesiredState(
   repository: RepositoryMetadata,
   values: RuntimeValueProvider,
 ): Promise<DesiredState> {
-  const matches = Object.entries(loaded.templates)
-    .filter(([, template]) => matchesScope(template.match, repository));
+  const classification = classifyResource(loaded, repository);
 
-  if (matches.length !== 1) {
+  if (classification.status !== "matched") {
     throw new Error(
-      matches.length === 0
-        ? "Repository " + repository.name + " does not match any template"
-        : "Repository " + repository.name + " matches multiple templates: " +
-          matches.map(([name]) => name).join(", "),
+      classification.status === "unmatched"
+        ? "Resource " + repository.name + " does not match any template"
+        : "Resource " + repository.name + " matches multiple templates: " +
+          classification.templates.join(", "),
     );
   }
 
-  const [[templateName, template]] = matches;
+  const templateName = classification.template;
+  const template = loaded.templates[templateName];
   const readSource = createConfigurationSourceReader(loaded.root);
 
   return {

@@ -28,6 +28,7 @@ deno run -A jsr:@octosmith/cli@0 --help
 | Command             | GitHub access | Mutates GitHub | Purpose                                              |
 | ------------------- | ------------- | -------------- | ---------------------------------------------------- |
 | `template validate` | No            | No             | Validate configuration and static planner invariants |
+| `resource list`     | Yes           | No             | Inspect in-scope resources and template coverage     |
 | `plan`              | Yes           | No             | Compare current GitHub state with desired state      |
 | `apply`             | Yes           | Yes            | Build a fresh plan and apply its operations          |
 
@@ -39,6 +40,56 @@ octosmith template validate --path ./configuration
 
 Validation is offline and does not require `GITHUB_TOKEN`.
 
+### resource list
+
+```sh
+octosmith resource list --path ./configuration
+octosmith resource list --path ./configuration --format json
+```
+
+Inspection uses `GITHUB_TOKEN` and the same discovery as plan/apply. Resources
+excluded by configuration scope are absent. A template exclusion affects only
+that template; another template may still match. Inspection does not read
+desired-state values, managed-file contents, or reconciliation state.
+
+```text
+TYPE        NAME                 TEMPLATE                  STATUS
+repository  acme/api-service     repository:teams/backend  matched
+repository  acme/legacy-service  -                         unmatched
+
+Summary: 1 matched, 1 unmatched
+```
+
+JSON preserves every discovered in-scope resource and uses canonical template
+identities:
+
+```json
+{
+  "resources": [
+    {
+      "type": "repository",
+      "name": "acme/api-service",
+      "template": "repository:teams/backend",
+      "status": "matched"
+    },
+    {
+      "type": "repository",
+      "name": "acme/legacy-service",
+      "template": null,
+      "status": "unmatched"
+    }
+  ],
+  "summary": { "matched": 1, "unmatched": 1 }
+}
+```
+
+Unmatched resources are shown before the command exits with code `1` by default.
+For repository resources, `repositories.settings.unmatched_repositories: ignore`
+allows success while retaining `template: null` and `status: "unmatched"`.
+Multiple template matches remain an error, not an inspection status. Discovery
+failures also fail the command and are diagnosed on stderr; successfully
+discovered resources are still reported.
+
 ### plan
 
 ```sh
@@ -47,6 +98,21 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration
 
 `plan` reads GitHub and reports the operations required to reach the desired
 state. It does not mutate GitHub and does not require secret runtime values.
+
+The text summary includes an unmatched count, even when unmatched resources are
+ignored:
+
+```text
+Summary: 0 unchanged, 21 planned, 0 applied, 0 partially-applied, 0 failed, 3 unmatched
+```
+
+Fresh plan/apply JSON reports include an `inspection` object with the same
+`resources` and `summary` shape as `resource list`. Classification is
+independent of execution outcomes: under the default policy an unmatched
+resource also has a failed execution report; under `ignore` it has no execution
+report but remains visible in inspection. Ignored resources do not generate
+execution events or persisted operations. Applying a persisted plan reports only
+its stored resource set, without a new scope-wide inspection.
 
 Use `--out <file>` to persist the exact executable operations:
 
@@ -98,7 +164,8 @@ supported top-level resource target is a repository, so a resource outside
 
 ## Authentication
 
-`plan` and `apply` read the GitHub credential from `GITHUB_TOKEN`.
+`resource list`, `plan`, and `apply` read the GitHub credential from
+`GITHUB_TOKEN`.
 
 The token needs read permissions for every resource used by planning, plus the
 corresponding write permissions for resources managed by apply. For
@@ -157,8 +224,10 @@ The CLI returns:
 
 - `0` when validation succeeds or plan/apply completes without failed or
   partially applied repositories
+- `0` when resource inspection succeeds, including ignored unmatched resources
 - `1` for validation errors, usage errors, command errors, failed repositories,
-  or partially applied repositories
+  partially applied repositories, or unmatched resources under the default
+  policy
 
 ## Common options
 
@@ -171,8 +240,8 @@ The CLI returns:
 ```
 
 `--verbose`, `--trace`, and `--events-output` apply to `plan` and `apply`.
-`resource list`, `resource create`, `template validate`, and
-`template permissions` support `--path` and `--format`.
+`resource list` also supports `--trace`. `resource list`, `resource create`,
+`template validate`, and `template permissions` support `--path` and `--format`.
 
 ## Grouped commands
 

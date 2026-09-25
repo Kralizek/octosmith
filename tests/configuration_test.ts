@@ -2,7 +2,9 @@ import { assertEquals, assertRejects, assertThrows } from "@std/assert";
 import { fromFileUrl, join, relative } from "@std/path";
 import {
   buildPlan,
+  classifyResource,
   loadConfigurationDirectory,
+  type LoadedConfiguration,
   matchesSelector,
   preflightRuntimeReferences,
   resolveDesiredState,
@@ -14,6 +16,69 @@ import { currentState } from "./plan/fixtures.ts";
 const ROOT = fromFileUrl(new URL("..", import.meta.url));
 const CONFIGURATION_ROOT = join(ROOT, "examples", "configuration");
 const FIXTURE_ROOT = join(ROOT, "tests", "fixtures", "configuration");
+
+Deno.test("canonical classification distinguishes single, missing, and multiple matches", async () => {
+  const primary = {
+    version: 1 as const,
+    kind: "repository" as const,
+    match: {
+      include: { names: ["service-*"] },
+      exclude: { names: ["service-legacy"] },
+    },
+    repository: {},
+  };
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: "all" } },
+    },
+    templates: {
+      "repository:primary": primary,
+      "repository:fallback": {
+        ...primary,
+        match: { include: { names: ["service-legacy"] } },
+      },
+    },
+  };
+  const metadata = { name: "service-api", teams: [], properties: {} };
+  assertEquals(classifyResource(loaded, metadata), {
+    status: "matched",
+    template: "repository:primary",
+  });
+  assertEquals(
+    classifyResource(loaded, { ...metadata, name: "service-legacy" }),
+    { status: "matched", template: "repository:fallback" },
+  );
+  assertEquals(classifyResource(loaded, { ...metadata, name: "other" }), {
+    status: "unmatched",
+    template: null,
+  });
+  const overlapping = {
+    ...loaded,
+    templates: { ...loaded.templates, "repository:duplicate": primary },
+  };
+  assertEquals(classifyResource(overlapping, metadata), {
+    status: "invalid",
+    templates: ["repository:primary", "repository:duplicate"],
+  });
+  await assertRejects(
+    () => resolveDesiredState(overlapping, metadata, () => "unused"),
+    Error,
+    "Resource service-api matches multiple templates",
+  );
+  await assertRejects(
+    () =>
+      resolveDesiredState(
+        loaded,
+        { ...metadata, name: "other" },
+        () => "unused",
+      ),
+    Error,
+    "Resource other does not match any template",
+  );
+});
 
 Deno.test("loads example configuration and templates", async () => {
   const loaded = await loadConfigurationDirectory(CONFIGURATION_ROOT);

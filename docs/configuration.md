@@ -74,6 +74,12 @@ template. Set `repositories.settings.unmatched_repositories` to `ignore` to
 allow a broader scope where repositories without a matching template are left
 unmanaged. Repositories that match more than one template are always rejected.
 
+Use `octosmith resource list` to inspect the remaining in-scope resources and
+their template matches. Ignored unmatched resources remain visible in inspection
+and plan summaries. See the
+[CLI reference](../packages/cli/README.md#resource-list) for text/JSON output
+and exit behavior.
+
 ## Templates
 
 Each repository in scope that is managed must resolve to exactly one template.

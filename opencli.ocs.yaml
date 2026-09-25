@@ -115,6 +115,13 @@ commands:
   octosmith resource list:
     kind: action
     summary: List resources within configured scope.
+    description: |
+      Inspect resources after configuration-scope include/exclude evaluation.
+      Text columns are TYPE, NAME, TEMPLATE, STATUS. JSON contains resources and
+      matched/unmatched summary counts; unmatched resources have template null.
+      Unmatched resources fail by default. For repository resources,
+      repositories.settings.unmatched_repositories: ignore keeps them visible
+      without failing. Multiple template matches always fail.
     flags:
       - name: path
         aliases: [p]
@@ -128,6 +135,17 @@ commands:
           - value: text
           - value: json
         summary: Output format.
+
+      - name: trace
+        type: boolean
+        summary: Emit GitHub API request traces to stderr.
+    examples:
+      - title: Inspect template coverage
+        content: |
+          $ octosmith resource list --path ./configuration
+      - title: Inspect resources as JSON
+        content: |
+          $ octosmith resource list --format json
 
   octosmith resource create:
     kind: action

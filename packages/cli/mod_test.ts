@@ -85,11 +85,6 @@ Deno.test("version is available from grouped commands without a short alias", as
 for (
   const [name, args, message] of [
     [
-      "resource list",
-      ["resource", "list", "--path", ".", "--format", "json"],
-      "resource list is not implemented yet",
-    ],
-    [
       "resource create",
       ["resource", "create", "teams/backend", "--name", "api-service"],
       "resource create is not implemented yet",

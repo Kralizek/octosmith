@@ -1,10 +1,364 @@
 import { assertEquals, assertStringIncludes } from "@std/assert";
+import { stringify } from "@std/yaml";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
 
 interface CapturedRequest {
   readonly method: string;
   readonly url: URL;
   readonly body?: unknown;
+}
+
+for (const policy of ["error", "ignore"] as const) {
+  for (const format of ["text", "json"] as const) {
+    for (const command of [["resource", "list"], ["plan"], ["apply"]]) {
+      Deno.test(`${command.join(" ")} reports template coverage in ${format} with ${policy} policy`, async () => {
+        const root = await inspectionConfigurationDirectory(policy);
+        const requests: CapturedRequest[] = [];
+        const output: string[] = [];
+        const errors: string[] = [];
+        const isList = command[0] === "resource";
+        try {
+          const runtime = createGitHubRuntime({
+            token: "test-token",
+            baseUrl: "https://github.example.test/api/v3",
+            fetch: fakeInspectionGitHub(requests),
+          });
+          const exitCode = await main(
+            [...command, "-p", root, "--format", format],
+            {
+              runtime,
+              write: (value) => output.push(value),
+              writeError: (value) => errors.push(value),
+            },
+          );
+          assertEquals(exitCode, policy === "ignore" ? 0 : 1);
+          const expectedResources = [
+            {
+              type: "repository",
+              name: "acme/sample",
+              template: "repository:primary",
+              status: "matched",
+            },
+            {
+              type: "repository",
+              name: "acme/sample-legacy",
+              template: "repository:fallback",
+              status: "matched",
+            },
+            {
+              type: "repository",
+              name: "acme/unmatched",
+              template: null,
+              status: "unmatched",
+            },
+          ];
+          const text = output.join("\n");
+          assertEquals(text.includes("excluded"), false);
+          if (format === "json") {
+            const result = JSON.parse(text);
+            assertEquals(isList ? result : result.inspection, {
+              resources: expectedResources,
+              summary: { matched: 2, unmatched: 1 },
+            });
+            if (!isList) {
+              assertEquals(
+                result.repositories.filter((resource: { repository: string }) =>
+                  resource.repository === "unmatched"
+                )
+                  .map((resource: { status: string }) => resource.status),
+                policy === "ignore" ? [] : ["failed"],
+              );
+            }
+          } else if (isList) {
+            assertEquals(
+              text.split("\n").filter(Boolean).slice(0, 4).map((line) =>
+                line.trim().split(/\s+/)
+              ),
+              [
+                ["TYPE", "NAME", "TEMPLATE", "STATUS"],
+                ["repository", "acme/sample", "repository:primary", "matched"],
+                [
+                  "repository",
+                  "acme/sample-legacy",
+                  "repository:fallback",
+                  "matched",
+                ],
+                ["repository", "acme/unmatched", "-", "unmatched"],
+              ],
+            );
+            assertStringIncludes(text, "Summary: 2 matched, 1 unmatched");
+          } else {
+            assertStringIncludes(text, "repository acme/unmatched - unmatched");
+            const failed = policy === "ignore"
+              ? 0
+              : command[0] === "apply"
+              ? 3
+              : 1;
+            const planned = command[0] === "plan" ? 2 : 0;
+            const applied = command[0] === "apply" && policy === "ignore"
+              ? 2
+              : 0;
+            assertStringIncludes(
+              text,
+              `Summary: 0 unchanged, ${planned} planned, ${applied} applied, 0 partially-applied, ${failed} failed, 1 unmatched`,
+            );
+          }
+          if (isList) {
+            assertEquals(
+              requests.map(({ method, url }) => [method, url.pathname]),
+              [
+                ["GET", "/api/v3/orgs/acme/repos"],
+              ],
+            );
+            assertEquals(errors.length, policy === "ignore" ? 0 : 1);
+            if (policy === "error") {
+              assertStringIncludes(
+                errors[0],
+                "resources in the configuration scope did not match a template",
+              );
+            }
+          }
+          if (command[0] !== "apply" || policy === "error") {
+            assertEquals(mutations(requests), []);
+          }
+        } finally {
+          await Deno.remove(root, { recursive: true });
+        }
+      });
+    }
+  }
+}
+
+for (const command of [["resource", "list"], ["plan"], ["apply"]]) {
+  Deno.test(`${command.join(" ")} rejects multiple template matches even with ignore policy`, async () => {
+    const root = await inspectionConfigurationDirectory("ignore");
+    const requests: CapturedRequest[] = [];
+    const output: string[] = [];
+    const errors: string[] = [];
+    try {
+      await Deno.copyFile(
+        root + "/templates/primary.yml",
+        root + "/templates/duplicate.yml",
+      );
+      const runtime = createGitHubRuntime({
+        token: "test-token",
+        baseUrl: "https://github.example.test/api/v3",
+        fetch: fakeInspectionGitHub(requests),
+      });
+      assertEquals(
+        await main([...command, "--path", root], {
+          runtime,
+          write: (value) => output.push(value),
+          writeError: (value) => errors.push(value),
+        }),
+        1,
+      );
+      assertStringIncludes(
+        [...output, ...errors].join("\n"),
+        "Resource acme/sample matches multiple templates:",
+      );
+      assertEquals(mutations(requests), []);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}
+
+Deno.test("resource list traces discovery separately from JSON and does not resolve runtime values", async () => {
+  const root = await inspectionConfigurationDirectory("ignore");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+  const errors: string[] = [];
+  const originalFetch = globalThis.fetch;
+  const previous = Deno.env.get("GITHUB_TOKEN");
+  try {
+    await Deno.writeTextFile(
+      root + "/templates/fallback.yml",
+      stringify({
+        version: 1,
+        kind: "repository",
+        match: { include: { names: ["sample-legacy"] } },
+        repository: {
+          actions: {
+            variables: [{
+              to: "MISSING",
+              from: "OCTOSMITH_INSPECTION_MISSING",
+            }],
+          },
+        },
+      }),
+    );
+    globalThis.fetch = fakeInspectionGitHub(requests);
+    Deno.env.set("GITHUB_TOKEN", "test-token");
+    assertEquals(
+      await main([
+        "resource",
+        "list",
+        "--path",
+        root,
+        "--format=json",
+        "--trace",
+      ], {
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      0,
+    );
+    assertEquals(JSON.parse(output.join("\n")).summary, {
+      matched: 2,
+      unmatched: 1,
+    });
+    assertStringIncludes(errors.join("\n"), "GET /orgs/acme/repos");
+    assertEquals(requests.length, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (previous === undefined) Deno.env.delete("GITHUB_TOKEN");
+    else Deno.env.set("GITHUB_TOKEN", previous);
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+for (const format of ["text", "json"] as const) {
+  Deno.test(`resource list renders an empty scope in ${format}`, async () => {
+    const root = await inspectionConfigurationDirectory("error");
+    const output: string[] = [];
+    try {
+      const runtime = createGitHubRuntime({
+        token: "test-token",
+        fetch: () =>
+          Promise.resolve(json([{ name: "excluded", visibility: "private" }])),
+      });
+      assertEquals(
+        await main(["resource", "list", "--path", root, "--format", format], {
+          runtime,
+          write: (value) => output.push(value),
+        }),
+        0,
+      );
+      if (format === "json") {
+        assertEquals(JSON.parse(output.join("\n")), {
+          resources: [],
+          summary: { matched: 0, unmatched: 0 },
+        });
+      } else {
+        assertStringIncludes(
+          output.join("\n"),
+          "Summary: 0 matched, 0 unmatched",
+        );
+        assertEquals(output[0].split("\n")[0].split(/\s+/), [
+          "TYPE",
+          "NAME",
+          "TEMPLATE",
+          "STATUS",
+        ]);
+      }
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}
+
+Deno.test("resource list reports discovered resources but fails on discovery errors", async () => {
+  const root = await configurationDirectory(true);
+  const output: string[] = [];
+  const errors: string[] = [];
+  const requests: CapturedRequest[] = [];
+  try {
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+    assertEquals(
+      await main(["resource", "list", "--path", root, "--format=json"], {
+        runtime,
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      1,
+    );
+    const result = JSON.parse(output.join("\n"));
+    assertEquals(result.summary, { matched: 1, unmatched: 0 });
+    assertEquals(
+      result.resources.map((resource: { name: string }) => resource.name),
+      ["acme/sample"],
+    );
+    assertStringIncludes(errors.join("\n"), "Resource missing:");
+    assertEquals(mutations(requests), []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+async function inspectionConfigurationDirectory(
+  policy: "error" | "ignore",
+): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    stringify({
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: "all", exclude: { names: ["excluded"] } },
+        ...(policy === "ignore" &&
+          { settings: { unmatched_repositories: "ignore" } }),
+      },
+    }),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/primary.yml",
+    stringify({
+      version: 1,
+      kind: "repository",
+      match: {
+        include: { names: ["sample*"] },
+        exclude: { names: ["sample-legacy"] },
+      },
+      repository: { settings: { has_issues: false } },
+    }),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/fallback.yml",
+    stringify({
+      version: 1,
+      kind: "repository",
+      match: { include: { names: ["sample-legacy"] } },
+      repository: { settings: { has_issues: false } },
+    }),
+  );
+  return root;
+}
+
+function fakeInspectionGitHub(
+  requests: CapturedRequest[],
+): typeof globalThis.fetch {
+  return (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const method = init?.method ?? "GET";
+    requests.push({ method, url });
+    const path = url.pathname.replace(/^\/api\/v3/, "");
+    if (method === "GET" && path === "/orgs/acme/repos") {
+      return Promise.resolve(
+        json(
+          ["unmatched", "sample-legacy", "excluded", "sample"].map((name) => ({
+            name,
+            visibility: "private",
+          })),
+        ),
+      );
+    }
+    if (
+      (method === "GET" || method === "PATCH") &&
+      /^\/repos\/acme\/sample(?:-legacy)?$/.test(path)
+    ) {
+      return Promise.resolve(json(repository(path.split("/").at(-1))));
+    }
+    return Promise.resolve(
+      json({ message: "Unexpected request: " + method + " " + path }, 500),
+    );
+  };
 }
 
 Deno.test("CLI applies through the real GitHub HTTP stack", async () => {
@@ -1560,10 +1914,20 @@ Deno.test("CLI JSON apply preserves the structured report shape", async () => {
     const report = JSON.parse(output.join("\n"));
     assertEquals(Object.keys(report).sort(), [
       "completedAt",
+      "inspection",
       "organization",
       "repositories",
       "startedAt",
     ]);
+    assertEquals(report.inspection, {
+      resources: [{
+        type: "repository",
+        name: "acme/sample",
+        template: "repository:code",
+        status: "matched",
+      }],
+      summary: { matched: 1, unmatched: 0 },
+    });
     assertEquals(report.repositories.length, 1);
     assertEquals(report.repositories[0].repository, "sample");
   } finally {

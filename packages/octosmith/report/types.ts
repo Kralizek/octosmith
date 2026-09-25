@@ -1,5 +1,6 @@
 import type { RuntimeReferenceDiagnostic } from "../configuration/runtime_references.ts";
 import type { ApplyItemType, Operation } from "../plan/types.ts";
+import type { ResourceInspectionResult } from "../inspection.ts";
 
 /** Describes repository report status. */
 export type RepositoryReportStatus =
@@ -23,6 +24,7 @@ export interface Report {
   readonly startedAt: Date;
   readonly completedAt: Date;
   readonly repositories: readonly RepositoryReport[];
+  readonly inspection?: ResourceInspectionResult;
 }
 
 /** Describes repository report. */

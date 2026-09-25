@@ -53,6 +53,13 @@ flowchart TD
 Plan and apply share discovery, state loading, desired-state resolution, and
 planning. Apply differs only after a plan exists.
 
+`resource list` stops after discovery and template classification. Discovery
+applies configuration-scope include/exclude evaluation before classification.
+The canonical `classifyResource` primitive is shared by inspection,
+desired-state resolution, fresh apply preparation/recheck, and persisted-plan
+preflight. It distinguishes a single match, no match, and invalid multiple
+matches without resolving runtime values or reading managed files.
+
 ## Desired state and current state
 
 Configuration is normalized into desired state before planning. GitHub adapters
@@ -145,6 +152,12 @@ concurrency checks and execution stops on the first failed operation.
 
 Repository reports are structured data first. Text and JSON are presentation
 choices made by the CLI.
+
+Resource inspection has its own `matched`/`unmatched` classification,
+independent of reconciliation statuses. Fresh plan/apply reports retain this
+coverage in `inspection`, and text summaries include its unmatched count.
+Ignoring unmatched resources changes failure policy, not their classification or
+visibility.
 
 Sensitive runtime values and managed file contents must not leak into reports.
 
