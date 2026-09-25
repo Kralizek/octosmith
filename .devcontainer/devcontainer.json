@@ -1,0 +1,22 @@
+{
+  "name": "Octosmith",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/deno:1": {
+      "version": "2"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {},
+    "ghcr.io/devcontainers/features/go:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "denoland.vscode-deno"
+      ],
+      "settings": {
+        "deno.enable": true
+      }
+    }
+  },
+  "postCreateCommand": "go install github.com/bcdxn/opencli/cmd/ocli@v1.3.0"
+}
