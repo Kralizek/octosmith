@@ -488,6 +488,62 @@ Deno.test("validation allows literal scope entries without templates when unmatc
   }
 });
 
+Deno.test("validation skips templates excluded from reachable scope", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      [
+        "version: 1",
+        "organization: example-org",
+        "repositories:",
+        "  scope:",
+        "    include:",
+        "      names:",
+        "        - sample",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "reachable.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        "    names:",
+        "      - sample",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "excluded.yml"),
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include: all",
+        "  exclude:",
+        "    names:",
+        "      - sample",
+        "repository:",
+        "  files:",
+        "    README.md:",
+        "      ensure: exact",
+        "      source: /dev/zero",
+        "",
+      ].join("\n"),
+    );
+
+    await validateConfigurationDirectory(root);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("rejects symlinked root configuration file", async () => {
   const root = await Deno.makeTempDir();
   const outside = await Deno.makeTempFile();

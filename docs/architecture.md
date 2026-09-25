@@ -79,6 +79,40 @@ The GitHub layer is split around interfaces:
 
 This keeps the planner testable without GitHub.
 
+## Persisted executable plans
+
+Persisted plans add a stricter execution boundary than normal in-process
+plan/apply. A saved plan is an executable artifact: after preflight, Octosmith
+must replay the stored operations rather than reinterpret them from live state.
+
+Resource state preconditions therefore combine two independent projections:
+
+- **planning ownership** — remote state that influenced `buildPlan` under the
+  effective template and collection-management semantics;
+- **replay dependencies** — live state that the exact stored operations will
+  read or preserve while the mutation sink executes them.
+
+Replay dependencies are declared by an exhaustive operation contract in the
+planning package. The same contract also declares runtime secret sources used by
+stored operations. Persisted-plan preflight and the mutation sink share that
+contract so adding a new operation type requires an explicit dependency
+decision.
+
+The persisted apply boundary is:
+
+```text
+parse + schema/semantic validation
+→ validate effective configuration/template hashes
+→ validate runtime dependencies for stored operations
+→ validate planning-owned state + replay dependencies for every resource
+→ re-check one resource immediately before mutation
+→ replay stored operations exactly
+```
+
+The canonical hash function remains generic. Domain-specific semantic
+normalization happens before hashing so the hash layer does not need to know
+about Octosmith fields.
+
 ## Reporting
 
 Repository reports are structured data first. Text and JSON are presentation

@@ -1,4 +1,5 @@
 import sodium from "libsodium-wrappers";
+import { persistedOperationSecretSources } from "../plan/operation_contract.ts";
 import type {
   DesiredActionsOidcSettings,
   DesiredActionsSettings,
@@ -71,20 +72,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     _repository: string,
     operations: readonly Operation[],
   ): RepositoryMutationSink {
-    const names = new Set(operations.flatMap((operation) => {
-      switch (operation.type) {
-        case "set-actions-secret":
-        case "set-dependabot-secret":
-          return [operation.secret.source];
-        case "create-environment":
-        case "update-environment":
-          return (operation.environment.secrets ?? []).map((secret) =>
-            secret.source
-          );
-        default:
-          return [];
-      }
-    }));
+    const names = persistedOperationSecretSources(operations);
     const values = new Map<string, string>();
 
     for (const name of names) {

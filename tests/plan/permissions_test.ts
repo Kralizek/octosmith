@@ -73,7 +73,7 @@ Deno.test("team permission operations include repository and organization requir
   ]);
 });
 
-Deno.test("file operations include permissions for direct and pull-request delivery", () => {
+Deno.test("file operations use pull-request delivery permissions by default", () => {
   assertEquals(requiredPermissionsForOperationType("update-file"), [
     {
       scope: "repository",
@@ -88,6 +88,39 @@ Deno.test("file operations include permissions for direct and pull-request deliv
     {
       scope: "repository",
       permission: "pull_requests",
+      access: "write",
+    },
+  ]);
+});
+
+Deno.test("file operations include pull-request permissions when requested", () => {
+  assertEquals(
+    requiredPermissionsForOperationType("update-file", "pull_request"),
+    [
+      {
+        scope: "repository",
+        permission: "contents",
+        access: "write",
+      },
+      {
+        scope: "repository",
+        permission: "issues",
+        access: "write",
+      },
+      {
+        scope: "repository",
+        permission: "pull_requests",
+        access: "write",
+      },
+    ],
+  );
+});
+
+Deno.test("file operations can request direct delivery explicitly", () => {
+  assertEquals(requiredPermissionsForOperationType("update-file", "direct"), [
+    {
+      scope: "repository",
+      permission: "contents",
       access: "write",
     },
   ]);

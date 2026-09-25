@@ -9,7 +9,9 @@
 
 import { Command } from "@cliffy/command";
 import {
+  createPersistedPlanArtifact,
   loadConfigurationDirectory,
+  parsePersistedPlanArtifact,
   renderReport,
   renderRuntimeReferenceDiagnostic,
   type Report,
@@ -20,6 +22,11 @@ import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ApplyRuntime } from "./apply.ts";
 import { apply, createGitHubRuntime } from "./apply.ts";
+import {
+  applyPersistedPlan,
+  PersistedPlanStaleError,
+  renderPersistedPlanPreflight,
+} from "./persisted.ts";
 import cliMetadata from "./deno.json" with { type: "json" };
 
 /** The Octosmith CLI version. */
@@ -117,18 +124,21 @@ function createCli(
           readonly out?: string;
         };
 
-        if (mode === "apply" && modeOptions.plan !== undefined) {
-          if (resource !== undefined) {
-            throw new Error(
-              "Cannot combine a resource target with --plan",
-            );
-          }
-
-          throw new Error("Persisted plan apply is not implemented yet");
+        if (
+          mode === "apply" &&
+          modeOptions.plan !== undefined &&
+          resource !== undefined
+        ) {
+          throw new Error(
+            "Cannot combine a resource target with --plan",
+          );
         }
 
-        if (mode === "plan" && modeOptions.out !== undefined) {
-          throw new Error("Persisted plan output is not implemented yet");
+        if (mode === "plan" && modeOptions.out === "") {
+          throw new Error("Persisted plan output path must not be empty");
+        }
+        if (mode === "apply" && modeOptions.plan === "") {
+          throw new Error("Persisted plan path must not be empty");
         }
 
         const format = parseOutputFormat(commandOptions.format);
@@ -149,25 +159,63 @@ function createCli(
           : undefined;
         const startedAt = new Date();
         const repositories: RepositoryReport[] = [];
+        const persistedResources:
+          import("@octosmith/octosmith").PersistedResourceInput[] = [];
+
+        const onRepositoryApplied = async (
+          repositoryReport: RepositoryReport,
+        ) => {
+          repositories.push(repositoryReport);
+
+          if (eventOutput) {
+            await eventOutput.write(
+              toRepositoryEvent(
+                loaded.configuration.organization,
+                mode,
+                repositoryReport,
+              ),
+            );
+          }
+        };
 
         try {
-          await apply(runtime, loaded, {
-            mode,
-            ...(resource !== undefined && { resource }),
-            onRepositoryApplied: async (repositoryReport) => {
-              repositories.push(repositoryReport);
+          if (mode === "apply" && modeOptions.plan !== undefined) {
+            const artifact = parsePersistedPlanArtifact(
+              JSON.parse(await Deno.readTextFile(modeOptions.plan)),
+            );
 
-              if (eventOutput) {
-                await eventOutput.write(
-                  toRepositoryEvent(
-                    loaded.configuration.organization,
-                    mode,
-                    repositoryReport,
+            try {
+              await applyPersistedPlan(
+                runtime,
+                loaded,
+                artifact,
+                onRepositoryApplied,
+              );
+            } catch (error) {
+              if (error instanceof PersistedPlanStaleError) {
+                write(
+                  renderOutput(
+                    format,
+                    error.preflight,
+                    renderPersistedPlanPreflight,
                   ),
                 );
+                throw new ApplyFailedError();
               }
-            },
-          });
+              throw error;
+            }
+          } else {
+            await apply(runtime, loaded, {
+              mode,
+              ...(resource !== undefined && { resource }),
+              onRepositoryApplied,
+              ...(mode === "plan" && modeOptions.out !== undefined && {
+                onPlanBuilt: (plannedResource) => {
+                  persistedResources.push(plannedResource);
+                },
+              }),
+            });
+          }
         } finally {
           eventOutput?.close();
         }
@@ -192,6 +240,17 @@ function createCli(
 
         if (hasFailures(report)) {
           throw new ApplyFailedError();
+        }
+
+        if (mode === "plan" && modeOptions.out !== undefined) {
+          const artifact = await createPersistedPlanArtifact(
+            loaded,
+            persistedResources,
+          );
+          await Deno.writeTextFile(
+            modeOptions.out,
+            JSON.stringify(artifact, null, 2) + "\n",
+          );
         }
       }),
     );
@@ -387,6 +446,7 @@ function assertResourcePosition(
 export * from "./events.ts";
 export * from "./output.ts";
 export * from "./apply.ts";
+export * from "./persisted.ts";
 
 if (import.meta.main) {
   Deno.exit(await main(Deno.args));

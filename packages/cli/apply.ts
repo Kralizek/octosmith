@@ -2,16 +2,17 @@ import {
   buildApplyEvaluations,
   buildPlan,
   type DesiredState,
+  type ExecutableResourcePlan,
   type LoadedConfiguration,
   matchesScope,
   type Plan,
   preflightRuntimeReferences,
-  reportAppliedRepository,
   reportFailedRepository,
   reportPlannedRepository,
   resolveDesiredState,
   type RuntimeValueProvider,
 } from "@octosmith/octosmith";
+import { executeExecutableResources } from "./execution.ts";
 import {
   applyPlan,
   type ApplyPlanResult,
@@ -116,6 +117,9 @@ export interface ApplyOptions {
   readonly onRepositoryApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
   ) => void | Promise<void>;
+  readonly onPlanBuilt?: (
+    resource: ExecutableResourcePlan,
+  ) => void | Promise<void>;
 }
 
 /** Plan or apply configuration for the targeted resource set. */
@@ -130,15 +134,11 @@ export async function apply(
 
   const discovery = await runtime.discover(loaded, options.resource);
   const values = options.values ?? runtime.value ?? environmentValue;
-
-  const addResult = async (
-    result: import("@octosmith/octosmith").RepositoryReport,
-  ) => {
-    await options.onRepositoryApplied(result);
-  };
+  const failures: import("@octosmith/octosmith").RepositoryReport[] = [];
+  const prepared: ExecutableResourcePlan[] = [];
 
   for (const failure of discovery.failures) {
-    await addResult(
+    failures.push(
       reportFailedRepository(failure.repository, failure.error),
     );
   }
@@ -158,7 +158,6 @@ export async function apply(
 
     let template: string | undefined;
     let templateName: string | undefined;
-    let result: import("@octosmith/octosmith").RepositoryReport;
 
     try {
       let runtimeValues = values;
@@ -187,35 +186,63 @@ export async function apply(
         desired,
         plan.operations,
       );
+      const executable = { desired, current, plan, evaluations };
 
-      if (options.mode === "plan") {
-        result = reportPlannedRepository(
-          desired.template,
-          plan,
-          evaluations,
-          desired.templateName,
-        );
-      } else {
-        const applied = await runtime.apply(plan);
-        result = reportAppliedRepository(
-          desired.template,
-          desired.repository,
-          evaluations,
-          applied.operations,
-          desired.templateName,
-        );
-      }
+      prepared.push(executable);
+      await options.onPlanBuilt?.(executable);
     } catch (error) {
-      result = reportFailedRepository(
-        repository.name,
-        error,
-        template,
-        templateName,
+      failures.push(
+        reportFailedRepository(
+          repository.name,
+          error,
+          template,
+          templateName,
+        ),
       );
     }
-
-    await addResult(result);
   }
+
+  if (options.mode === "plan") {
+    for (const failure of failures) {
+      await options.onRepositoryApplied(failure);
+    }
+    for (const resource of prepared) {
+      await options.onRepositoryApplied(
+        reportPlannedRepository(
+          resource.desired.template,
+          resource.plan,
+          resource.evaluations,
+          resource.desired.templateName,
+        ),
+      );
+    }
+    return;
+  }
+
+  if (failures.length > 0) {
+    for (const failure of failures) {
+      await options.onRepositoryApplied(failure);
+    }
+    for (const resource of prepared) {
+      await options.onRepositoryApplied(
+        reportFailedRepository(
+          resource.desired.repository,
+          new Error(
+            "Apply aborted before mutation because another resource failed during preparation",
+          ),
+          resource.desired.template,
+          resource.desired.templateName,
+        ),
+      );
+    }
+    return;
+  }
+
+  await executeExecutableResources(
+    runtime,
+    prepared,
+    options.onRepositoryApplied,
+  );
 }
 
 function environmentValue(name: string): string {

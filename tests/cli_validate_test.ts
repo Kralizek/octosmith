@@ -390,6 +390,42 @@ Deno.test("validate detects overlap through an alternate visibility witness", as
   }
 });
 
+Deno.test("validate accepts all names except a negative name pattern", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/default.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include: all",
+        "  exclude:",
+        '    names: ["private-*"]',
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    assertEquals(await main(["template", "validate", "--path", root]), 0);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate rejects scope when exclusions make every template unreachable", async () => {
   const root = await Deno.makeTempDir();
 
@@ -481,6 +517,42 @@ Deno.test("validate rejects exclusions covering every non-empty repository name"
     } finally {
       console.error = originalError;
     }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate allows exclusions satisfied by alternate visibility witnesses", async () => {
+  const root = await Deno.makeTempDir();
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/default.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include: all",
+        "  exclude:",
+        '    visibility: "public"',
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+
+    assertEquals(await main(["template", "validate", "--path", root]), 0);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

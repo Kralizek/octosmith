@@ -538,7 +538,7 @@ Deno.test("missing repository secret value fails before secret mutation", async 
   }
 });
 
-Deno.test("partial apply skips later operations and continues with the next repository", async () => {
+Deno.test("partial apply stops before mutating later repositories", async () => {
   const root = await partialConfigurationDirectory();
   const previous = Deno.env.get("DESIRED");
 
@@ -575,10 +575,13 @@ Deno.test("partial apply skips later operations and continues with the next repo
       "✗ Actions variable DESIRED — update",
     );
     assertStringIncludes(rendered, "· File managed.txt — create");
-    assertStringIncludes(rendered, "✓ z-next [repository:code] — applied");
+    assertEquals(
+      rendered.includes("z-next [repository:code] — applied"),
+      false,
+    );
     assertStringIncludes(
       rendered,
-      "Summary: 0 unchanged, 0 planned, 1 applied, 1 partially-applied, 0 failed",
+      "Summary: 0 unchanged, 0 planned, 0 applied, 1 partially-applied, 0 failed",
     );
 
     assertEquals(
@@ -600,7 +603,7 @@ Deno.test("partial apply skips later operations and continues with the next repo
     );
 
     assertEquals(failedIndex >= 0, true);
-    assertEquals(continuedIndex > failedIndex, true);
+    assertEquals(continuedIndex, -1);
   } finally {
     if (previous === undefined) {
       Deno.env.delete("DESIRED");
@@ -663,7 +666,7 @@ Deno.test("CLI validates all templates before plan discovery", async () => {
   }
 });
 
-Deno.test("CLI preflights repository secrets before strict cleanup and continues afterward", async () => {
+Deno.test("CLI aborts all fresh apply mutations when repository secret preflight fails", async () => {
   const root = await safetyConfigurationDirectory(
     {
       code: {
@@ -701,25 +704,16 @@ Deno.test("CLI preflights repository secrets before strict cleanup and continues
       }),
       1,
     );
-    assertEquals(
-      mutations(requests).map((request) =>
-        request.method + " " + request.url.pathname
-      ),
-      ["PATCH /api/v3/repos/acme/z-next"],
-    );
+    assertEquals(mutations(requests), []);
     const preflightIndex = events.indexOf("preflight:NEW");
     assertEquals(preflightIndex >= 0, true);
-    assertEquals(
-      events.indexOf("PATCH /api/v3/repos/acme/z-next") > preflightIndex,
-      true,
-    );
     assertStringIncludes(
       output.join("\n"),
       'Required secret "NEW" is not available in the current context.',
     );
     assertStringIncludes(
       output.join("\n"),
-      "Summary: 0 unchanged, 0 planned, 1 applied, 0 partially-applied, 1 failed",
+      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 2 failed",
     );
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -982,6 +976,14 @@ function fakeGitHub(
     }
 
     if (
+      method === "GET" &&
+      url.pathname ===
+        "/api/v3/repos/acme/sample/actions/variables/DESIRED"
+    ) {
+      return json({ name: "DESIRED", value: "same" });
+    }
+
+    if (
       method === "PATCH" &&
       url.pathname === "/api/v3/repos/acme/sample"
     ) {
@@ -993,6 +995,13 @@ function fakeGitHub(
       url.pathname === "/api/v3/repos/acme/sample/actions/variables/EXTRA"
     ) {
       return new Response(null, { status: 204 });
+    }
+
+    if (
+      method === "PATCH" &&
+      url.pathname === "/api/v3/repos/acme/sample/actions/variables/DESIRED"
+    ) {
+      return json({});
     }
 
     return json(
@@ -1042,6 +1051,233 @@ function repository(
     security_and_analysis: {},
   };
 }
+
+Deno.test("persisted apply executes the reviewed operations without replanning", async () => {
+  const root = await configurationDirectory();
+  const planPath = await Deno.makeTempFile({ suffix: ".json" });
+  const previous = Deno.env.get("DESIRED");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "planned-value");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--out", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const artifact = JSON.parse(await Deno.readTextFile(planPath));
+    const plannedVariable = artifact.resources[0].operations.find(
+      (operation: Record<string, unknown>) =>
+        operation.type === "set-actions-variable",
+    );
+    assertEquals(plannedVariable.variable.value, "planned-value");
+
+    Deno.env.set("DESIRED", "different-runtime-value");
+    requests.length = 0;
+    output.length = 0;
+
+    assertEquals(
+      await main(
+        ["apply", "--plan", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const variableMutation = requests.find((request) =>
+      request.method === "PATCH" &&
+      request.url.pathname ===
+        "/api/v3/repos/acme/sample/actions/variables/DESIRED"
+    );
+    assertEquals(
+      (variableMutation?.body as { value?: string } | undefined)?.value,
+      "planned-value",
+    );
+    assertEquals(output.join("\n").includes("different-runtime-value"), false);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(planPath);
+  }
+});
+
+Deno.test("persisted apply reports owned-state drift without mutation", async () => {
+  const root = await configurationDirectory();
+  const planPath = await Deno.makeTempFile({ suffix: ".json" });
+  const previous = Deno.env.get("DESIRED");
+  const state = { hasIssues: true };
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests, state),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--out", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    state.hasIssues = false;
+    requests.length = 0;
+    output.length = 0;
+
+    assertEquals(
+      await main(
+        ["apply", "--plan", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    const rendered = output.join("\n");
+    assertStringIncludes(rendered, "Configuration: valid");
+    assertStringIncludes(rendered, "repository  sample  state");
+    assertEquals(mutations(requests), []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(planPath);
+  }
+});
+
+Deno.test("persisted apply reports template drift before state drift", async () => {
+  const root = await configurationDirectory();
+  const planPath = await Deno.makeTempFile({ suffix: ".json" });
+  const previous = Deno.env.get("DESIRED");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--out", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const templatePath = root + "/templates/code.yml";
+    const template = await Deno.readTextFile(templatePath);
+    await Deno.writeTextFile(
+      templatePath,
+      template.replace("has_issues: false", "has_issues: true"),
+    );
+    requests.length = 0;
+    output.length = 0;
+
+    assertEquals(
+      await main(
+        ["apply", "--plan", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    const rendered = output.join("\n");
+    assertStringIncludes(rendered, "Configuration: valid");
+    assertStringIncludes(rendered, "repository  sample  template");
+    assertEquals(mutations(requests), []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(planPath);
+  }
+});
+
+Deno.test("persisted apply reports root configuration drift independently", async () => {
+  const root = await configurationDirectory();
+  const planPath = await Deno.makeTempFile({ suffix: ".json" });
+  const previous = Deno.env.get("DESIRED");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(
+        ["plan", "--out", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const configPath = root + "/octosmith.yml";
+    const configuration = await Deno.readTextFile(configPath);
+    await Deno.writeTextFile(
+      configPath,
+      configuration.replace(
+        '    names: ["*"]',
+        '    names: ["*"]\n  settings:\n    unmatched_repositories: ignore',
+      ),
+    );
+    requests.length = 0;
+    output.length = 0;
+
+    assertEquals(
+      await main(
+        ["apply", "--plan", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    const rendered = output.join("\n");
+    assertStringIncludes(rendered, "Configuration: changed");
+    assertStringIncludes(rendered, "repository  sample  valid");
+    assertEquals(mutations(requests), []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(planPath);
+  }
+});
 
 Deno.test("CLI emits structured JSON reports", async () => {
   const root = await configurationDirectory();
@@ -1818,6 +2054,109 @@ Deno.test("template validate reports unresolved runtime references without readi
       template: "repository:code",
       path: "repository.actions.secrets[0]",
     }]);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("TOKEN");
+    } else {
+      Deno.env.set("TOKEN", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("persisted apply preflights secret sources stored in operations", async () => {
+  const root = await secretConfigurationDirectory();
+  const planPath = root + "/plan.json";
+  const previousToken = Deno.env.get("TOKEN");
+  const previousEdited = Deno.env.get("EDITED_TOKEN");
+  const requests: CapturedRequest[] = [];
+
+  try {
+    Deno.env.set("TOKEN", "available-while-planning");
+    Deno.env.delete("EDITED_TOKEN");
+    const planningRuntime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeSecretGitHub(requests),
+    });
+    assertEquals(
+      await main(["plan", "--path", root, "--out", planPath], {
+        runtime: planningRuntime,
+      }),
+      0,
+    );
+
+    const artifact = JSON.parse(await Deno.readTextFile(planPath));
+    const secretOperation = artifact.resources[0].operations.find(
+      (operation: { type: string }) => operation.type === "set-actions-secret",
+    );
+    secretOperation.secret.source = "EDITED_TOKEN";
+    await Deno.writeTextFile(planPath, JSON.stringify(artifact));
+
+    requests.length = 0;
+    const applyRuntime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeSecretGitHub(requests),
+    });
+
+    assertEquals(
+      await main(["apply", "--path", root, "--plan", planPath], {
+        runtime: applyRuntime,
+      }),
+      1,
+    );
+    assertEquals(
+      requests.some((request) => request.method !== "GET"),
+      false,
+    );
+  } finally {
+    if (previousToken === undefined) Deno.env.delete("TOKEN");
+    else Deno.env.set("TOKEN", previousToken);
+    if (previousEdited === undefined) Deno.env.delete("EDITED_TOKEN");
+    else Deno.env.set("EDITED_TOKEN", previousEdited);
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("persisted apply preflights missing secrets before mutation", async () => {
+  const root = await secretConfigurationDirectory();
+  const planPath = root + "/plan.json";
+  const previous = Deno.env.get("TOKEN");
+  const requests: CapturedRequest[] = [];
+
+  try {
+    Deno.env.set("TOKEN", "available-while-planning");
+    const planningRuntime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeSecretGitHub(requests),
+    });
+    assertEquals(
+      await main(["plan", "--path", root, "--out", planPath], {
+        runtime: planningRuntime,
+      }),
+      0,
+    );
+
+    requests.length = 0;
+    Deno.env.delete("TOKEN");
+    const applyRuntime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeSecretGitHub(requests),
+    });
+
+    assertEquals(
+      await main(["apply", "--path", root, "--plan", planPath], {
+        runtime: applyRuntime,
+      }),
+      1,
+    );
+    assertEquals(
+      requests.some((request) => request.method !== "GET"),
+      false,
+    );
   } finally {
     if (previous === undefined) {
       Deno.env.delete("TOKEN");

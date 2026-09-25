@@ -1,0 +1,2609 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/Kralizek/octosmith/master/schemas/plan.schema.json",
+  "title": "Octosmith persisted plan",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format",
+    "version",
+    "createdAt",
+    "configuration",
+    "resources"
+  ],
+  "properties": {
+    "format": {
+      "const": "octosmith-plan"
+    },
+    "version": {
+      "const": 1
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "configuration": {
+      "$ref": "#/$defs/hash"
+    },
+    "resources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/resource"
+      }
+    }
+  },
+  "$defs": {
+    "hash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "algorithm",
+        "hash"
+      ],
+      "properties": {
+        "algorithm": {
+          "const": "sha256"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "templateHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "algorithm",
+        "hash"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "algorithm": {
+          "const": "sha256"
+        },
+        "hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "resource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "name",
+        "template",
+        "state",
+        "operations",
+        "evaluations"
+      ],
+      "properties": {
+        "type": {
+          "const": "repository"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "template": {
+          "$ref": "#/$defs/templateHash"
+        },
+        "state": {
+          "$ref": "#/$defs/hash"
+        },
+        "operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/operation"
+          }
+        },
+        "evaluations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evaluation"
+          }
+        }
+      }
+    },
+    "operation": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "settings"
+          ],
+          "properties": {
+            "type": {
+              "const": "update-repository-settings"
+            },
+            "settings": {
+              "$ref": "#/$defs/repositorySettings"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name",
+            "value"
+          ],
+          "properties": {
+            "type": {
+              "const": "set-custom-property"
+            },
+            "name": {
+              "type": "string"
+            },
+            "value": {
+              "$ref": "#/$defs/customPropertyValue"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "settings"
+          ],
+          "properties": {
+            "type": {
+              "const": "update-actions-settings"
+            },
+            "settings": {
+              "$ref": "#/$defs/actionsSettings"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "settings"
+          ],
+          "properties": {
+            "type": {
+              "const": "update-actions-oidc"
+            },
+            "settings": {
+              "$ref": "#/$defs/actionsOidc"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "permission"
+          ],
+          "properties": {
+            "type": {
+              "const": "set-team-permission"
+            },
+            "permission": {
+              "$ref": "#/$defs/teamPermission"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "team"
+          ],
+          "properties": {
+            "type": {
+              "const": "remove-team-permission"
+            },
+            "team": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "variable"
+          ],
+          "properties": {
+            "type": {
+              "const": "set-actions-variable"
+            },
+            "variable": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "value"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "remove-actions-variable"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "secret"
+          ],
+          "properties": {
+            "type": {
+              "const": "set-actions-secret"
+            },
+            "secret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "source"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "secret"
+          ],
+          "properties": {
+            "type": {
+              "const": "remove-actions-secret"
+            },
+            "secret": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "secret"
+          ],
+          "properties": {
+            "type": {
+              "const": "set-dependabot-secret"
+            },
+            "secret": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "name",
+                "source"
+              ],
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "secret"
+          ],
+          "properties": {
+            "type": {
+              "const": "remove-dependabot-secret"
+            },
+            "secret": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "ruleset"
+          ],
+          "properties": {
+            "type": {
+              "const": "create-ruleset"
+            },
+            "ruleset": {
+              "$ref": "#/$defs/rulesetDefinition"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "changes"
+          ],
+          "properties": {
+            "type": {
+              "const": "update-ruleset"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "changes": {
+              "$ref": "#/$defs/desiredRuleset"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "id",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "delete-ruleset"
+            },
+            "id": {
+              "type": "integer"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "environment"
+          ],
+          "properties": {
+            "type": {
+              "const": "create-environment"
+            },
+            "environment": {
+              "$ref": "#/$defs/environment"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "environment",
+            "collections"
+          ],
+          "properties": {
+            "type": {
+              "const": "update-environment"
+            },
+            "environment": {
+              "$ref": "#/$defs/environment"
+            },
+            "collections": {
+              "enum": [
+                "explicit",
+                "strict"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "name"
+          ],
+          "properties": {
+            "type": {
+              "const": "delete-environment"
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "file"
+          ],
+          "properties": {
+            "type": {
+              "const": "create-file"
+            },
+            "file": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "ensure",
+                    "content"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "ensure": {
+                      "const": "exact"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "path",
+                    "ensure",
+                    "content"
+                  ],
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "ensure": {
+                      "const": "exists"
+                    },
+                    "content": {
+                      "type": "string"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "sha",
+            "file"
+          ],
+          "properties": {
+            "type": {
+              "const": "update-file"
+            },
+            "sha": {
+              "type": "string",
+              "minLength": 1
+            },
+            "file": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "path",
+                "ensure",
+                "content"
+              ],
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "ensure": {
+                  "const": "exact"
+                },
+                "content": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "path",
+            "sha"
+          ],
+          "properties": {
+            "type": {
+              "const": "delete-file"
+            },
+            "path": {
+              "type": "string"
+            },
+            "sha": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      ]
+    },
+    "evaluation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "details"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "repository-settings",
+            "custom-property",
+            "actions-settings",
+            "actions-oidc",
+            "actions-variable",
+            "actions-secret",
+            "dependabot-secret",
+            "team-permission",
+            "ruleset",
+            "environment",
+            "file"
+          ]
+        },
+        "details": {
+          "type": "object"
+        },
+        "operationIndex": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "rulesetDefinition": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "target",
+            "enforcement",
+            "bypassActors",
+            "conditions",
+            "rules"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "target": {
+              "enum": [
+                "branch",
+                "tag"
+              ]
+            },
+            "enforcement": {
+              "enum": [
+                "disabled",
+                "evaluate",
+                "active"
+              ]
+            },
+            "bypassActors": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/rulesetBypassActor"
+              }
+            },
+            "conditions": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "refName"
+              ],
+              "properties": {
+                "refName": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "include",
+                    "exclude"
+                  ],
+                  "properties": {
+                    "include": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "exclude": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/refRulesetRule"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "target",
+            "enforcement",
+            "bypassActors",
+            "rules"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "target": {
+              "const": "push"
+            },
+            "enforcement": {
+              "enum": [
+                "disabled",
+                "evaluate",
+                "active"
+              ]
+            },
+            "bypassActors": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/rulesetBypassActor"
+              }
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/pushRulesetRule"
+              }
+            }
+          },
+          "not": {
+            "required": [
+              "conditions"
+            ]
+          }
+        }
+      ]
+    },
+    "customPropertyValue": {
+      "oneOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "rulesetBypassActor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actorType",
+        "bypassMode"
+      ],
+      "properties": {
+        "actorType": {
+          "enum": [
+            "integration",
+            "organization-admin",
+            "repository-role",
+            "team",
+            "deploy-key",
+            "user"
+          ]
+        },
+        "actorId": {
+          "type": "integer"
+        },
+        "bypassMode": {
+          "enum": [
+            "always",
+            "pull-request",
+            "exempt"
+          ]
+        }
+      }
+    },
+    "refNameCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "rulesetConditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "refName": {
+          "$ref": "#/$defs/refNameCondition"
+        }
+      }
+    },
+    "desiredRulesetRule": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "enum": [
+            "creation",
+            "update",
+            "deletion",
+            "required-linear-history",
+            "merge-queue",
+            "required-deployments",
+            "required-signatures",
+            "pull-request",
+            "required-status-checks",
+            "non-fast-forward",
+            "commit-message-pattern",
+            "commit-author-email-pattern",
+            "committer-email-pattern",
+            "branch-name-pattern",
+            "tag-name-pattern",
+            "workflows",
+            "code-scanning",
+            "code-quality",
+            "code-coverage",
+            "copilot-code-review",
+            "license-compliance-scanning",
+            "file-path-restriction",
+            "max-file-path-length",
+            "file-extension-restriction",
+            "max-file-size"
+          ]
+        }
+      },
+      "additionalProperties": true
+    },
+    "desiredRuleset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "target": {
+          "enum": [
+            "branch",
+            "tag",
+            "push"
+          ]
+        },
+        "enforcement": {
+          "enum": [
+            "disabled",
+            "evaluate",
+            "active"
+          ]
+        },
+        "bypassActors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/rulesetBypassActor"
+          }
+        },
+        "conditions": {
+          "$ref": "#/$defs/persistedRulesetConditions"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/persistedRulesetRule"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {
+                "required": [
+                  "rules"
+                ]
+              },
+              {
+                "required": [
+                  "conditions"
+                ]
+              }
+            ]
+          },
+          "then": {
+            "required": [
+              "target"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "target"
+            ],
+            "properties": {
+              "target": {
+                "const": "push"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "conditions"
+              ]
+            },
+            "properties": {
+              "rules": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/pushRulesetRule"
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "target"
+            ],
+            "properties": {
+              "target": {
+                "enum": [
+                  "branch",
+                  "tag"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "rules": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/refRulesetRule"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "subjectClaimTemplate": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "const": "default"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source"
+          ],
+          "properties": {
+            "source": {
+              "const": "organization"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "source",
+            "claims"
+          ],
+          "properties": {
+            "source": {
+              "const": "custom"
+            },
+            "claims": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "selectedActions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "githubOwnedAllowed": {
+          "type": "boolean"
+        },
+        "verifiedAllowed": {
+          "type": "boolean"
+        },
+        "patternsAllowed": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "actionsOidc": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "subjectClaimTemplate": {
+          "$ref": "#/$defs/subjectClaimTemplate"
+        },
+        "immutableSubject": {
+          "type": "boolean"
+        }
+      }
+    },
+    "actionsSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "allowedActions": {
+          "enum": [
+            "all",
+            "local-only",
+            "selected"
+          ]
+        },
+        "shaPinningRequired": {
+          "type": "boolean"
+        },
+        "selectedActions": {
+          "$ref": "#/$defs/selectedActions"
+        }
+      }
+    },
+    "mergeSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "allowSquashMerge": {
+          "type": "boolean"
+        },
+        "allowMergeCommit": {
+          "type": "boolean"
+        },
+        "allowRebaseMerge": {
+          "type": "boolean"
+        },
+        "allowAutoMerge": {
+          "type": "boolean"
+        },
+        "allowUpdateBranch": {
+          "type": "boolean"
+        },
+        "deleteBranchOnMerge": {
+          "type": "boolean"
+        },
+        "squashMergeCommitTitle": {
+          "enum": [
+            "pull-request-title",
+            "commit-or-pull-request-title"
+          ]
+        },
+        "squashMergeCommitMessage": {
+          "enum": [
+            "pull-request-body",
+            "commit-messages",
+            "blank"
+          ]
+        },
+        "mergeCommitTitle": {
+          "enum": [
+            "pull-request-title",
+            "merge-message"
+          ]
+        },
+        "mergeCommitMessage": {
+          "enum": [
+            "pull-request-title",
+            "pull-request-body",
+            "blank"
+          ]
+        }
+      }
+    },
+    "securityAndAnalysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "advancedSecurity": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "codeSecurity": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "secretScanning": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "secretScanningPushProtection": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        },
+        "secretScanningAiDetection": {
+          "enum": [
+            "enabled",
+            "disabled"
+          ]
+        }
+      }
+    },
+    "repositorySettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "website": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "topics": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "visibility": {
+          "enum": [
+            "public",
+            "private",
+            "internal"
+          ]
+        },
+        "hasIssues": {
+          "type": "boolean"
+        },
+        "hasProjects": {
+          "type": "boolean"
+        },
+        "hasWiki": {
+          "type": "boolean"
+        },
+        "hasDiscussions": {
+          "type": "boolean"
+        },
+        "hasPullRequests": {
+          "type": "boolean"
+        },
+        "pullRequestCreationPolicy": {
+          "enum": [
+            "all",
+            "collaborators-only"
+          ]
+        },
+        "isTemplate": {
+          "type": "boolean"
+        },
+        "defaultBranch": {
+          "type": "string"
+        },
+        "merge": {
+          "$ref": "#/$defs/mergeSettings"
+        },
+        "archived": {
+          "type": "boolean"
+        },
+        "allowForking": {
+          "type": "boolean"
+        },
+        "webCommitSignoffRequired": {
+          "type": "boolean"
+        },
+        "securityAndAnalysis": {
+          "$ref": "#/$defs/securityAndAnalysis"
+        }
+      }
+    },
+    "teamPermission": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "team",
+        "permission"
+      ],
+      "properties": {
+        "team": {
+          "type": "string"
+        },
+        "permission": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "name"
+          ],
+          "properties": {
+            "kind": {
+              "enum": [
+                "built-in",
+                "custom"
+              ]
+            },
+            "name": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "value"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "desiredSecret": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "source"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "secrets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/desiredSecret"
+          }
+        },
+        "variables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/variable"
+          }
+        }
+      }
+    },
+    "requiredStatusCheck": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "context"
+      ],
+      "properties": {
+        "context": {
+          "type": "string"
+        },
+        "integrationId": {
+          "type": "integer"
+        }
+      }
+    },
+    "requiredWorkflow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "repositoryId"
+      ],
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "repositoryId": {
+          "type": "integer"
+        },
+        "ref": {
+          "type": "string"
+        },
+        "sha": {
+          "type": "string"
+        }
+      }
+    },
+    "codeScanningTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "alertsThreshold",
+        "securityAlertsThreshold"
+      ],
+      "properties": {
+        "tool": {
+          "type": "string"
+        },
+        "alertsThreshold": {
+          "enum": [
+            "none",
+            "errors",
+            "errors-and-warnings",
+            "all"
+          ]
+        },
+        "securityAlertsThreshold": {
+          "enum": [
+            "none",
+            "critical",
+            "high-or-higher",
+            "medium-or-higher",
+            "all"
+          ]
+        }
+      }
+    },
+    "pullRequestDismissalActor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer"
+        },
+        "type": {
+          "enum": [
+            "user",
+            "team",
+            "integration-installation",
+            "repository-role"
+          ]
+        }
+      }
+    },
+    "requiredReviewer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reviewerTeamId",
+        "filePatterns",
+        "minimumApprovals"
+      ],
+      "properties": {
+        "reviewerTeamId": {
+          "type": "integer"
+        },
+        "filePatterns": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "minimumApprovals": {
+          "type": "integer"
+        }
+      }
+    },
+    "dismissalRestriction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "enabled",
+        "allowedActors"
+      ],
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "allowedActors": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/pullRequestDismissalActor"
+          }
+        }
+      }
+    },
+    "refRulesetRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "creation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "updateAllowsFetchAndMerge"
+          ],
+          "properties": {
+            "type": {
+              "const": "update"
+            },
+            "updateAllowsFetchAndMerge": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "deletion"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-linear-history"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "checkResponseTimeoutMinutes",
+            "groupingStrategy",
+            "maxEntriesToBuild",
+            "maxEntriesToMerge",
+            "mergeMethod",
+            "minEntriesToMerge",
+            "minEntriesToMergeWaitMinutes"
+          ],
+          "properties": {
+            "type": {
+              "const": "merge-queue"
+            },
+            "checkResponseTimeoutMinutes": {
+              "type": "integer"
+            },
+            "groupingStrategy": {
+              "enum": [
+                "all-green",
+                "head-green"
+              ]
+            },
+            "maxEntriesToBuild": {
+              "type": "integer"
+            },
+            "maxEntriesToMerge": {
+              "type": "integer"
+            },
+            "mergeMethod": {
+              "enum": [
+                "merge",
+                "squash",
+                "rebase"
+              ]
+            },
+            "minEntriesToMerge": {
+              "type": "integer"
+            },
+            "minEntriesToMergeWaitMinutes": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "environments"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-deployments"
+            },
+            "environments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-signatures"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "allowedMergeMethods",
+            "dismissStaleReviewsOnPush",
+            "dismissalRestriction",
+            "requireCodeOwnerReview",
+            "requireLastPushApproval",
+            "requiredApprovingReviewCount",
+            "requiredReviewThreadResolution",
+            "requiredReviewers"
+          ],
+          "properties": {
+            "type": {
+              "const": "pull-request"
+            },
+            "allowedMergeMethods": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "merge",
+                  "squash",
+                  "rebase"
+                ]
+              }
+            },
+            "dismissStaleReviewsOnPush": {
+              "type": "boolean"
+            },
+            "dismissalRestriction": {
+              "$ref": "#/$defs/dismissalRestriction"
+            },
+            "requireCodeOwnerReview": {
+              "type": "boolean"
+            },
+            "requireLastPushApproval": {
+              "type": "boolean"
+            },
+            "requiredApprovingReviewCount": {
+              "type": "integer"
+            },
+            "requiredReviewThreadResolution": {
+              "type": "boolean"
+            },
+            "requiredReviewers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/requiredReviewer"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "doNotEnforceOnCreate",
+            "checks",
+            "strict"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-status-checks"
+            },
+            "doNotEnforceOnCreate": {
+              "type": "boolean"
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/requiredStatusCheck"
+              }
+            },
+            "strict": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "non-fast-forward"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "commit-message-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "commit-author-email-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "committer-email-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "branch-name-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "tag-name-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "doNotEnforceOnCreate",
+            "workflows"
+          ],
+          "properties": {
+            "type": {
+              "const": "workflows"
+            },
+            "doNotEnforceOnCreate": {
+              "type": "boolean"
+            },
+            "workflows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/requiredWorkflow"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "tools"
+          ],
+          "properties": {
+            "type": {
+              "const": "code-scanning"
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/codeScanningTool"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "severity"
+          ],
+          "properties": {
+            "type": {
+              "const": "code-quality"
+            },
+            "severity": {
+              "enum": [
+                "errors",
+                "warnings",
+                "notes",
+                "all"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "code-coverage"
+            },
+            "maxCoverageDrop": {
+              "type": "number"
+            },
+            "minimumCoverage": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "reviewDraftPullRequests",
+            "reviewOnPush"
+          ],
+          "properties": {
+            "type": {
+              "const": "copilot-code-review"
+            },
+            "reviewDraftPullRequests": {
+              "type": "boolean"
+            },
+            "reviewOnPush": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "license-compliance-scanning"
+            }
+          }
+        }
+      ]
+    },
+    "pushRulesetRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "restrictedFilePaths"
+          ],
+          "properties": {
+            "type": {
+              "const": "file-path-restriction"
+            },
+            "restrictedFilePaths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "maxFilePathLength"
+          ],
+          "properties": {
+            "type": {
+              "const": "max-file-path-length"
+            },
+            "maxFilePathLength": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "restrictedFileExtensions"
+          ],
+          "properties": {
+            "type": {
+              "const": "file-extension-restriction"
+            },
+            "restrictedFileExtensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "maxFileSizeMb"
+          ],
+          "properties": {
+            "type": {
+              "const": "max-file-size"
+            },
+            "maxFileSizeMb": {
+              "type": "number"
+            }
+          }
+        }
+      ]
+    },
+    "persistedRulesetRule": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "creation"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "updateAllowsFetchAndMerge"
+          ],
+          "properties": {
+            "type": {
+              "const": "update"
+            },
+            "updateAllowsFetchAndMerge": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "deletion"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-linear-history"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "checkResponseTimeoutMinutes",
+            "groupingStrategy",
+            "maxEntriesToBuild",
+            "maxEntriesToMerge",
+            "mergeMethod",
+            "minEntriesToMerge",
+            "minEntriesToMergeWaitMinutes"
+          ],
+          "properties": {
+            "type": {
+              "const": "merge-queue"
+            },
+            "checkResponseTimeoutMinutes": {
+              "type": "integer"
+            },
+            "groupingStrategy": {
+              "enum": [
+                "all-green",
+                "head-green"
+              ]
+            },
+            "maxEntriesToBuild": {
+              "type": "integer"
+            },
+            "maxEntriesToMerge": {
+              "type": "integer"
+            },
+            "mergeMethod": {
+              "enum": [
+                "merge",
+                "squash",
+                "rebase"
+              ]
+            },
+            "minEntriesToMerge": {
+              "type": "integer"
+            },
+            "minEntriesToMergeWaitMinutes": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "environments"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-deployments"
+            },
+            "environments": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-signatures"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "allowedMergeMethods",
+            "dismissStaleReviewsOnPush",
+            "dismissalRestriction",
+            "requireCodeOwnerReview",
+            "requireLastPushApproval",
+            "requiredApprovingReviewCount",
+            "requiredReviewThreadResolution",
+            "requiredReviewers"
+          ],
+          "properties": {
+            "type": {
+              "const": "pull-request"
+            },
+            "allowedMergeMethods": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "merge",
+                  "squash",
+                  "rebase"
+                ]
+              }
+            },
+            "dismissStaleReviewsOnPush": {
+              "type": "boolean"
+            },
+            "dismissalRestriction": {
+              "$ref": "#/$defs/dismissalRestriction"
+            },
+            "requireCodeOwnerReview": {
+              "type": "boolean"
+            },
+            "requireLastPushApproval": {
+              "type": "boolean"
+            },
+            "requiredApprovingReviewCount": {
+              "type": "integer"
+            },
+            "requiredReviewThreadResolution": {
+              "type": "boolean"
+            },
+            "requiredReviewers": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/requiredReviewer"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "doNotEnforceOnCreate",
+            "checks",
+            "strict"
+          ],
+          "properties": {
+            "type": {
+              "const": "required-status-checks"
+            },
+            "doNotEnforceOnCreate": {
+              "type": "boolean"
+            },
+            "checks": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/requiredStatusCheck"
+              }
+            },
+            "strict": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "non-fast-forward"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "commit-message-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "commit-author-email-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "committer-email-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "branch-name-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "operator",
+            "pattern"
+          ],
+          "properties": {
+            "type": {
+              "const": "tag-name-pattern"
+            },
+            "name": {
+              "type": "string"
+            },
+            "negate": {
+              "type": "boolean"
+            },
+            "operator": {
+              "enum": [
+                "starts-with",
+                "ends-with",
+                "contains",
+                "regex"
+              ]
+            },
+            "pattern": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "doNotEnforceOnCreate",
+            "workflows"
+          ],
+          "properties": {
+            "type": {
+              "const": "workflows"
+            },
+            "doNotEnforceOnCreate": {
+              "type": "boolean"
+            },
+            "workflows": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/requiredWorkflow"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "tools"
+          ],
+          "properties": {
+            "type": {
+              "const": "code-scanning"
+            },
+            "tools": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/codeScanningTool"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "severity"
+          ],
+          "properties": {
+            "type": {
+              "const": "code-quality"
+            },
+            "severity": {
+              "enum": [
+                "errors",
+                "warnings",
+                "notes",
+                "all"
+              ]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "code-coverage"
+            },
+            "maxCoverageDrop": {
+              "type": "number"
+            },
+            "minimumCoverage": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "reviewDraftPullRequests",
+            "reviewOnPush"
+          ],
+          "properties": {
+            "type": {
+              "const": "copilot-code-review"
+            },
+            "reviewDraftPullRequests": {
+              "type": "boolean"
+            },
+            "reviewOnPush": {
+              "type": "boolean"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type"
+          ],
+          "properties": {
+            "type": {
+              "const": "license-compliance-scanning"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "restrictedFilePaths"
+          ],
+          "properties": {
+            "type": {
+              "const": "file-path-restriction"
+            },
+            "restrictedFilePaths": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "maxFilePathLength"
+          ],
+          "properties": {
+            "type": {
+              "const": "max-file-path-length"
+            },
+            "maxFilePathLength": {
+              "type": "integer"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "restrictedFileExtensions"
+          ],
+          "properties": {
+            "type": {
+              "const": "file-extension-restriction"
+            },
+            "restrictedFileExtensions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "type",
+            "maxFileSizeMb"
+          ],
+          "properties": {
+            "type": {
+              "const": "max-file-size"
+            },
+            "maxFileSizeMb": {
+              "type": "number"
+            }
+          }
+        }
+      ]
+    },
+    "persistedRefNameCondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "include",
+        "exclude"
+      ],
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "persistedRulesetConditions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "refName"
+      ],
+      "properties": {
+        "refName": {
+          "$ref": "#/$defs/persistedRefNameCondition"
+        }
+      }
+    }
+  }
+}

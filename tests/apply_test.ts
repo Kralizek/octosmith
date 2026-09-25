@@ -123,6 +123,32 @@ Deno.test("apply apply executes the fresh plan", async () => {
   }
 });
 
+Deno.test("fresh apply prepares all resources before the first mutation", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime(
+      [metadata("sample"), metadata("broken")],
+      new Set(["broken"]),
+    );
+    const results = await applyResults(runtime, root, "apply");
+
+    assertEquals(runtime.applied, []);
+    assertEquals(
+      results.map((item) => [item.repository, item.status]),
+      [
+        ["broken", "failed"],
+        ["sample", "failed"],
+      ],
+    );
+    assertEquals(
+      results.find((item) => item.repository === "sample")?.error,
+      "Apply aborted before mutation because another resource failed during preparation",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("apply returns a structured report without runtime values or file contents", async () => {
   const root = await sensitiveConfigurationDirectory();
   try {
