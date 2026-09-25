@@ -173,6 +173,34 @@ Deno.test("verbose text includes unchanged apply items", () => {
   );
 });
 
+for (const unmatched of [undefined, 0, 2]) {
+  Deno.test(`summary distinguishes absent inspection from unmatched count ${unmatched}`, () => {
+    const report: Report = {
+      organization: "acme",
+      startedAt: new Date(0),
+      completedAt: new Date(1),
+      repositories: [],
+      ...(unmatched !== undefined && {
+        inspection: {
+          resources: Array.from({ length: unmatched }, (_, index) => ({
+            type: "repository",
+            name: "acme/unmatched-" + index,
+            template: null,
+            status: "unmatched" as const,
+          })),
+          summary: { matched: 0, unmatched },
+        },
+      }),
+    };
+
+    assertEquals(
+      renderReport(report).split("\n").at(-1),
+      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 0 failed" +
+        (unmatched === undefined ? "" : ", " + unmatched + " unmatched"),
+    );
+  });
+}
+
 Deno.test("summary counts every repository outcome exactly", () => {
   const applied = reportAppliedRepository(
     "code",

@@ -45,8 +45,10 @@ export function renderReport(
       summary.planned + " planned, " +
       summary.applied + " applied, " +
       summary.partiallyApplied + " partially-applied, " +
-      summary.failed + " failed, " +
-      (report.inspection?.summary.unmatched ?? 0) + " unmatched",
+      summary.failed + " failed" +
+      (report.inspection === undefined
+        ? ""
+        : ", " + report.inspection.summary.unmatched + " unmatched"),
   );
 
   return lines.join("\n");
