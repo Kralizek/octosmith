@@ -3,9 +3,9 @@ import {
   buildPlan,
   type DesiredState,
   type ExecutableResourcePlan,
+  hashCanonical,
   type LoadedConfiguration,
   matchesScope,
-  hashCanonical,
   preflightRuntimeReferences,
   projectOwnedCurrentState,
   reportFailedRepository,
@@ -72,8 +72,12 @@ export function createGitHubRuntime(
   const secretValue = options.secretValue ?? environmentValue;
   let source: GitHubRepositoryStateSource | undefined;
   let sink: GitHubRepositoryMutationSink | undefined;
-  let fileChanges: LoadedConfiguration["configuration"]["repositories"]["fileChanges"];
-  const preparedSinks = new Map<string, import("@octosmith/octosmith").RepositoryMutationSink>();
+  let fileChanges:
+    LoadedConfiguration["configuration"]["repositories"]["fileChanges"];
+  const preparedSinks = new Map<
+    string,
+    import("@octosmith/octosmith").RepositoryMutationSink
+  >();
 
   return {
     value: secretValue,
