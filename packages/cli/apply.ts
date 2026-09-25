@@ -136,7 +136,9 @@ export function createGitHubRuntime(
         loadedConfiguration,
         resource.desired.repository,
       );
-      if (discovery.failures.length > 0 || discovery.repositories.length !== 1) {
+      if (
+        discovery.failures.length > 0 || discovery.repositories.length !== 1
+      ) {
         throw new Error("Resource selection changed after apply preparation");
       }
       const metadata = discovery.repositories[0];
