@@ -205,6 +205,48 @@ Deno.test("empty nested repository settings do not imply administration access",
   }
 });
 
+
+Deno.test("configured repository settings imply administration access even for default-like values", async () => {
+  const root = await configuration();
+  try {
+    for (const settings of [
+      "visibility: private",
+      "topics: []",
+      "description: null",
+      "merge:\n      squash: false",
+    ]) {
+      await Deno.writeTextFile(
+        root + "/templates/fourth.yml",
+        `version: 1
+kind: repository
+match:
+  include:
+    names: [fourth]
+repository:
+  settings:
+    ${settings}
+`,
+      );
+
+      assertEquals(
+        requiredPermissionsForConfiguration(
+          await loadConfigurationDirectory(root),
+          "fourth",
+        ),
+        [
+          {
+            scope: "repository",
+            permission: "administration",
+            access: "write",
+          },
+        ],
+      );
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("direct file delivery excludes pull request permissions", async () => {
   const root = await configuration();
   try {
