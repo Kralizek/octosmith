@@ -205,7 +205,6 @@ Deno.test("empty nested repository settings do not imply administration access",
   }
 });
 
-
 Deno.test("configured repository settings imply administration access even for default-like values", async () => {
   const root = await configuration();
   try {
