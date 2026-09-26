@@ -25,36 +25,54 @@ import {
 export async function validateConfigurationDirectory(
   root: string,
 ): Promise<readonly RuntimeReferenceDiagnostic[]> {
-  const loaded = await loadConfigurationDirectory(root);
+  return await validateLoadedConfiguration(
+    await loadConfigurationDirectory(root),
+  );
+}
+
+/** Validate a loaded configuration using the same semantic checks as directory validation. */
+export async function validateLoadedConfiguration(
+  loaded: LoadedConfiguration,
+  selectedTemplate?: string,
+): Promise<readonly RuntimeReferenceDiagnostic[]> {
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
   const scope = loaded.configuration.repositories.scope;
-  assertTemplatesDoNotOverlap(scope, loaded.templates);
+  if (selectedTemplate === undefined) {
+    assertTemplatesDoNotOverlap(scope, loaded.templates);
+  }
   if (
+    selectedTemplate === undefined &&
     loaded.configuration.repositories.settings?.unmatchedRepositories !==
       "ignore"
   ) {
     assertScopeCanMatchTemplate(scope, loaded.templates);
   }
 
+  const selectedIdentity = selectedTemplate === undefined
+    ? undefined
+    : selectedTemplate.startsWith("repository:")
+    ? selectedTemplate
+    : "repository:" + selectedTemplate;
+  if (
+    selectedIdentity !== undefined &&
+    loaded.templates[selectedIdentity] === undefined
+  ) {
+    throw new Error("Unknown template: " + selectedTemplate);
+  }
+
   for (const [name, template] of Object.entries(loaded.templates)) {
+    if (selectedIdentity !== undefined && name !== selectedIdentity) continue;
     diagnostics.push(...runtimeReferenceWarnings(name, template));
-    const scopeInclude = scope.include === "all" ? {} : scope.include;
-    const templateInclude = template.match.include === "all"
-      ? {}
-      : template.match.include;
-    const repository = scopeIntersectionWitness(
-      [scopeInclude, templateInclude],
-      [
-        scope.exclude,
-        template.match.exclude,
-      ].filter(
-        (selector): selector is RepositorySelector => selector !== undefined,
-      ),
-      name,
-    );
+    const repository = templateScopeWitness(scope, template, name);
 
     if (repository === undefined) {
+      if (selectedIdentity !== undefined) {
+        throw new Error(
+          "Template " + selectedTemplate +
+            " cannot match any repository within configured scope",
+        );
+      }
       continue;
     }
 
@@ -72,6 +90,31 @@ export async function validateConfigurationDirectory(
   }
 
   return diagnostics;
+}
+
+/** Whether a template can manage a repository within the configured scope. */
+export function templateCanMatchScope(
+  scope: Scope<RepositorySelector>,
+  template: RepositoryTemplate,
+): boolean {
+  return templateScopeWitness(scope, template, "template") !== undefined;
+}
+
+function templateScopeWitness(
+  scope: Scope<RepositorySelector>,
+  template: RepositoryTemplate,
+  name: string,
+): RepositoryMetadata | undefined {
+  return scopeIntersectionWitness(
+    [
+      scope.include === "all" ? {} : scope.include,
+      template.match.include === "all" ? {} : template.match.include,
+    ],
+    [scope.exclude, template.match.exclude].filter(
+      (selector): selector is RepositorySelector => selector !== undefined,
+    ),
+    name,
+  );
 }
 
 function assertTemplatesDoNotOverlap(

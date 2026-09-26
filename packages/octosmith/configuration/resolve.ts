@@ -294,7 +294,8 @@ function equalPropertyValue(
   return actual === expected;
 }
 
-function normalizeRepositorySettings(
+/** Normalize repository settings configuration into planner-ready desired settings. */
+export function normalizeRepositorySettings(
   settings: RepositorySettingsConfiguration,
 ): DesiredRepositorySettings {
   const merge = normalizeMerge(settings);

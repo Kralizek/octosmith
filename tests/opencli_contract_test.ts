@@ -141,6 +141,7 @@ Deno.test("OpenCLI contract includes representative canonical examples", async (
       "octosmith resource list",
       "octosmith resource create",
       "octosmith template validate",
+      "octosmith template permissions",
     ]
   ) {
     assertEquals(
@@ -148,4 +149,18 @@ Deno.test("OpenCLI contract includes representative canonical examples", async (
       true,
     );
   }
+});
+
+Deno.test("OpenCLI permission options match the implemented template command", async () => {
+  const document = await loadContract();
+  const command = document.commands["octosmith template permissions"];
+  assertEquals(
+    command.flags?.map((flag) => flag.name),
+    ["path", "format"],
+  );
+  assertEquals(command.flags?.[0].aliases, ["p"]);
+  assertStringIncludes(
+    usage(),
+    "template",
+  );
 });

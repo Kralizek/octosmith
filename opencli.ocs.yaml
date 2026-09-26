@@ -209,6 +209,11 @@ commands:
   octosmith template permissions:
     kind: action
     summary: Analyze worst-case permissions for a template or configuration.
+    description: |
+      Analyze reachable, composed templates without GitHub access or runtime
+      secrets. Includes possible strict collection removals. Text output groups
+      permissions by scope; JSON contains normalized requirements with scope,
+      permission API name, and access level.
     args:
       - name: template
         type: string
@@ -227,3 +232,7 @@ commands:
           - value: text
           - value: json
         summary: Output format.
+    examples:
+      - title: Analyze a template as JSON
+        content: |
+          $ octosmith template permissions teams/backend --format json
