@@ -251,6 +251,91 @@ Deno.test("unknown template fails clearly", async () => {
   }
 });
 
+Deno.test("selected template ignores unrelated invalid and overlapping templates", async () => {
+  const root = await configuration();
+  const output: string[] = [];
+  const errors: string[] = [];
+  try {
+    await Deno.writeTextFile(root + "/templates/second.yml", "not a template");
+    await Deno.writeTextFile(
+      root + "/templates/overlap.yml",
+      `version: 1
+kind: repository
+match:
+  include:
+    names: [first]
+repository:
+  actions:
+    variables: []
+`,
+    );
+
+    assertEquals(
+      await main(
+        [
+          "template",
+          "permissions",
+          "first",
+          "--path",
+          root,
+          "--format",
+          "json",
+        ],
+        {
+          write: (text) => output.push(text),
+          writeError: (text) => errors.push(text),
+        },
+      ),
+      0,
+    );
+    assertEquals(errors, []);
+    assertEquals(
+      JSON.parse(output[0]).requirements.some(
+        (item: { permission: string }) => item.permission === "members",
+      ),
+      true,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("selected unreachable template fails instead of reporting no permissions", async () => {
+  const root = await configuration();
+  const errors: string[] = [];
+  const output: string[] = [];
+  try {
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      `version: 1
+organization: acme
+repositories:
+  scope:
+    include:
+      names: [second]
+`,
+    );
+
+    assertEquals(
+      await main(
+        ["template", "permissions", "first", "--path", root],
+        {
+          write: (text) => output.push(text),
+          writeError: (text) => errors.push(text),
+        },
+      ),
+      1,
+    );
+    assertEquals(output, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Template first cannot match any repository within configured scope",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("aggregation retains strongest access for a scoped permission", () => {
   assertEquals(
     aggregateGitHubPermissionRequirements([

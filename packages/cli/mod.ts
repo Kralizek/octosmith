@@ -381,12 +381,13 @@ function createCli(
             const format = parseOutputFormat(commandOptions.format);
             const loaded = await loadConfigurationDirectory(
               commandOptions.path,
+              template,
             );
+            await validateLoadedConfiguration(loaded, template);
             const requirements = requiredPermissionsForConfiguration(
               loaded,
               template,
             );
-            await validateLoadedConfiguration(loaded);
             write(renderOutput(
               format,
               { requirements },

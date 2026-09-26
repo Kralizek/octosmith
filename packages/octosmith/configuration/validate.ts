@@ -33,23 +33,46 @@ export async function validateConfigurationDirectory(
 /** Validate a loaded configuration using the same semantic checks as directory validation. */
 export async function validateLoadedConfiguration(
   loaded: LoadedConfiguration,
+  selectedTemplate?: string,
 ): Promise<readonly RuntimeReferenceDiagnostic[]> {
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
   const scope = loaded.configuration.repositories.scope;
-  assertTemplatesDoNotOverlap(scope, loaded.templates);
+  if (selectedTemplate === undefined) {
+    assertTemplatesDoNotOverlap(scope, loaded.templates);
+  }
   if (
+    selectedTemplate === undefined &&
     loaded.configuration.repositories.settings?.unmatchedRepositories !==
       "ignore"
   ) {
     assertScopeCanMatchTemplate(scope, loaded.templates);
   }
 
+  const selectedIdentity = selectedTemplate === undefined
+    ? undefined
+    : selectedTemplate.startsWith("repository:")
+    ? selectedTemplate
+    : "repository:" + selectedTemplate;
+  if (
+    selectedIdentity !== undefined &&
+    loaded.templates[selectedIdentity] === undefined
+  ) {
+    throw new Error("Unknown template: " + selectedTemplate);
+  }
+
   for (const [name, template] of Object.entries(loaded.templates)) {
+    if (selectedIdentity !== undefined && name !== selectedIdentity) continue;
     diagnostics.push(...runtimeReferenceWarnings(name, template));
     const repository = templateScopeWitness(scope, template, name);
 
     if (repository === undefined) {
+      if (selectedIdentity !== undefined) {
+        throw new Error(
+          "Template " + selectedTemplate +
+            " cannot match any repository within configured scope",
+        );
+      }
       continue;
     }
 

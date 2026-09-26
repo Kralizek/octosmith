@@ -55,6 +55,7 @@ export interface LoadedConfiguration {
 /** Load and validate an Octosmith configuration directory. */
 export async function loadConfigurationDirectory(
   root: string,
+  selectedTemplate?: string,
 ): Promise<LoadedConfiguration> {
   const configuration = await loadYaml<Configuration>(
     join(root, "octosmith.yml"),
@@ -71,17 +72,13 @@ export async function loadConfigurationDirectory(
   }
 
   const templates: Record<string, RepositoryTemplate> = {};
+  const selectedIdentity = selectedTemplate === undefined
+    ? undefined
+    : selectedTemplate.startsWith("repository:")
+    ? selectedTemplate
+    : "repository:" + selectedTemplate;
 
   for await (const path of walkTemplateFiles(templatesDirectory)) {
-    const rawTemplate = await loadYaml<RepositoryTemplate>(
-      path,
-      validateTemplate,
-    );
-    const template = await composeRepositoryTemplate(
-      canonicalRoot,
-      path,
-      rawTemplate,
-    );
     const relativePath = relative(templatesDirectory, path)
       .replaceAll("\\", "/");
     const extension = extname(relativePath);
@@ -91,15 +88,32 @@ export async function loadConfigurationDirectory(
           relativePath,
       );
     }
-
     const id = relativePath.slice(0, -extension.length);
-    const identity = template.kind + ":" + id;
+    const identity = "repository:" + id;
+    if (selectedIdentity !== undefined && identity !== selectedIdentity) {
+      continue;
+    }
 
+    const rawTemplate = await loadYaml<RepositoryTemplate>(
+      path,
+      validateTemplate,
+    );
+    const template = await composeRepositoryTemplate(
+      canonicalRoot,
+      path,
+      rawTemplate,
+    );
     if (templates[identity] !== undefined) {
       throw new Error("Duplicate template identity: " + identity);
     }
 
     templates[identity] = template;
+  }
+
+  if (
+    selectedIdentity !== undefined && templates[selectedIdentity] === undefined
+  ) {
+    throw new Error("Unknown template: " + selectedTemplate);
   }
 
   return {
