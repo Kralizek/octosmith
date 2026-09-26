@@ -67,6 +67,20 @@ repository:
   environments: []
 `,
   );
+  await Deno.writeTextFile(
+    root + "/templates/third.yml",
+    `version: 1
+kind: repository
+match:
+  include:
+    names: [third]
+repository:
+  actions:
+    variables:
+      - name: CHANNEL
+        value: stable
+`,
+  );
   return root;
 }
 
@@ -94,6 +108,11 @@ Deno.test("permission analysis is offline, composed and structured", async () =>
       requirements: [
         { scope: "organization", permission: "members", access: "read" },
         { scope: "repository", permission: "actions", access: "write" },
+        {
+          scope: "repository",
+          permission: "actions_variables",
+          access: "write",
+        },
         { scope: "repository", permission: "administration", access: "write" },
         { scope: "repository", permission: "contents", access: "write" },
         { scope: "repository", permission: "issues", access: "write" },
@@ -124,6 +143,7 @@ Deno.test("single template text output excludes other templates and groups scope
     assertStringIncludes(output[0], "Organization permissions:");
     assertStringIncludes(output[0], "Members (members): read");
     assertEquals(output[0].includes("Dependabot secrets"), false);
+    assertEquals(output[0].includes("Variables"), false);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
