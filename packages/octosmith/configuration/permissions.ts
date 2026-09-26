@@ -55,9 +55,9 @@ function potentialOperationTypes(
   if (
     repository.settings &&
     diffRepositorySettings(
-        {} as CurrentRepositorySettings,
-        normalizeRepositorySettings(repository.settings),
-      ) !== undefined
+      emptyCurrentRepositorySettings(),
+      normalizeRepositorySettings(repository.settings),
+    ) !== undefined
   ) {
     types.push("update-repository-settings");
   }
@@ -123,4 +123,39 @@ function potentialOperationTypes(
   }
 
   return types;
+}
+
+
+function emptyCurrentRepositorySettings(): CurrentRepositorySettings {
+  return {
+    name: "",
+    description: null,
+    website: null,
+    topics: [],
+    visibility: "private",
+    hasIssues: false,
+    hasProjects: false,
+    hasWiki: false,
+    hasDiscussions: false,
+    hasPullRequests: false,
+    pullRequestCreationPolicy: "all",
+    isTemplate: false,
+    defaultBranch: "main",
+    merge: {
+      allowSquashMerge: false,
+      allowMergeCommit: false,
+      allowRebaseMerge: false,
+      allowAutoMerge: false,
+      allowUpdateBranch: false,
+      deleteBranchOnMerge: false,
+      squashMergeCommitTitle: "pull-request-title",
+      squashMergeCommitMessage: "pull-request-body",
+      mergeCommitTitle: "pull-request-title",
+      mergeCommitMessage: "pull-request-title",
+    },
+    archived: false,
+    allowForking: false,
+    webCommitSignoffRequired: false,
+    securityAndAnalysis: {},
+  };
 }
