@@ -94,11 +94,6 @@ for (
       ["template", "validate", "teams/backend"],
       "Template-specific validation is not implemented yet",
     ],
-    [
-      "template permissions",
-      ["template", "permissions", "teams/backend"],
-      "template permissions is not implemented yet",
-    ],
   ] as const
 ) {
   Deno.test(`canonical CLI form parses: ${name}`, async () => {
