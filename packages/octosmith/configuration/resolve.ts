@@ -294,6 +294,7 @@ function equalPropertyValue(
   return actual === expected;
 }
 
+/** Normalize repository settings configuration into planner-ready desired settings. */
 export function normalizeRepositorySettings(
   settings: RepositorySettingsConfiguration,
 ): DesiredRepositorySettings {
