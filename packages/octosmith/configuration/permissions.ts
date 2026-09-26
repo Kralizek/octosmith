@@ -4,8 +4,6 @@ import {
   type OperationType,
   requiredPermissionsForOperationType,
 } from "../plan/permissions.ts";
-import { diffRepositorySettings } from "../plan/build.ts";
-import type { CurrentRepositorySettings } from "../state/repository.ts";
 import type { LoadedConfiguration } from "./load.ts";
 import { normalizeRepositorySettings } from "./resolve.ts";
 import { templateCanMatchScope } from "./validate.ts";
@@ -54,10 +52,7 @@ function potentialOperationTypes(
 
   if (
     repository.settings &&
-    diffRepositorySettings(
-        emptyCurrentRepositorySettings(),
-        normalizeRepositorySettings(repository.settings),
-      ) !== undefined
+    hasConfiguredValue(normalizeRepositorySettings(repository.settings))
   ) {
     types.push("update-repository-settings");
   }
@@ -125,36 +120,16 @@ function potentialOperationTypes(
   return types;
 }
 
-function emptyCurrentRepositorySettings(): CurrentRepositorySettings {
-  return {
-    name: "",
-    description: null,
-    website: null,
-    topics: [],
-    visibility: "private",
-    hasIssues: false,
-    hasProjects: false,
-    hasWiki: false,
-    hasDiscussions: false,
-    hasPullRequests: false,
-    pullRequestCreationPolicy: "all",
-    isTemplate: false,
-    defaultBranch: "main",
-    merge: {
-      allowSquashMerge: false,
-      allowMergeCommit: false,
-      allowRebaseMerge: false,
-      allowAutoMerge: false,
-      allowUpdateBranch: false,
-      deleteBranchOnMerge: false,
-      squashMergeCommitTitle: "pull-request-title",
-      squashMergeCommitMessage: "pull-request-body",
-      mergeCommitTitle: "pull-request-title",
-      mergeCommitMessage: "pull-request-title",
-    },
-    archived: false,
-    allowForking: false,
-    webCommitSignoffRequired: false,
-    securityAndAnalysis: {},
-  };
+function hasConfiguredValue(value: unknown): boolean {
+  if (value === undefined) {
+    return false;
+  }
+
+  if (value === null || Array.isArray(value) || typeof value !== "object") {
+    return true;
+  }
+
+  return Object.values(value as Record<string, unknown>).some(
+    hasConfiguredValue,
+  );
 }
