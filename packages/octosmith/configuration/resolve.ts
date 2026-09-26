@@ -294,7 +294,7 @@ function equalPropertyValue(
   return actual === expected;
 }
 
-function normalizeRepositorySettings(
+export function normalizeRepositorySettings(
   settings: RepositorySettingsConfiguration,
 ): DesiredRepositorySettings {
   const merge = normalizeMerge(settings);

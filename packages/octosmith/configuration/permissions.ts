@@ -4,7 +4,10 @@ import {
   type OperationType,
   requiredPermissionsForOperationType,
 } from "../plan/permissions.ts";
+import { diffRepositorySettings } from "../plan/build.ts";
+import type { CurrentRepositorySettings } from "../state/repository.ts";
 import type { LoadedConfiguration } from "./load.ts";
+import { normalizeRepositorySettings } from "./resolve.ts";
 import { templateCanMatchScope } from "./validate.ts";
 import type { RepositoryConfiguration } from "./types.ts";
 
@@ -49,7 +52,13 @@ function potentialOperationTypes(
 ): OperationType[] {
   const types: OperationType[] = [];
 
-  if (repository.settings && Object.keys(repository.settings).length > 0) {
+  if (
+    repository.settings &&
+    diffRepositorySettings(
+        {} as CurrentRepositorySettings,
+        normalizeRepositorySettings(repository.settings),
+      ) !== undefined
+  ) {
     types.push("update-repository-settings");
   }
   if (

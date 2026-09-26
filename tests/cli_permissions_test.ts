@@ -81,6 +81,19 @@ repository:
         value: stable
 `,
   );
+  await Deno.writeTextFile(
+    root + "/templates/fourth.yml",
+    `version: 1
+kind: repository
+match:
+  include:
+    names: [fourth]
+repository:
+  settings:
+    merge: {}
+    security_and_analysis: {}
+`,
+  );
   return root;
 }
 
@@ -174,6 +187,21 @@ Deno.test("strict empty collections can remove resources; explicit cannot", asyn
   } finally {
     await Deno.remove(explicit, { recursive: true });
     await Deno.remove(strict, { recursive: true });
+  }
+});
+
+Deno.test("empty nested repository settings do not imply administration access", async () => {
+  const root = await configuration();
+  try {
+    assertEquals(
+      requiredPermissionsForConfiguration(
+        await loadConfigurationDirectory(root),
+        "fourth",
+      ),
+      [],
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
   }
 });
 
