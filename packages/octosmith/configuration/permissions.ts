@@ -55,9 +55,9 @@ function potentialOperationTypes(
   if (
     repository.settings &&
     diffRepositorySettings(
-      emptyCurrentRepositorySettings(),
-      normalizeRepositorySettings(repository.settings),
-    ) !== undefined
+        emptyCurrentRepositorySettings(),
+        normalizeRepositorySettings(repository.settings),
+      ) !== undefined
   ) {
     types.push("update-repository-settings");
   }
@@ -124,7 +124,6 @@ function potentialOperationTypes(
 
   return types;
 }
-
 
 function emptyCurrentRepositorySettings(): CurrentRepositorySettings {
   return {
