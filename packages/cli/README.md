@@ -243,6 +243,16 @@ The CLI returns:
 `resource list` also supports `--trace`. `resource list`, `resource create`,
 `template validate`, and `template permissions` support `--path` and `--format`.
 
+`template permissions [template]` analyzes possible operations for all reachable
+templates or one named template without a GitHub token or live repository state.
+It uses the effective configuration (including fragments) and reports the
+strongest required access for each repository or organization permission. Strict
+collection management includes possible removals even for empty managed
+collections. JSON output contains a `requirements` array of objects with
+`scope`, `permission` (GitHub API name), and `access` fields. This is a
+worst-case mutation requirement, not a report of current drift or all read
+permissions needed to discover repository state.
+
 ## Grouped commands
 
 The canonical grouped command surface is:

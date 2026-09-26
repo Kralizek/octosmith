@@ -10,6 +10,8 @@
 import { Command } from "@cliffy/command";
 import {
   createPersistedPlanArtifact,
+  getGitHubPermissionDescriptor,
+  type GitHubPermissionRequirement,
   inspectResource,
   loadConfigurationDirectory,
   parsePersistedPlanArtifact,
@@ -18,9 +20,11 @@ import {
   renderRuntimeReferenceDiagnostic,
   type Report,
   type RepositoryReport,
+  requiredPermissionsForConfiguration,
   type ResourceInspection,
   summarizeResourceInspection,
   validateConfigurationDirectory,
+  validateLoadedConfiguration,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
@@ -373,13 +377,44 @@ function createCli(
           .option("--format <format:string>", "Output format: text or json.", {
             default: "text",
           })
-          .action((_commandOptions, _template?: string) => {
-            throw new Error("template permissions is not implemented yet");
+          .action(async (commandOptions, template?: string) => {
+            const format = parseOutputFormat(commandOptions.format);
+            const loaded = await loadConfigurationDirectory(
+              commandOptions.path,
+            );
+            const requirements = requiredPermissionsForConfiguration(
+              loaded,
+              template,
+            );
+            await validateLoadedConfiguration(loaded);
+            write(renderOutput(
+              format,
+              { requirements },
+              ({ requirements }) => renderPermissionRequirements(requirements),
+            ));
           }),
       ),
   );
 
   return root;
+}
+
+function renderPermissionRequirements(
+  requirements: readonly GitHubPermissionRequirement[],
+): string {
+  if (requirements.length === 0) return "No permissions required.";
+
+  return (["repository", "organization"] as const).flatMap((scope) => {
+    const entries = requirements.filter((item) => item.scope === scope);
+    return entries.length === 0 ? [] : [
+      `${scope === "repository" ? "Repository" : "Organization"} permissions:`,
+      ...entries.map((item) =>
+        `  ${
+          getGitHubPermissionDescriptor(item).displayName
+        } (${item.permission}): ${item.access}`
+      ),
+    ];
+  }).join("\n");
 }
 
 function createDefaultRuntime(
