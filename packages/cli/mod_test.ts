@@ -18,36 +18,144 @@ Deno.test("version comes from package metadata", async () => {
   assertEquals(VERSION, metadata.version);
 });
 
-Deno.test("missing GITHUB_TOKEN returns a clear CLI failure", async () => {
-  const previous = Deno.env.get("GITHUB_TOKEN");
+Deno.test("CLI shebang permits running gh for local authentication", async () => {
+  const entrypoint = await Deno.readTextFile(
+    new URL("./mod.ts", import.meta.url),
+  );
+  assertStringIncludes(entrypoint.split("\n", 1)[0], "--allow-run=gh");
+});
+
+Deno.test("missing gh returns a clear CLI failure", async () => {
   const errors: string[] = [];
-  const originalError = console.error;
-  const originalFetch = globalThis.fetch;
   let fetchCalls = 0;
 
-  try {
-    Deno.env.delete("GITHUB_TOKEN");
-    console.error = (...values: unknown[]) => {
-      errors.push(values.map(String).join(" "));
-    };
-    globalThis.fetch = ((_input, _init) => {
-      fetchCalls++;
-      return Promise.reject(new Error("fetch must not be called"));
-    }) as typeof globalThis.fetch;
+  assertEquals(
+    await main(["plan"], {
+      credentials: {
+        getEnv: () => undefined,
+        runGhAuthToken: () =>
+          Promise.reject(new Deno.errors.NotFound("secret")),
+      },
+      fetch: () => {
+        fetchCalls++;
+        throw new Error("fetch must not be called");
+      },
+      writeError: (value) => errors.push(value),
+    }),
+    1,
+  );
+  assertStringIncludes(errors.join("\n"), "gh is not installed");
+  assertEquals(errors.join("\n").includes("secret"), false);
+  assertEquals(fetchCalls, 0);
+});
 
-    assertEquals(await main(["plan"]), 1);
-    assertStringIncludes(errors.join("\n"), "GITHUB_TOKEN is required");
-    assertEquals(fetchCalls, 0);
+Deno.test("resource list uses the GitHub CLI token without leaking it", async () => {
+  const root = await authenticationConfiguration();
+  const output: string[] = [];
+  const errors: string[] = [];
+  const authorizations: string[] = [];
+  try {
+    assertEquals(
+      await main(["resource", "list", "--path", root], {
+        credentials: {
+          getEnv: () => undefined,
+          runGhAuthToken: () =>
+            Promise.resolve({
+              code: 0,
+              success: true,
+              signal: null,
+              stdout: new TextEncoder().encode(" cli-secret\n"),
+              stderr: new Uint8Array(),
+            }),
+        },
+        fetch: (_url, init) => {
+          authorizations.push(
+            (init?.headers as Record<string, string>).authorization,
+          );
+          return Promise.resolve(Response.json([]));
+        },
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      0,
+      errors.join("\n"),
+    );
+    assertEquals(authorizations.map((header) => header.slice(7)), [
+      "cli-secret",
+    ]);
+    assertEquals(authorizations[0].startsWith("Bearer "), true);
+    assertStringIncludes(output.join("\n"), "0 matched, 0 unmatched");
+    assertEquals(output.join("\n").includes("cli-secret"), false);
+    assertEquals(errors.join("\n").includes("cli-secret"), false);
   } finally {
-    globalThis.fetch = originalFetch;
-    console.error = originalError;
-    if (previous === undefined) {
-      Deno.env.delete("GITHUB_TOKEN");
-    } else {
-      Deno.env.set("GITHUB_TOKEN", previous);
-    }
+    await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test("failed gh token retrieval fails the CLI without exposing output", async () => {
+  const errors: string[] = [];
+  assertEquals(
+    await main(["resource", "list"], {
+      credentials: {
+        getEnv: () => undefined,
+        runGhAuthToken: () =>
+          Promise.resolve({
+            code: 2,
+            success: false,
+            signal: null,
+            stdout: new TextEncoder().encode("cli-secret"),
+            stderr: new TextEncoder().encode("cli-secret"),
+          }),
+      },
+      writeError: (value) => errors.push(value),
+    }),
+    1,
+  );
+  assertStringIncludes(errors.join("\n"), "gh auth token exited with code 2");
+  assertEquals(errors.join("\n").includes("cli-secret"), false);
+});
+
+Deno.test("offline commands do not read credentials or invoke gh", async () => {
+  const root = await authenticationConfiguration();
+  try {
+    const credentials = {
+      getEnv: () => {
+        throw new Error("environment must not be read");
+      },
+      runGhAuthToken: () => {
+        throw new Error("gh must not be invoked");
+      },
+    };
+    for (const command of ["validate", "permissions"]) {
+      const errors: string[] = [];
+      assertEquals(
+        await main(["template", command, "--path", root], {
+          credentials,
+          write: () => {},
+          writeError: (value) => errors.push(value),
+        }),
+        0,
+        errors.join("\n"),
+      );
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+async function authenticationConfiguration(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(`${root}/templates`);
+  await Deno.writeTextFile(
+    `${root}/octosmith.yml`,
+    "version: 1\norganization: acme\nrepositories:\n  scope:\n    include: all\n",
+  );
+  await Deno.writeTextFile(
+    `${root}/templates/sample.yml`,
+    "version: 1\nkind: repository\nmatch:\n  include: all\nrepository: {}\n",
+  );
+  return root;
+}
 
 Deno.test("apply rejects combining a resource target with --plan", async () => {
   const errors: string[] = [];

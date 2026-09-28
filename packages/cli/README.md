@@ -38,7 +38,7 @@ deno run -A jsr:@octosmith/cli@0 --help
 octosmith template validate --path ./configuration
 ```
 
-Validation is offline and does not require `GITHUB_TOKEN`.
+Validation is offline and does not resolve GitHub credentials.
 
 ### resource list
 
@@ -47,10 +47,10 @@ octosmith resource list --path ./configuration
 octosmith resource list --path ./configuration --format json
 ```
 
-Inspection uses `GITHUB_TOKEN` and the same discovery as plan/apply. Resources
-excluded by configuration scope are absent. A template exclusion affects only
-that template; another template may still match. Inspection does not read
-desired-state values, managed-file contents, or reconciliation state.
+Inspection uses the same GitHub authentication and discovery as plan/apply.
+Resources excluded by configuration scope are absent. A template exclusion
+affects only that template; another template may still match. Inspection does
+not read desired-state values, managed-file contents, or reconciliation state.
 
 ```text
 TYPE        NAME                 TEMPLATE                  STATUS
@@ -164,15 +164,34 @@ supported top-level resource target is a repository, so a resource outside
 
 ## Authentication
 
-`resource list`, `plan`, and `apply` read the GitHub credential from
-`GITHUB_TOKEN`.
+For local use, sign in with GitHub CLI and run Octosmith:
+
+```powershell
+gh auth login
+octosmith plan
+```
+
+Alternatively, supply a token yourself:
+
+```powershell
+$env:GITHUB_TOKEN = "..."
+octosmith plan
+```
+
+`resource list`, `plan`, and `apply` use an explicitly injected runtime/token
+first, then `GITHUB_TOKEN`, then `gh auth token` for local use. An environment
+token takes precedence over GitHub CLI credentials. The CLI requests the
+`github.com` token, matching Octosmith's GitHub API host. GitHub Actions
+continues to use its `github-token` input through `GITHUB_TOKEN` and does not
+invoke `gh` when the input is missing. `template validate` and
+`template permissions` are offline and do not resolve credentials.
 
 The token needs read permissions for every resource used by planning, plus the
 corresponding write permissions for resources managed by apply. For
 organization-wide automation this is commonly a fine-grained personal access
 token or a GitHub App installation token.
 
-Credentials are never added to CLI arguments or reports.
+Credentials are never added to CLI arguments, reports, or diagnostics.
 
 ## Output
 

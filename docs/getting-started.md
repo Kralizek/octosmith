@@ -38,6 +38,20 @@ sources, and static planner invariants without contacting GitHub.
 
 Planning requires GitHub read access:
 
+```powershell
+gh auth login
+octosmith plan --path ./github-config
+```
+
+Or set `GITHUB_TOKEN` (which takes precedence over GitHub CLI credentials):
+
+```powershell
+$env:GITHUB_TOKEN = "..."
+octosmith plan --path ./github-config
+```
+
+The Deno CLI can also be run directly with an environment token:
+
 ```sh
 GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 plan --path ./github-config
 ```
