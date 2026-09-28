@@ -139,17 +139,23 @@ export function runtimeReferenceWarnings(
   }));
 }
 
-/** Render a runtime-reference diagnostic without exposing values. */
-export function renderRuntimeReferenceDiagnostic(
-  diagnostic: RuntimeReferenceDiagnostic,
+/** Render the summary line for a runtime-reference diagnostic. */
+export function describeRuntimeReferenceDiagnostic(
+  diagnostic: Pick<RuntimeReferenceDiagnostic, "severity" | "code" | "name">,
 ): string {
   const kind = diagnostic.code.endsWith("_secret") ? "secret" : "variable";
   const availability = diagnostic.severity === "error"
     ? "is not available in the current context"
     : "requires a runtime value";
+  return `Required ${kind} "${diagnostic.name}" ${availability}.`;
+}
 
+/** Render a runtime-reference diagnostic without exposing values. */
+export function renderRuntimeReferenceDiagnostic(
+  diagnostic: RuntimeReferenceDiagnostic,
+): string {
   const lines = [
-    `Required ${kind} "${diagnostic.name}" ${availability}.`,
+    describeRuntimeReferenceDiagnostic(diagnostic),
     "",
     "Referenced by:",
     `  template: ${diagnostic.template}`,

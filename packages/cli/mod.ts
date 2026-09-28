@@ -10,6 +10,7 @@
 import { Command } from "@cliffy/command";
 import {
   createPersistedPlanArtifact,
+  describeRuntimeReferenceDiagnostic,
   getGitHubPermissionDescriptor,
   type GitHubPermissionRequirement,
   inspectResource,
@@ -573,10 +574,6 @@ function renderValidationWarnings(
 function renderGroupedRuntimeReferenceDiagnostic(
   diagnostic: ValidationWarningGroup,
 ): string {
-  const kind = diagnostic.code.endsWith("_secret") ? "secret" : "variable";
-  const availability = diagnostic.severity === "error"
-    ? "is not available in the current context"
-    : "requires a runtime value";
   const templateWidth = Math.max(
     0,
     ...diagnostic.references.map(({ template }) => template.length),
@@ -586,7 +583,7 @@ function renderGroupedRuntimeReferenceDiagnostic(
   );
 
   return [
-    `Required ${kind} "${diagnostic.name}" ${availability}.`,
+    describeRuntimeReferenceDiagnostic(diagnostic),
     "",
     "Referenced by:",
     ...references,
