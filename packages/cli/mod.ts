@@ -583,6 +583,7 @@ function renderGroupedRuntimeReferenceDiagnostic(
     ? "is not available in the current context"
     : "requires a runtime value";
   const templateWidth = Math.max(
+    0,
     ...diagnostic.references.map(({ template }) => template.length),
   );
   const references = diagnostic.references.map(({ template, path }) =>
