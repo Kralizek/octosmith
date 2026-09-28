@@ -43,7 +43,10 @@ Deno.test("GitHub CLI token is trimmed before use", async () => {
   assertEquals(
     await resolveGitHubToken({
       getEnv: () => undefined,
-      runGhAuthToken: () => Promise.resolve(output(0, " \tcli-secret\r\n")),
+      runGhAuthToken: (args) => {
+        assertEquals(args, ["auth", "token", "--hostname", "github.com"]);
+        return Promise.resolve(output(0, " \tcli-secret\r\n"));
+      },
     }),
     "cli-secret",
   );

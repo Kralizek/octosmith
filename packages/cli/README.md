@@ -180,10 +180,11 @@ octosmith plan
 
 `resource list`, `plan`, and `apply` use an explicitly injected runtime/token
 first, then `GITHUB_TOKEN`, then `gh auth token` for local use. An environment
-token takes precedence over GitHub CLI credentials. GitHub Actions continues to
-use its `github-token` input through `GITHUB_TOKEN` and does not invoke `gh`
-when the input is missing. `template validate` and `template permissions` are
-offline and do not resolve credentials.
+token takes precedence over GitHub CLI credentials. The CLI requests the
+`github.com` token, matching Octosmith's GitHub API host. GitHub Actions
+continues to use its `github-token` input through `GITHUB_TOKEN` and does not
+invoke `gh` when the input is missing. `template validate` and
+`template permissions` are offline and do not resolve credentials.
 
 The token needs read permissions for every resource used by planning, plus the
 corresponding write permissions for resources managed by apply. For

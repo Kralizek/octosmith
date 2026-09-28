@@ -2,7 +2,9 @@
 export interface GitHubTokenOptions {
   readonly explicitToken?: string;
   readonly getEnv?: (name: string) => string | undefined;
-  readonly runGhAuthToken?: () => Promise<Deno.CommandOutput>;
+  readonly runGhAuthToken?: (
+    args: readonly string[],
+  ) => Promise<Deno.CommandOutput>;
 }
 
 /** Resolve a GitHub token without involving the core planning API. */
@@ -31,12 +33,12 @@ export async function resolveGitHubToken(
 
   let result: Deno.CommandOutput;
   try {
-    result = await (options.runGhAuthToken ?? (() =>
+    result = await (options.runGhAuthToken ?? ((args) =>
       new Deno.Command("gh", {
-        args: ["auth", "token"],
+        args: [...args],
         stdout: "piped",
         stderr: "piped",
-      }).output()))();
+      }).output()))(["auth", "token", "--hostname", "github.com"]);
   } catch (error) {
     if (error instanceof Deno.errors.NotFound) {
       throw new Error(
