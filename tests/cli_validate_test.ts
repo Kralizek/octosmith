@@ -72,24 +72,14 @@ Deno.test("validate groups repeated unresolved secrets in text output", async ()
     assertEquals((text.match(/Warning: Required secret "/g) ?? []).length, 2);
     assertEquals((text.match(/SLACK_BOT_OPERATION_TOKEN/g) ?? []).length, 1);
     assertEquals((text.match(/COPILOT_REVIEW_TOKEN/g) ?? []).length, 1);
-    assertEquals(
-      (text.match(/repository\.actions\.secrets\[0\]/g) ?? []).length,
-      4,
+    assertGroupedSecretReferences(
+      warningSection(text, "SLACK_BOT_OPERATION_TOKEN"),
+      "repository.actions.secrets[0]",
     );
-    assertEquals(
-      (text.match(/repository\.actions\.secrets\[1\]/g) ?? []).length,
-      4,
+    assertGroupedSecretReferences(
+      warningSection(text, "COPILOT_REVIEW_TOKEN"),
+      "repository.actions.secrets[1]",
     );
-    for (
-      const template of [
-        "repository:infrastructure",
-        "repository:libraries",
-        "repository:services",
-        "repository:toolkit",
-      ]
-    ) {
-      assertStringIncludes(text, template);
-    }
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -971,4 +961,40 @@ function byValidationDiagnostic(
   return `${left.template}\0${left.path}\0${left.name}`.localeCompare(
     `${right.template}\0${right.path}\0${right.name}`,
   );
+}
+
+function warningSection(text: string, secret: string): string {
+  const prefix =
+    `Warning: Required secret "${secret}" requires a runtime value.`;
+  const start = text.indexOf(prefix);
+  assertEquals(start >= 0, true);
+  const next = text.indexOf("\n\nWarning:", start + prefix.length);
+  return next >= 0 ? text.slice(start, next) : text.slice(start);
+}
+
+function assertGroupedSecretReferences(section: string, path: string): void {
+  assertEquals(
+    (section.match(new RegExp(escapeRegExp(path), "g")) ?? []).length,
+    4,
+  );
+
+  for (
+    const template of [
+      "repository:infrastructure",
+      "repository:libraries",
+      "repository:services",
+      "repository:toolkit",
+    ]
+  ) {
+    assertEquals(
+      new RegExp(`${escapeRegExp(template)}\\s+${escapeRegExp(path)}`).test(
+        section,
+      ),
+      true,
+    );
+  }
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
