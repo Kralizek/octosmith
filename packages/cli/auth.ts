@@ -12,19 +12,21 @@ export async function resolveGitHubToken(
   options: GitHubTokenOptions = {},
 ): Promise<string> {
   if (options.explicitToken !== undefined) {
-    if (!options.explicitToken.trim()) {
+    const token = options.explicitToken.trim();
+    if (!token) {
       throw new Error("Explicit GitHub token is empty");
     }
-    return options.explicitToken;
+    return token;
   }
 
   const getEnv = options.getEnv ?? Deno.env.get;
   const environmentToken = getEnv("GITHUB_TOKEN");
   if (environmentToken !== undefined) {
-    if (!environmentToken.trim()) {
+    const token = environmentToken.trim();
+    if (!token) {
       throw new Error("GITHUB_TOKEN is empty");
     }
-    return environmentToken;
+    return token;
   }
 
   if (getEnv("GITHUB_ACTIONS") === "true") {

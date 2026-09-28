@@ -15,7 +15,7 @@ function output(code: number, stdout = "", stderr = ""): Deno.CommandOutput {
 Deno.test("explicit token wins over environment and GitHub CLI", async () => {
   assertEquals(
     await resolveGitHubToken({
-      explicitToken: "explicit-secret",
+      explicitToken: " \texplicit-secret\n",
       getEnv: () => {
         throw new Error("environment must not be read");
       },
@@ -30,7 +30,8 @@ Deno.test("explicit token wins over environment and GitHub CLI", async () => {
 Deno.test("GITHUB_TOKEN wins over GitHub CLI", async () => {
   assertEquals(
     await resolveGitHubToken({
-      getEnv: (name) => name === "GITHUB_TOKEN" ? "environment-secret" : "",
+      getEnv: (name) =>
+        name === "GITHUB_TOKEN" ? " environment-secret\r\n" : "",
       runGhAuthToken: () => {
         throw new Error("gh must not be invoked");
       },
