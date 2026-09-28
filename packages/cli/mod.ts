@@ -27,6 +27,7 @@ import {
   validateLoadedConfiguration,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
+import { type GitHubTokenOptions, resolveGitHubToken } from "./auth.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import type { ApplyRuntime } from "./apply.ts";
 import { apply, createGitHubRuntime } from "./apply.ts";
@@ -43,6 +44,8 @@ export const VERSION = cliMetadata.version;
 /** Describes cli execution options. */
 export interface CliExecutionOptions {
   readonly runtime?: ApplyRuntime;
+  readonly credentials?: GitHubTokenOptions;
+  readonly fetch?: typeof globalThis.fetch;
   readonly write?: (value: string) => void;
   readonly writeError?: (value: string) => void;
 }
@@ -151,7 +154,12 @@ function createCli(
 
         const format = parseOutputFormat(commandOptions.format);
         const runtime = options.runtime ??
-          createDefaultRuntime(commandOptions.trace ?? false, writeError);
+          await createDefaultRuntime(
+            commandOptions.trace ?? false,
+            writeError,
+            options.credentials,
+            options.fetch,
+          );
         const loaded = await loadConfigurationDirectory(
           commandOptions.path,
         );
@@ -291,7 +299,12 @@ function createCli(
           .action(async (commandOptions) => {
             const format = parseOutputFormat(commandOptions.format);
             const runtime = options.runtime ??
-              createDefaultRuntime(commandOptions.trace ?? false, writeError);
+              await createDefaultRuntime(
+                commandOptions.trace ?? false,
+                writeError,
+                options.credentials,
+                options.fetch,
+              );
             const loaded = await loadConfigurationDirectory(
               commandOptions.path,
             );
@@ -418,22 +431,19 @@ function renderPermissionRequirements(
   }).join("\n");
 }
 
-function createDefaultRuntime(
+async function createDefaultRuntime(
   trace: boolean,
   writeError: (value: string) => void,
-): ApplyRuntime {
-  const token = Deno.env.get("GITHUB_TOKEN");
-
-  if (!token) {
-    throw new Error(
-      "GITHUB_TOKEN is required to access GitHub",
-    );
-  }
+  credentials?: GitHubTokenOptions,
+  fetch?: typeof globalThis.fetch,
+): Promise<ApplyRuntime> {
+  const token = await resolveGitHubToken(credentials);
 
   let firstTraceGroup = true;
 
   return createGitHubRuntime({
     token,
+    fetch,
     ...(trace && {
       traceGroup: (name) => {
         if (!firstTraceGroup) {

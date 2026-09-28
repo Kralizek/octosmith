@@ -16,6 +16,10 @@ Deno.test("action metadata delegates to the CLI package", async () => {
   );
 
   const runStep = steps.find((step) => step.name === "Run Octosmith");
+  assertEquals(
+    (runStep?.env as Record<string, string>)?.GITHUB_TOKEN,
+    "${{ inputs.github-token }}",
+  );
   assertStringIncludes(
     String(runStep?.run ?? ""),
     "$GITHUB_ACTION_PATH/scripts/run-action.sh",
