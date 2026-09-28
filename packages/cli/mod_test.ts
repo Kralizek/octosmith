@@ -18,6 +18,13 @@ Deno.test("version comes from package metadata", async () => {
   assertEquals(VERSION, metadata.version);
 });
 
+Deno.test("CLI shebang permits running gh for local authentication", async () => {
+  const entrypoint = await Deno.readTextFile(
+    new URL("./mod.ts", import.meta.url),
+  );
+  assertStringIncludes(entrypoint.split("\n", 1)[0], "--allow-run=gh");
+});
+
 Deno.test("missing gh returns a clear CLI failure", async () => {
   const errors: string[] = [];
   let fetchCalls = 0;
