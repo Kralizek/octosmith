@@ -130,16 +130,24 @@ Deno.test("explicit empty token is not silently replaced", async () => {
   );
 });
 
-Deno.test("GitHub Actions without a token does not invoke gh", async () => {
-  const error = await assertRejects(
-    () =>
-      resolveGitHubToken({
-        getEnv: (name) => name === "GITHUB_ACTIONS" ? "true" : undefined,
-        runGhAuthToken: () => {
-          throw new Error("gh must not be invoked");
-        },
-      }),
-    Error,
-  );
-  assertStringIncludes(error.message, "GITHUB_TOKEN is required");
-});
+for (
+  const [name, value] of [
+    ["true", "true"],
+    ["false", "false"],
+    ["empty", ""],
+  ] as const
+) {
+  Deno.test(`GitHub Actions marker ${name} without a token does not invoke gh`, async () => {
+    const error = await assertRejects(
+      () =>
+        resolveGitHubToken({
+          getEnv: (name) => name === "GITHUB_ACTIONS" ? value : undefined,
+          runGhAuthToken: () => {
+            throw new Error("gh must not be invoked");
+          },
+        }),
+      Error,
+    );
+    assertStringIncludes(error.message, "GITHUB_TOKEN is required");
+  });
+}

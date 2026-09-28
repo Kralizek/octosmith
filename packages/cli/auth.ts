@@ -29,7 +29,7 @@ export async function resolveGitHubToken(
     return token;
   }
 
-  if (getEnv("GITHUB_ACTIONS") === "true") {
+  if (getEnv("GITHUB_ACTIONS") !== undefined) {
     throw new Error("GITHUB_TOKEN is required to access GitHub in Actions");
   }
 
