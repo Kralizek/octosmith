@@ -20,7 +20,7 @@ export async function resolveGitHubToken(
 
   const getEnv = options.getEnv ?? Deno.env.get;
   const environmentToken = getEnv("GITHUB_TOKEN");
-  if (environmentToken) {
+  if (environmentToken !== undefined) {
     if (!environmentToken.trim()) {
       throw new Error("GITHUB_TOKEN is empty");
     }

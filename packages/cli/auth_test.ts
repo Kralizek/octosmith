@@ -39,6 +39,24 @@ Deno.test("GITHUB_TOKEN wins over GitHub CLI", async () => {
   );
 });
 
+for (
+  const [name, value] of [["empty", ""], ["whitespace-only", " \t"]] as const
+) {
+  Deno.test(`${name} GITHUB_TOKEN does not fall back to gh`, async () => {
+    await assertRejects(
+      () =>
+        resolveGitHubToken({
+          getEnv: (name) => name === "GITHUB_TOKEN" ? value : undefined,
+          runGhAuthToken: () => {
+            throw new Error("gh must not be invoked");
+          },
+        }),
+      Error,
+      "GITHUB_TOKEN is empty",
+    );
+  });
+}
+
 Deno.test("GitHub CLI token is trimmed before use", async () => {
   assertEquals(
     await resolveGitHubToken({
@@ -115,7 +133,7 @@ Deno.test("GitHub Actions without a token does not invoke gh", async () => {
   const error = await assertRejects(
     () =>
       resolveGitHubToken({
-        getEnv: (name) => name === "GITHUB_ACTIONS" ? "true" : "",
+        getEnv: (name) => name === "GITHUB_ACTIONS" ? "true" : undefined,
         runGhAuthToken: () => {
           throw new Error("gh must not be invoked");
         },
