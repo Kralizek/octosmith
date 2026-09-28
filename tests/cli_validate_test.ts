@@ -54,6 +54,128 @@ Deno.test("validate emits machine-readable success", async () => {
   }
 });
 
+Deno.test("validate groups repeated unresolved secrets in text output", async () => {
+  const root = await repeatedSecretConfiguration();
+  const output: string[] = [];
+
+  try {
+    assertEquals(
+      await main(
+        ["template", "validate", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const text = output[0];
+    assertStringIncludes(text, "Configuration is valid.");
+    assertEquals((text.match(/Warning: Required secret "/g) ?? []).length, 2);
+    assertEquals((text.match(/SLACK_BOT_OPERATION_TOKEN/g) ?? []).length, 1);
+    assertEquals((text.match(/COPILOT_REVIEW_TOKEN/g) ?? []).length, 1);
+    assertEquals(
+      (text.match(/repository\.actions\.secrets\[0\]/g) ?? []).length,
+      4,
+    );
+    assertEquals(
+      (text.match(/repository\.actions\.secrets\[1\]/g) ?? []).length,
+      4,
+    );
+    for (
+      const template of [
+        "repository:infrastructure",
+        "repository:libraries",
+        "repository:services",
+        "repository:toolkit",
+      ]
+    ) {
+      assertStringIncludes(text, template);
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate preserves repeated unresolved secrets in json output", async () => {
+  const root = await repeatedSecretConfiguration();
+  const output: string[] = [];
+
+  try {
+    assertEquals(
+      await main(
+        ["template", "validate", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const result = JSON.parse(output[0]);
+    assertEquals(result.valid, true);
+    assertEquals(
+      [...result.diagnostics].sort(byValidationDiagnostic),
+      [
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:infrastructure",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:infrastructure",
+          path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:libraries",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:libraries",
+          path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:services",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:services",
+          path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:toolkit",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:toolkit",
+          path: "repository.actions.secrets[1]",
+        },
+      ].sort(byValidationDiagnostic),
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate fails when a managed file source is missing", async () => {
   const root = await validConfiguration(false);
   const errors: string[] = [];
@@ -796,4 +918,57 @@ async function validConfiguration(includeManagedFile = true): Promise<string> {
   );
 
   return root;
+}
+
+async function repeatedSecretConfiguration(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      "  scope:",
+      "    include:",
+      "      names:",
+      "        - infrastructure",
+      "        - libraries",
+      "        - services",
+      "        - toolkit",
+      "",
+    ].join("\n"),
+  );
+
+  for (const name of ["infrastructure", "libraries", "services", "toolkit"]) {
+    await Deno.writeTextFile(
+      root + `/templates/${name}.yml`,
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        "    names:",
+        `      - ${name}`,
+        "repository:",
+        "  actions:",
+        "    secrets:",
+        "      - SLACK_BOT_OPERATION_TOKEN",
+        "      - COPILOT_REVIEW_TOKEN",
+        "",
+      ].join("\n"),
+    );
+  }
+
+  return root;
+}
+
+function byValidationDiagnostic(
+  left: { template: string; path: string; name: string },
+  right: { template: string; path: string; name: string },
+): number {
+  return `${left.template}\0${left.path}\0${left.name}`.localeCompare(
+    `${right.template}\0${right.path}\0${right.name}`,
+  );
 }

@@ -22,6 +22,7 @@ import {
   type RepositoryReport,
   requiredPermissionsForConfiguration,
   type ResourceInspection,
+  type RuntimeReferenceDiagnostic,
   summarizeResourceInspection,
   validateConfigurationDirectory,
   validateLoadedConfiguration,
@@ -74,9 +75,7 @@ function createCli(
         format,
         result,
         (value) => {
-          const warnings = value.diagnostics.map((diagnostic) =>
-            "Warning: " + renderRuntimeReferenceDiagnostic(diagnostic)
-          );
+          const warnings = renderValidationWarnings(value.diagnostics);
           return ["Configuration is valid.", ...warnings].join("\n\n");
         },
       ),
@@ -520,6 +519,82 @@ function validateRawResourceArgument(args: readonly string[]): void {
   if (rest.includes("")) {
     throw new Error("Resource target must not be empty");
   }
+}
+
+function renderValidationWarnings(
+  diagnostics: readonly RuntimeReferenceDiagnostic[],
+): readonly string[] {
+  const rendered: string[] = [];
+  const unresolvedSecretGroups = new Map<
+    string,
+    {
+      severity: RuntimeReferenceDiagnostic["severity"];
+      code: RuntimeReferenceDiagnostic["code"];
+      name: string;
+      references: Array<{ template: string; path: string }>;
+    }
+  >();
+
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.code !== "unresolved_secret") {
+      rendered.push("Warning: " + renderRuntimeReferenceDiagnostic(diagnostic));
+      continue;
+    }
+
+    const key =
+      `${diagnostic.severity}\0${diagnostic.code}\0${diagnostic.name}`;
+    let group = unresolvedSecretGroups.get(key);
+
+    if (group === undefined) {
+      group = {
+        severity: diagnostic.severity,
+        code: diagnostic.code,
+        name: diagnostic.name,
+        references: [],
+      };
+      unresolvedSecretGroups.set(key, group);
+      rendered.push(key);
+    }
+
+    group.references.push({
+      template: diagnostic.template,
+      path: diagnostic.path,
+    });
+  }
+
+  return rendered.map((value) => {
+    const group = unresolvedSecretGroups.get(value);
+    return group === undefined
+      ? value
+      : "Warning: " + renderGroupedRuntimeReferenceDiagnostic(group);
+  });
+}
+
+function renderGroupedRuntimeReferenceDiagnostic(
+  diagnostic: {
+    severity: RuntimeReferenceDiagnostic["severity"];
+    code: RuntimeReferenceDiagnostic["code"];
+    name: string;
+    references: ReadonlyArray<{ template: string; path: string }>;
+  },
+): string {
+  const kind = diagnostic.code.endsWith("_secret") ? "secret" : "variable";
+  const availability = diagnostic.severity === "error"
+    ? "is not available in the current context"
+    : "requires a runtime value";
+  const templateWidth = Math.max(
+    ...diagnostic.references.map(({ template }) => template.length),
+  );
+  const references = diagnostic.references.map(({ template, path }) =>
+    `  ${template.padEnd(templateWidth)}  ${path}`
+  );
+
+  return [
+    `Required ${kind} "${diagnostic.name}" ${availability}.`,
+    "",
+    "Referenced by:",
+    ...references,
+  ].join("\n");
 }
 
 function assertResourcePosition(
