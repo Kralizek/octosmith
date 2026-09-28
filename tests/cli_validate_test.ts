@@ -54,8 +54,8 @@ Deno.test("validate emits machine-readable success", async () => {
   }
 });
 
-Deno.test("validate groups repeated unresolved secrets in text output", async () => {
-  const root = await repeatedSecretConfiguration();
+Deno.test("validate groups repeated runtime references in text output", async () => {
+  const root = await repeatedRuntimeReferenceConfiguration();
   const output: string[] = [];
 
   try {
@@ -69,24 +69,30 @@ Deno.test("validate groups repeated unresolved secrets in text output", async ()
 
     const text = output[0];
     assertStringIncludes(text, "Configuration is valid.");
-    assertEquals((text.match(/Warning: Required secret "/g) ?? []).length, 2);
+    assertEquals((text.match(/Warning: Required /g) ?? []).length, 3);
+    assertEquals((text.match(/Required variable "/g) ?? []).length, 1);
     assertEquals((text.match(/SLACK_BOT_OPERATION_TOKEN/g) ?? []).length, 1);
     assertEquals((text.match(/COPILOT_REVIEW_TOKEN/g) ?? []).length, 1);
-    assertGroupedSecretReferences(
-      warningSection(text, "SLACK_BOT_OPERATION_TOKEN"),
+    assertEquals((text.match(/DEPLOY_ENV/g) ?? []).length, 1);
+    assertGroupedReferences(
+      warningSection(text, "secret", "SLACK_BOT_OPERATION_TOKEN"),
       "repository.actions.secrets[0]",
     );
-    assertGroupedSecretReferences(
-      warningSection(text, "COPILOT_REVIEW_TOKEN"),
+    assertGroupedReferences(
+      warningSection(text, "secret", "COPILOT_REVIEW_TOKEN"),
       "repository.actions.secrets[1]",
+    );
+    assertGroupedReferences(
+      warningSection(text, "variable", "DEPLOY_ENV"),
+      "repository.actions.variables[0]",
     );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
 });
 
-Deno.test("validate preserves repeated unresolved secrets in json output", async () => {
-  const root = await repeatedSecretConfiguration();
+Deno.test("validate preserves repeated runtime references in json output", async () => {
+  const root = await repeatedRuntimeReferenceConfiguration();
   const output: string[] = [];
 
   try {
@@ -105,6 +111,13 @@ Deno.test("validate preserves repeated unresolved secrets in json output", async
       [
         {
           severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:infrastructure",
+          path: "repository.actions.variables[0]",
+        },
+        {
+          severity: "warning",
           code: "unresolved_secret",
           name: "SLACK_BOT_OPERATION_TOKEN",
           template: "repository:infrastructure",
@@ -116,6 +129,13 @@ Deno.test("validate preserves repeated unresolved secrets in json output", async
           name: "COPILOT_REVIEW_TOKEN",
           template: "repository:infrastructure",
           path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:libraries",
+          path: "repository.actions.variables[0]",
         },
         {
           severity: "warning",
@@ -133,6 +153,13 @@ Deno.test("validate preserves repeated unresolved secrets in json output", async
         },
         {
           severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:services",
+          path: "repository.actions.variables[0]",
+        },
+        {
+          severity: "warning",
           code: "unresolved_secret",
           name: "SLACK_BOT_OPERATION_TOKEN",
           template: "repository:services",
@@ -144,6 +171,13 @@ Deno.test("validate preserves repeated unresolved secrets in json output", async
           name: "COPILOT_REVIEW_TOKEN",
           template: "repository:services",
           path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:toolkit",
+          path: "repository.actions.variables[0]",
         },
         {
           severity: "warning",
@@ -910,7 +944,7 @@ async function validConfiguration(includeManagedFile = true): Promise<string> {
   return root;
 }
 
-async function repeatedSecretConfiguration(): Promise<string> {
+async function repeatedRuntimeReferenceConfiguration(): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
 
@@ -943,6 +977,8 @@ async function repeatedSecretConfiguration(): Promise<string> {
         `      - ${name}`,
         "repository:",
         "  actions:",
+        "    variables:",
+        "      - DEPLOY_ENV",
         "    secrets:",
         "      - SLACK_BOT_OPERATION_TOKEN",
         "      - COPILOT_REVIEW_TOKEN",
@@ -963,38 +999,25 @@ function byValidationDiagnostic(
   );
 }
 
-function warningSection(text: string, secret: string): string {
+function warningSection(text: string, kind: string, name: string): string {
   const prefix =
-    `Warning: Required secret "${secret}" requires a runtime value.`;
+    `Warning: Required ${kind} "${name}" requires a runtime value.`;
   const start = text.indexOf(prefix);
   assertEquals(start >= 0, true);
   const next = text.indexOf("\n\nWarning:", start + prefix.length);
   return next >= 0 ? text.slice(start, next) : text.slice(start);
 }
 
-function assertGroupedSecretReferences(section: string, path: string): void {
+function assertGroupedReferences(section: string, path: string): void {
+  const referencedBy = section.split("Referenced by:\n")[1];
+  assertEquals(referencedBy === undefined, false);
   assertEquals(
-    (section.match(new RegExp(escapeRegExp(path), "g")) ?? []).length,
-    4,
+    referencedBy.split("\n\n").sort(),
+    [
+      "  template: repository:infrastructure\n  path: " + path,
+      "  template: repository:libraries\n  path: " + path,
+      "  template: repository:services\n  path: " + path,
+      "  template: repository:toolkit\n  path: " + path,
+    ].sort(),
   );
-
-  for (
-    const template of [
-      "repository:infrastructure",
-      "repository:libraries",
-      "repository:services",
-      "repository:toolkit",
-    ]
-  ) {
-    assertEquals(
-      new RegExp(`${escapeRegExp(template)}\\s+${escapeRegExp(path)}`).test(
-        section,
-      ),
-      true,
-    );
-  }
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

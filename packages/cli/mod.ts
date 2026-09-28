@@ -19,6 +19,7 @@ import {
   renderReport,
   renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
+  renderRuntimeReferenceReference,
   type Report,
   type RepositoryReport,
   requiredPermissionsForConfiguration,
@@ -76,8 +77,8 @@ function createCli(
         format,
         result,
         (value) => {
-          const warnings = renderValidationWarnings(value.diagnostics);
-          return ["Configuration is valid.", ...warnings].join("\n\n");
+          const diagnostics = renderValidationDiagnostics(value.diagnostics);
+          return ["Configuration is valid.", ...diagnostics].join("\n\n");
         },
       ),
     );
@@ -522,79 +523,72 @@ function validateRawResourceArgument(args: readonly string[]): void {
   }
 }
 
-function renderValidationWarnings(
+function renderValidationDiagnostics(
   diagnostics: readonly RuntimeReferenceDiagnostic[],
 ): readonly string[] {
-  const rendered: Array<
-    | { kind: "warning"; text: string }
-    | { kind: "group"; group: ValidationWarningGroup }
-  > = [];
-  const unresolvedSecretGroups = new Map<
-    string,
-    ValidationWarningGroup
-  >();
+  const rendered: ValidationDiagnosticGroup[] = [];
+  const groups = new Map<string, ValidationDiagnosticGroup>();
 
   for (const diagnostic of diagnostics) {
-    if (diagnostic.code !== "unresolved_secret") {
-      rendered.push({
-        kind: "warning",
-        text: "Warning: " + renderRuntimeReferenceDiagnostic(diagnostic),
-      });
-      continue;
-    }
-
-    const key =
-      `${diagnostic.severity}\0${diagnostic.code}\0${diagnostic.name}`;
-    let group = unresolvedSecretGroups.get(key);
+    const key = validationDiagnosticKey(diagnostic);
+    let group = groups.get(key);
 
     if (group === undefined) {
       group = {
-        severity: diagnostic.severity,
-        code: diagnostic.code,
-        name: diagnostic.name,
-        references: [],
+        diagnostics: [],
       };
-      unresolvedSecretGroups.set(key, group);
-      rendered.push({ kind: "group", group });
+      groups.set(key, group);
+      rendered.push(group);
     }
 
-    group.references.push({
-      template: diagnostic.template,
-      path: diagnostic.path,
-    });
+    group.diagnostics.push(diagnostic);
   }
 
   return rendered.map((value) =>
-    value.kind === "warning"
-      ? value.text
-      : "Warning: " + renderGroupedRuntimeReferenceDiagnostic(value.group)
+    value.diagnostics.length === 1
+      ? renderValidationDiagnostic(value.diagnostics[0])
+      : renderGroupedRuntimeReferenceDiagnostic(value.diagnostics)
   );
 }
 
 function renderGroupedRuntimeReferenceDiagnostic(
-  diagnostic: ValidationWarningGroup,
+  diagnostics: readonly RuntimeReferenceDiagnostic[],
 ): string {
-  const templateWidth = Math.max(
-    0,
-    ...diagnostic.references.map(({ template }) => template.length),
-  );
-  const references = diagnostic.references.map(({ template, path }) =>
-    `  ${template.padEnd(templateWidth)}  ${path}`
-  );
+  const references = diagnostics.flatMap((diagnostic, index) => [
+    ...(index === 0 ? [] : [""]),
+    ...renderRuntimeReferenceReference(diagnostic),
+  ]);
 
   return [
-    describeRuntimeReferenceDiagnostic(diagnostic),
+    renderValidationDiagnosticPrefix(diagnostics[0].severity) +
+    describeRuntimeReferenceDiagnostic(diagnostics[0]),
     "",
     "Referenced by:",
     ...references,
   ].join("\n");
 }
 
-interface ValidationWarningGroup {
-  readonly severity: RuntimeReferenceDiagnostic["severity"];
-  readonly code: RuntimeReferenceDiagnostic["code"];
-  readonly name: string;
-  readonly references: Array<{ template: string; path: string }>;
+function renderValidationDiagnostic(
+  diagnostic: RuntimeReferenceDiagnostic,
+): string {
+  return renderValidationDiagnosticPrefix(diagnostic.severity) +
+    renderRuntimeReferenceDiagnostic(diagnostic);
+}
+
+function renderValidationDiagnosticPrefix(
+  severity: RuntimeReferenceDiagnostic["severity"],
+): string {
+  return severity === "error" ? "Error: " : "Warning: ";
+}
+
+function validationDiagnosticKey(
+  diagnostic: Pick<RuntimeReferenceDiagnostic, "severity" | "code" | "name">,
+): string {
+  return `${diagnostic.severity}\0${diagnostic.code}\0${diagnostic.name}`;
+}
+
+interface ValidationDiagnosticGroup {
+  readonly diagnostics: RuntimeReferenceDiagnostic[];
 }
 
 function assertResourcePosition(
