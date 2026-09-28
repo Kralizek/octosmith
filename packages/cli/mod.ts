@@ -524,20 +524,21 @@ function validateRawResourceArgument(args: readonly string[]): void {
 function renderValidationWarnings(
   diagnostics: readonly RuntimeReferenceDiagnostic[],
 ): readonly string[] {
-  const rendered: string[] = [];
+  const rendered: Array<
+    | { kind: "warning"; text: string }
+    | { kind: "group"; group: ValidationWarningGroup }
+  > = [];
   const unresolvedSecretGroups = new Map<
     string,
-    {
-      severity: RuntimeReferenceDiagnostic["severity"];
-      code: RuntimeReferenceDiagnostic["code"];
-      name: string;
-      references: Array<{ template: string; path: string }>;
-    }
+    ValidationWarningGroup
   >();
 
   for (const diagnostic of diagnostics) {
     if (diagnostic.code !== "unresolved_secret") {
-      rendered.push("Warning: " + renderRuntimeReferenceDiagnostic(diagnostic));
+      rendered.push({
+        kind: "warning",
+        text: "Warning: " + renderRuntimeReferenceDiagnostic(diagnostic),
+      });
       continue;
     }
 
@@ -553,7 +554,7 @@ function renderValidationWarnings(
         references: [],
       };
       unresolvedSecretGroups.set(key, group);
-      rendered.push(key);
+      rendered.push({ kind: "group", group });
     }
 
     group.references.push({
@@ -562,21 +563,15 @@ function renderValidationWarnings(
     });
   }
 
-  return rendered.map((value) => {
-    const group = unresolvedSecretGroups.get(value);
-    return group === undefined
-      ? value
-      : "Warning: " + renderGroupedRuntimeReferenceDiagnostic(group);
-  });
+  return rendered.map((value) =>
+    value.kind === "warning"
+      ? value.text
+      : "Warning: " + renderGroupedRuntimeReferenceDiagnostic(value.group)
+  );
 }
 
 function renderGroupedRuntimeReferenceDiagnostic(
-  diagnostic: {
-    severity: RuntimeReferenceDiagnostic["severity"];
-    code: RuntimeReferenceDiagnostic["code"];
-    name: string;
-    references: ReadonlyArray<{ template: string; path: string }>;
-  },
+  diagnostic: ValidationWarningGroup,
 ): string {
   const kind = diagnostic.code.endsWith("_secret") ? "secret" : "variable";
   const availability = diagnostic.severity === "error"
@@ -596,6 +591,13 @@ function renderGroupedRuntimeReferenceDiagnostic(
     "Referenced by:",
     ...references,
   ].join("\n");
+}
+
+interface ValidationWarningGroup {
+  readonly severity: RuntimeReferenceDiagnostic["severity"];
+  readonly code: RuntimeReferenceDiagnostic["code"];
+  readonly name: string;
+  readonly references: Array<{ template: string; path: string }>;
 }
 
 function assertResourcePosition(
