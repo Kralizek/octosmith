@@ -117,6 +117,7 @@ Deno.test("GitHub Actions without a token does not invoke gh", async () => {
           throw new Error("gh must not be invoked");
         },
       }),
+    Error,
   );
   assertStringIncludes(error.message, "GITHUB_TOKEN is required");
 });
