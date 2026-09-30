@@ -1,7 +1,8 @@
-import type {
-  GitHubPermissionRequirement,
-  OrganizationGitHubPermission,
-  RepositoryGitHubPermission,
+import {
+  aggregateGitHubPermissionRequirements,
+  type GitHubPermissionRequirement,
+  type OrganizationGitHubPermission,
+  type RepositoryGitHubPermission,
 } from "@octosmith/octosmith";
 import { type OutputFormat, parseOutputFormat } from "./output.ts";
 
@@ -64,11 +65,13 @@ function getPermissionInputName(
  * Renders permission requirements as deterministic `name=value` lines
  * compatible with the GitHub Actions `$GITHUB_OUTPUT` file format, using the
  * `permission-*` input names expected by `actions/create-github-app-token`.
+ * Duplicate scope/permission entries are aggregated first, retaining the
+ * strongest access level, so each input name appears at most once.
  */
 export function renderPermissionsGithubOutput(
   requirements: readonly GitHubPermissionRequirement[],
 ): string {
-  return requirements
+  return aggregateGitHubPermissionRequirements(requirements)
     .map((requirement) => ({
       name: getPermissionInputName(requirement),
       access: requirement.access,

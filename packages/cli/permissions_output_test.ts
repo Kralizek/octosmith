@@ -106,3 +106,15 @@ Deno.test("renderPermissionsGithubOutput maps GitHub API names to actions/create
   assertStringIncludes(rendered, "permission-dependabot-secrets=read");
   assertStringIncludes(rendered, "permission-actions-variables=write");
 });
+
+Deno.test("renderPermissionsGithubOutput deduplicates repeated permissions, keeping the strongest access", () => {
+  const requirements: readonly GitHubPermissionRequirement[] = [
+    { scope: "repository", permission: "administration", access: "read" },
+    { scope: "repository", permission: "administration", access: "write" },
+  ];
+
+  assertEquals(
+    renderPermissionsGithubOutput(requirements),
+    "permission-administration=write",
+  );
+});
