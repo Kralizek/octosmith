@@ -24,6 +24,12 @@ export function parsePermissionOutputFormat(
   }
 }
 
+// These maps are intentionally explicit (rather than derived by replacing
+// `_` with `-`) so a mismatch with `actions/create-github-app-token`'s
+// `permission-*` input names is caught by review rather than assumed. The
+// `satisfies Record<...>` constraint below still guarantees a compile error
+// if a new `RepositoryGitHubPermission`/`OrganizationGitHubPermission` value
+// is added without a corresponding entry here.
 const repositoryPermissionInputNames = {
   actions: "actions",
   administration: "administration",
