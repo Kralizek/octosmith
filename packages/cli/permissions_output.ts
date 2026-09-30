@@ -52,7 +52,7 @@ const organizationPermissionInputNames = {
  * Returns the `actions/create-github-app-token` `permission-*` input name
  * that corresponds to a normalized GitHub permission requirement.
  */
-export function getPermissionInputName(
+function getPermissionInputName(
   requirement: GitHubPermissionRequirement,
 ): string {
   return requirement.scope === "repository"
@@ -73,9 +73,7 @@ export function renderPermissionsGithubOutput(
       name: getPermissionInputName(requirement),
       access: requirement.access,
     }))
-    .sort((left, right) =>
-      left.name < right.name ? -1 : left.name > right.name ? 1 : 0
-    )
+    .sort((left, right) => left.name.localeCompare(right.name))
     .map(({ name, access }) => `permission-${name}=${access}`)
     .join("\n");
 }
