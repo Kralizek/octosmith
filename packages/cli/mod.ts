@@ -410,7 +410,8 @@ function createCli(
               template,
             );
             if (format === "github-output") {
-              write(renderPermissionsGithubOutput(requirements));
+              const rendered = renderPermissionsGithubOutput(requirements);
+              if (rendered.length > 0) write(rendered);
               return;
             }
             write(renderOutput(

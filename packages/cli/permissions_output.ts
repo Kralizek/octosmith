@@ -17,10 +17,11 @@ export function parsePermissionOutputFormat(
 
   try {
     return parseOutputFormat(value);
-  } catch {
+  } catch (error) {
     throw new Error(
       "Unsupported output format: " + value +
         ". Expected text, json, or github-output",
+      { cause: error },
     );
   }
 }
