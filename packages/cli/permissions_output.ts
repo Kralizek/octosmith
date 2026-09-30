@@ -56,9 +56,19 @@ const organizationPermissionInputNames = {
 function getPermissionInputName(
   requirement: GitHubPermissionRequirement,
 ): string {
-  return requirement.scope === "repository"
-    ? repositoryPermissionInputNames[requirement.permission]
-    : organizationPermissionInputNames[requirement.permission];
+  switch (requirement.scope) {
+    case "repository":
+      return repositoryPermissionInputNames[requirement.permission];
+    case "organization":
+      return organizationPermissionInputNames[requirement.permission];
+    default: {
+      const unreachable: never = requirement;
+      throw new Error(
+        "Unsupported GitHub permission scope: " +
+          JSON.stringify(unreachable),
+      );
+    }
+  }
 }
 
 /**
