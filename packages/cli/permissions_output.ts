@@ -24,7 +24,7 @@ export function parsePermissionOutputFormat(
   }
 }
 
-const repositoryActionInputNames = {
+const repositoryPermissionInputNames = {
   actions: "actions",
   administration: "administration",
   contents: "contents",
@@ -38,7 +38,7 @@ const repositoryActionInputNames = {
   actions_variables: "actions-variables",
 } as const satisfies Record<RepositoryGitHubPermission, string>;
 
-const organizationActionInputNames = {
+const organizationPermissionInputNames = {
   members: "members",
 } as const satisfies Record<OrganizationGitHubPermission, string>;
 
@@ -46,12 +46,12 @@ const organizationActionInputNames = {
  * Returns the `actions/create-github-app-token` `permission-*` input name
  * that corresponds to a normalized GitHub permission requirement.
  */
-export function getPermissionActionInputName(
+export function getPermissionInputName(
   requirement: GitHubPermissionRequirement,
 ): string {
   return requirement.scope === "repository"
-    ? repositoryActionInputNames[requirement.permission]
-    : organizationActionInputNames[requirement.permission];
+    ? repositoryPermissionInputNames[requirement.permission]
+    : organizationPermissionInputNames[requirement.permission];
 }
 
 /**
@@ -63,11 +63,13 @@ export function renderPermissionsGithubOutput(
   requirements: readonly GitHubPermissionRequirement[],
 ): string {
   return requirements
-    .map((requirement) =>
-      `permission-${
-        getPermissionActionInputName(requirement)
-      }=${requirement.access}`
+    .map((requirement) => ({
+      name: getPermissionInputName(requirement),
+      access: requirement.access,
+    }))
+    .sort((left, right) =>
+      left.name < right.name ? -1 : left.name > right.name ? 1 : 0
     )
-    .sort()
+    .map(({ name, access }) => `permission-${name}=${access}`)
     .join("\n");
 }
