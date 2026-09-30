@@ -143,6 +143,70 @@ Deno.test("offline commands do not read credentials or invoke gh", async () => {
   }
 });
 
+Deno.test("template permissions --format github-output renders permission-* lines", async () => {
+  const root = await Deno.makeTempDir();
+  const output: string[] = [];
+  try {
+    await Deno.mkdir(`${root}/templates`);
+    await Deno.writeTextFile(
+      `${root}/octosmith.yml`,
+      "version: 1\norganization: acme\nrepositories:\n  scope:\n    include: all\n",
+    );
+    await Deno.writeTextFile(
+      `${root}/templates/sample.yml`,
+      "version: 1\nkind: repository\nmatch:\n  include: all\nrepository:\n  teams:\n    - slug: backend\n      permission: push\n",
+    );
+
+    assertEquals(
+      await main([
+        "template",
+        "permissions",
+        "--path",
+        root,
+        "--format",
+        "github-output",
+      ], {
+        credentials: {
+          getEnv: () => {
+            throw new Error("environment must not be read");
+          },
+          runGhAuthToken: () => {
+            throw new Error("gh must not be invoked");
+          },
+        },
+        write: (value) => output.push(value),
+        writeError: () => {},
+      }),
+      0,
+    );
+
+    assertEquals(
+      output.join("\n"),
+      [
+        "permission-administration=write",
+        "permission-members=read",
+        "permission-metadata=read",
+      ].join("\n"),
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("resource list rejects --format github-output", async () => {
+  const errors: string[] = [];
+  assertEquals(
+    await main(["resource", "list", "--format", "github-output"], {
+      writeError: (value) => errors.push(value),
+    }),
+    1,
+  );
+  assertStringIncludes(
+    errors.join("\n"),
+    "Unsupported output format: github-output. Expected text or json",
+  );
+});
+
 async function authenticationConfiguration(): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(`${root}/templates`);

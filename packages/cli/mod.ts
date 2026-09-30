@@ -29,6 +29,10 @@ import {
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { type GitHubTokenOptions, resolveGitHubToken } from "./auth.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
+import {
+  parsePermissionOutputFormat,
+  renderPermissionsGithubOutput,
+} from "./permissions_output.ts";
 import type { ApplyRuntime } from "./apply.ts";
 import { apply, createGitHubRuntime } from "./apply.ts";
 import {
@@ -387,11 +391,15 @@ function createCli(
           .option("-p, --path <path:string>", "Configuration directory.", {
             default: ".",
           })
-          .option("--format <format:string>", "Output format: text or json.", {
-            default: "text",
-          })
+          .option(
+            "--format <format:string>",
+            "Output format: text, json, or github-output.",
+            {
+              default: "text",
+            },
+          )
           .action(async (commandOptions, template?: string) => {
-            const format = parseOutputFormat(commandOptions.format);
+            const format = parsePermissionOutputFormat(commandOptions.format);
             const loaded = await loadConfigurationDirectory(
               commandOptions.path,
               template,
@@ -401,6 +409,10 @@ function createCli(
               loaded,
               template,
             );
+            if (format === "github-output") {
+              write(renderPermissionsGithubOutput(requirements));
+              return;
+            }
             write(renderOutput(
               format,
               { requirements },

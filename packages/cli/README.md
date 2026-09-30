@@ -272,6 +272,29 @@ collections. JSON output contains a `requirements` array of objects with
 worst-case mutation requirement, not a report of current drift or all read
 permissions needed to discover repository state.
 
+`template permissions` additionally supports `--format github-output`, which
+renders deterministic `permission-<name>=<access>` lines matching the
+`permission-*` inputs of
+[`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
+The output can be appended directly to `$GITHUB_OUTPUT` to mint a short-lived
+installation token scoped to exactly what a workflow needs:
+
+```sh
+octosmith template permissions --path ./configuration \
+  --format github-output >> "$GITHUB_OUTPUT"
+```
+
+```text
+permission-administration=write
+permission-contents=write
+permission-issues=write
+permission-members=read
+permission-pull-requests=write
+```
+
+Other commands that support `--format` only accept `text` or `json` and reject
+`github-output`.
+
 ## Grouped commands
 
 The canonical grouped command surface is:
