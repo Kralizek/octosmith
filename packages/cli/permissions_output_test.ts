@@ -95,7 +95,8 @@ Deno.test("renderPermissionsGithubOutput maps GitHub API names to actions/create
       access: "write",
     },
     { scope: "repository", permission: "dependabot_secrets", access: "read" },
-    { scope: "repository", permission: "actions_variables", access: "write" },
+    { scope: "repository", permission: "variables", access: "write" },
+    { scope: "repository", permission: "workflows", access: "write" },
   ];
 
   const rendered = renderPermissionsGithubOutput(requirements);
@@ -104,7 +105,8 @@ Deno.test("renderPermissionsGithubOutput maps GitHub API names to actions/create
     "permission-repository-custom-properties=write",
   );
   assertStringIncludes(rendered, "permission-dependabot-secrets=read");
-  assertStringIncludes(rendered, "permission-actions-variables=write");
+  assertStringIncludes(rendered, "permission-variables=write");
+  assertStringIncludes(rendered, "permission-workflows=write");
 });
 
 Deno.test("renderPermissionsGithubOutput deduplicates repeated permissions, keeping the strongest access", () => {
