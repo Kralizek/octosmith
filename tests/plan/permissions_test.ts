@@ -157,8 +157,8 @@ Deno.test("permission aggregation retains strongest access and deterministic ord
 
   assertEquals(aggregateGitHubPermissionRequirements(requirements), [
     { scope: "organization", permission: "members", access: "read" },
-    { scope: "repository", permission: "contents", access: "write" },
     { scope: "repository", permission: "actions_variables", access: "write" },
+    { scope: "repository", permission: "contents", access: "write" },
   ]);
 });
 
@@ -182,8 +182,8 @@ Deno.test("plan permissions aggregate duplicate operation requirements", () => {
       ],
     }),
     [
-      { scope: "repository", permission: "secrets", access: "write" },
       { scope: "repository", permission: "actions_variables", access: "write" },
+      { scope: "repository", permission: "secrets", access: "write" },
     ],
   );
 });
