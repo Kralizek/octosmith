@@ -66,14 +66,13 @@ Deno.test("validate groups repeated runtime references in text output", async ()
       ),
       0,
     );
-
     const text = output[0];
     assertStringIncludes(text, "Configuration is valid.");
-    assertEquals((text.match(/Warning: Required /g) ?? []).length, 3);
-    assertEquals((text.match(/Required variable "/g) ?? []).length, 1);
+    assertEquals((text.match(/Warning: Required /g) ?? []).length, 6);
+    assertEquals((text.match(/Required variable "/g) ?? []).length, 4);
     assertEquals((text.match(/SLACK_BOT_OPERATION_TOKEN/g) ?? []).length, 1);
     assertEquals((text.match(/COPILOT_REVIEW_TOKEN/g) ?? []).length, 1);
-    assertEquals((text.match(/DEPLOY_ENV/g) ?? []).length, 1);
+    assertEquals((text.match(/DEPLOY_ENV/g) ?? []).length, 4);
     assertGroupedReferences(
       warningSection(text, "secret", "SLACK_BOT_OPERATION_TOKEN"),
       "repository.actions.secrets[0]",
@@ -82,10 +81,14 @@ Deno.test("validate groups repeated runtime references in text output", async ()
       warningSection(text, "secret", "COPILOT_REVIEW_TOKEN"),
       "repository.actions.secrets[1]",
     );
-    assertGroupedReferences(
-      warningSection(text, "variable", "DEPLOY_ENV"),
-      "repository.actions.variables[0]",
-    );
+    for (const name of ["infrastructure", "libraries", "services", "toolkit"]) {
+      assertStringIncludes(
+        text,
+        `Warning: Required variable "DEPLOY_ENV" requires a runtime value.\n\n` +
+          `Referenced by:\n  template: repository:${name}\n` +
+          "  path: repository.actions.variables[0]",
+      );
+    }
   } finally {
     await Deno.remove(root, { recursive: true });
   }

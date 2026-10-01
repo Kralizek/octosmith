@@ -530,14 +530,18 @@ function renderValidationDiagnostics(
   const groups = new Map<string, ValidationDiagnosticGroup>();
 
   for (const diagnostic of diagnostics) {
-    const key = validationDiagnosticKey(diagnostic);
-    let group = groups.get(key);
+    const key = diagnostic.code === "unresolved_secret"
+      ? validationDiagnosticKey(diagnostic)
+      : undefined;
+    let group = key === undefined ? undefined : groups.get(key);
 
-    if (group === undefined) {
+    if (key === undefined || group === undefined) {
       group = {
         diagnostics: [],
       };
-      groups.set(key, group);
+      if (key !== undefined) {
+        groups.set(key, group);
+      }
       rendered.push(group);
     }
 
