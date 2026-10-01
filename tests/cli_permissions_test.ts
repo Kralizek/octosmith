@@ -120,12 +120,12 @@ Deno.test("permission analysis is offline, composed and structured", async () =>
     assertEquals(JSON.parse(output[0]), {
       requirements: [
         { scope: "organization", permission: "members", access: "read" },
+        { scope: "repository", permission: "actions", access: "write" },
         {
           scope: "repository",
           permission: "actions_variables",
           access: "write",
         },
-        { scope: "repository", permission: "actions", access: "write" },
         { scope: "repository", permission: "administration", access: "write" },
         { scope: "repository", permission: "contents", access: "write" },
         { scope: "repository", permission: "issues", access: "write" },
