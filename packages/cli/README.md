@@ -292,6 +292,11 @@ permission-members=read
 permission-pull-requests=write
 ```
 
+The upstream action does not support the repository Actions Variables
+permission. If the selected configuration requires it, `github-output` fails
+instead of emitting an ineffective `permission-variables` line; use another
+supported token-creation method for that configuration.
+
 Other commands that support `--format` only accept `text` or `json` and reject
 `github-output`.
 

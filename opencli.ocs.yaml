@@ -213,7 +213,9 @@ commands:
       Analyze reachable, composed templates without GitHub access or runtime
       secrets. Includes possible strict collection removals. Text output groups
       permissions by scope; JSON contains normalized requirements with scope,
-      permission API name, and access level.
+      permission API name, and access level. github-output rejects permissions
+      unsupported by actions/create-github-app-token, including Actions
+      Variables.
     args:
       - name: template
         type: string
@@ -231,8 +233,12 @@ commands:
         choices:
           - value: text
           - value: json
+          - value: github-output
         summary: Output format.
     examples:
       - title: Analyze a template as JSON
         content: |
           $ octosmith template permissions teams/backend --format json
+      - title: Emit GitHub Actions outputs
+        content: |
+          $ octosmith template permissions teams/backend --format github-output

@@ -41,7 +41,7 @@ Deno.test("repository operation permissions are available by operation and type"
     }),
     [{
       scope: "repository",
-      permission: "variables",
+      permission: "actions_variables",
       access: "write",
     }],
   );
@@ -150,7 +150,7 @@ Deno.test("permission aggregation retains strongest access and deterministic ord
   const requirements: GitHubPermissionRequirement[] = [
     { scope: "repository", permission: "contents", access: "read" },
     { scope: "organization", permission: "members", access: "read" },
-    { scope: "repository", permission: "variables", access: "write" },
+    { scope: "repository", permission: "actions_variables", access: "write" },
     { scope: "repository", permission: "contents", access: "write" },
     { scope: "repository", permission: "contents", access: "read" },
   ];
@@ -158,7 +158,7 @@ Deno.test("permission aggregation retains strongest access and deterministic ord
   assertEquals(aggregateGitHubPermissionRequirements(requirements), [
     { scope: "organization", permission: "members", access: "read" },
     { scope: "repository", permission: "contents", access: "write" },
-    { scope: "repository", permission: "variables", access: "write" },
+    { scope: "repository", permission: "actions_variables", access: "write" },
   ]);
 });
 
@@ -183,7 +183,7 @@ Deno.test("plan permissions aggregate duplicate operation requirements", () => {
     }),
     [
       { scope: "repository", permission: "secrets", access: "write" },
-      { scope: "repository", permission: "variables", access: "write" },
+      { scope: "repository", permission: "actions_variables", access: "write" },
     ],
   );
 });

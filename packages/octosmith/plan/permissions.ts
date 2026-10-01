@@ -15,7 +15,7 @@ export type RepositoryGitHubPermission =
   | "metadata"
   | "pull_requests"
   | "secrets"
-  | "variables"
+  | "actions_variables"
   | "workflows";
 
 /** Identifies an organization-level GitHub permission by its API name. */
@@ -76,7 +76,10 @@ const repositoryPermissionDescriptors = {
     displayName: "Pull requests",
   },
   secrets: { apiName: "secrets", displayName: "Secrets" },
-  variables: { apiName: "variables", displayName: "Variables" },
+  actions_variables: {
+    apiName: "actions_variables",
+    displayName: "Actions variables",
+  },
   workflows: { apiName: "workflows", displayName: "Workflows" },
 } as const satisfies Record<
   RepositoryGitHubPermission,
@@ -132,10 +135,10 @@ const operationPermissions = {
     repository("metadata", "read"),
   ],
   "set-actions-variable": [
-    repository("variables", "write"),
+    repository("actions_variables", "write"),
   ],
   "remove-actions-variable": [
-    repository("variables", "write"),
+    repository("actions_variables", "write"),
   ],
   "set-actions-secret": [
     repository("secrets", "write"),

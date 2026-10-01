@@ -128,7 +128,7 @@ Deno.test("permission analysis is offline, composed and structured", async () =>
         { scope: "repository", permission: "pull_requests", access: "write" },
         {
           scope: "repository",
-          permission: "variables",
+          permission: "actions_variables",
           access: "write",
         },
       ],
@@ -157,6 +157,39 @@ Deno.test("single template text output excludes other templates and groups scope
     assertStringIncludes(output[0], "Members (members): read");
     assertEquals(output[0].includes("Dependabot secrets"), false);
     assertEquals(output[0].includes("Variables"), false);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("github-output fails for unsupported Actions variables permission", async () => {
+  const root = await configuration();
+  const output: string[] = [];
+  const errors: string[] = [];
+  try {
+    assertEquals(
+      await main(
+        [
+          "template",
+          "permissions",
+          "third",
+          "--path",
+          root,
+          "--format",
+          "github-output",
+        ],
+        {
+          write: (text) => output.push(text),
+          writeError: (text) => errors.push(text),
+        },
+      ),
+      1,
+    );
+    assertEquals(output, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "actions_variables permission is not supported",
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }

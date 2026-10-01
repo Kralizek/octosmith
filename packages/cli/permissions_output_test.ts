@@ -95,7 +95,6 @@ Deno.test("renderPermissionsGithubOutput maps GitHub API names to actions/create
       access: "write",
     },
     { scope: "repository", permission: "dependabot_secrets", access: "read" },
-    { scope: "repository", permission: "variables", access: "write" },
     { scope: "repository", permission: "workflows", access: "write" },
   ];
 
@@ -105,8 +104,27 @@ Deno.test("renderPermissionsGithubOutput maps GitHub API names to actions/create
     "permission-repository-custom-properties=write",
   );
   assertStringIncludes(rendered, "permission-dependabot-secrets=read");
-  assertStringIncludes(rendered, "permission-variables=write");
   assertStringIncludes(rendered, "permission-workflows=write");
+});
+
+Deno.test("renderPermissionsGithubOutput rejects unsupported Actions variables permission", () => {
+  let message: string | undefined;
+  try {
+    renderPermissionsGithubOutput([{
+      scope: "repository",
+      permission: "actions_variables",
+      access: "write",
+    }]);
+  } catch (error) {
+    message = error instanceof Error ? error.message : String(error);
+  }
+
+  assertEquals(
+    message,
+    "The actions_variables permission is not supported by " +
+      "actions/create-github-app-token and cannot be rendered as " +
+      "github-output.",
+  );
 });
 
 Deno.test("renderPermissionsGithubOutput deduplicates repeated permissions, keeping the strongest access", () => {

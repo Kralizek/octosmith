@@ -36,6 +36,7 @@ const repositoryPermissionInputNames = {
   actions: "actions",
   administration: "administration",
   contents: "contents",
+  actions_variables: null,
   repository_custom_properties: "repository-custom-properties",
   dependabot_secrets: "dependabot-secrets",
   environments: "environments",
@@ -43,9 +44,8 @@ const repositoryPermissionInputNames = {
   metadata: "metadata",
   pull_requests: "pull-requests",
   secrets: "secrets",
-  variables: "variables",
   workflows: "workflows",
-} as const satisfies Record<RepositoryGitHubPermission, string>;
+} as const satisfies Record<RepositoryGitHubPermission, string | null>;
 
 const organizationPermissionInputNames = {
   members: "members",
@@ -60,7 +60,18 @@ function getPermissionInputName(
 ): string {
   switch (requirement.scope) {
     case "repository":
-      return repositoryPermissionInputNames[requirement.permission];
+      {
+        const inputName =
+          repositoryPermissionInputNames[requirement.permission];
+        if (inputName === null) {
+          throw new Error(
+            "The actions_variables permission is not supported by " +
+              "actions/create-github-app-token and cannot be rendered as " +
+              "github-output.",
+          );
+        }
+        return inputName;
+      }
     case "organization":
       return organizationPermissionInputNames[requirement.permission];
     default: {
