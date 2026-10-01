@@ -43,7 +43,8 @@ const repositoryPermissionInputNames = {
   metadata: "metadata",
   pull_requests: "pull-requests",
   secrets: "secrets",
-  actions_variables: "actions-variables",
+  variables: "variables",
+  workflows: "workflows",
 } as const satisfies Record<RepositoryGitHubPermission, string>;
 
 const organizationPermissionInputNames = {
