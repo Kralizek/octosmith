@@ -123,7 +123,7 @@ Deno.test("permission analysis is offline, composed and structured", async () =>
         { scope: "repository", permission: "actions", access: "write" },
         {
           scope: "repository",
-          permission: "actions_variables",
+          permission: "variables",
           access: "write",
         },
         { scope: "repository", permission: "administration", access: "write" },
@@ -243,6 +243,40 @@ repository:
         ],
       );
     }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("managed workflow files require workflows permission", async () => {
+  const root = await configuration();
+  try {
+    await Deno.writeTextFile(
+      root + "/templates/first.yml",
+      `version: 1
+kind: repository
+match:
+  include:
+    names: [first]
+repository:
+  files:
+    .github/workflows/ci.yml:
+      ensure: exact
+      source: ../files/ci.yml
+`,
+    );
+    await Deno.mkdir(root + "/files");
+    await Deno.writeTextFile(root + "/files/ci.yml", "name: CI\n");
+
+    const requirements = requiredPermissionsForConfiguration(
+      await loadConfigurationDirectory(root),
+      "first",
+    );
+
+    assertEquals(
+      requirements.some((item) => item.permission === "workflows"),
+      true,
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
