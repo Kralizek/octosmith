@@ -162,6 +162,39 @@ Deno.test("single template text output excludes other templates and groups scope
   }
 });
 
+Deno.test("github-output fails for unsupported Actions variables permission", async () => {
+  const root = await configuration();
+  const output: string[] = [];
+  const errors: string[] = [];
+  try {
+    assertEquals(
+      await main(
+        [
+          "template",
+          "permissions",
+          "third",
+          "--path",
+          root,
+          "--format",
+          "github-output",
+        ],
+        {
+          write: (text) => output.push(text),
+          writeError: (text) => errors.push(text),
+        },
+      ),
+      1,
+    );
+    assertEquals(output, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "actions_variables permission is not supported",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("strict empty collections can remove resources; explicit cannot", async () => {
   const explicit = await configuration();
   const strict = await configuration("strict");
@@ -243,6 +276,40 @@ repository:
         ],
       );
     }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("managed workflow files require workflows permission", async () => {
+  const root = await configuration();
+  try {
+    await Deno.writeTextFile(
+      root + "/templates/first.yml",
+      `version: 1
+kind: repository
+match:
+  include:
+    names: [first]
+repository:
+  files:
+    .github/workflows/ci.yml:
+      ensure: exact
+      source: files/ci.yml
+`,
+    );
+    await Deno.mkdir(root + "/files");
+    await Deno.writeTextFile(root + "/files/ci.yml", "name: CI\n");
+
+    const requirements = requiredPermissionsForConfiguration(
+      await loadConfigurationDirectory(root),
+      "first",
+    );
+
+    assertEquals(
+      requirements.some((item) => item.permission === "workflows"),
+      true,
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }

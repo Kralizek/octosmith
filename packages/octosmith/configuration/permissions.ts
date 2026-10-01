@@ -2,6 +2,7 @@ import {
   aggregateGitHubPermissionRequirements,
   type GitHubPermissionRequirement,
   type OperationType,
+  requiredPermissionsForManagedFile,
   requiredPermissionsForOperationType,
 } from "../plan/permissions.ts";
 import type { LoadedConfiguration } from "./load.ts";
@@ -31,17 +32,27 @@ export function requiredPermissionsForConfiguration(
     ?.collectionManagement === "strict";
   const delivery = loaded.configuration.repositories.fileChanges?.mode ??
     "pull_request";
-  const types = selected.flatMap((template) =>
-    templateCanMatchScope(loaded.configuration.repositories.scope, template)
-      ? potentialOperationTypes(template.repository, strict)
-      : []
-  );
+  const requirements = selected.flatMap((template) => {
+    if (
+      !templateCanMatchScope(
+        loaded.configuration.repositories.scope,
+        template,
+      )
+    ) {
+      return [];
+    }
 
-  return aggregateGitHubPermissionRequirements(
-    types.flatMap((type) =>
-      requiredPermissionsForOperationType(type, delivery)
-    ),
-  );
+    return [
+      ...potentialOperationTypes(template.repository, strict).flatMap((type) =>
+        requiredPermissionsForOperationType(type, delivery)
+      ),
+      ...Object.keys(template.repository.files ?? {}).flatMap((path) =>
+        requiredPermissionsForManagedFile(path, delivery)
+      ),
+    ];
+  });
+
+  return aggregateGitHubPermissionRequirements(requirements);
 }
 
 function potentialOperationTypes(
@@ -108,15 +119,6 @@ function potentialOperationTypes(
     }
     if (strict) types.push("delete-environment");
   }
-  for (const file of Object.values(repository.files ?? {})) {
-    if (file.ensure === "absent") {
-      types.push("delete-file");
-    } else {
-      types.push("create-file");
-      if (file.ensure === "exact") types.push("update-file");
-    }
-  }
-
   return types;
 }
 

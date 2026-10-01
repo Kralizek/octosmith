@@ -15,7 +15,8 @@ export type RepositoryGitHubPermission =
   | "metadata"
   | "pull_requests"
   | "secrets"
-  | "actions_variables";
+  | "actions_variables"
+  | "workflows";
 
 /** Identifies an organization-level GitHub permission by its API name. */
 export type OrganizationGitHubPermission = "members";
@@ -75,7 +76,11 @@ const repositoryPermissionDescriptors = {
     displayName: "Pull requests",
   },
   secrets: { apiName: "secrets", displayName: "Secrets" },
-  actions_variables: { apiName: "actions_variables", displayName: "Variables" },
+  actions_variables: {
+    apiName: "actions_variables",
+    displayName: "Actions variables",
+  },
+  workflows: { apiName: "workflows", displayName: "Workflows" },
 } as const satisfies Record<
   RepositoryGitHubPermission,
   GitHubPermissionDescriptor<RepositoryGitHubPermission>
@@ -239,12 +244,40 @@ export function requiredPermissionsForOperationType(
   return operationPermissions[type];
 }
 
+/** Returns the GitHub permissions required by a managed file path. */
+export function requiredPermissionsForManagedFile(
+  path: string,
+  fileDelivery: FileDeliveryMode = "pull_request",
+): readonly GitHubPermissionRequirement[] {
+  const requirements = [
+    ...(fileDelivery === "pull_request"
+      ? pullRequestFileOperationPermissions
+      : directFileOperationPermissions),
+    ...(path.startsWith(".github/workflows/")
+      ? [repository("workflows", "write")]
+      : []),
+  ];
+
+  return aggregateGitHubPermissionRequirements(requirements);
+}
+
 /** Returns the GitHub permissions required by an operation. */
 export function requiredPermissionsForOperation(
   operation: Operation,
   fileDelivery?: FileDeliveryMode,
 ): readonly GitHubPermissionRequirement[] {
-  return requiredPermissionsForOperationType(operation.type, fileDelivery);
+  switch (operation.type) {
+    case "create-file":
+    case "update-file":
+      return requiredPermissionsForManagedFile(
+        operation.file.path,
+        fileDelivery,
+      );
+    case "delete-file":
+      return requiredPermissionsForManagedFile(operation.path, fileDelivery);
+    default:
+      return requiredPermissionsForOperationType(operation.type, fileDelivery);
+  }
 }
 
 /**

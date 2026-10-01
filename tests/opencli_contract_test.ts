@@ -9,7 +9,9 @@ interface OpenCliFlag {
 
 interface OpenCliCommand {
   readonly kind?: "action" | "group";
-  readonly flags?: readonly OpenCliFlag[];
+  readonly flags?: readonly (OpenCliFlag & {
+    readonly choices?: readonly { readonly value: string }[];
+  })[];
   readonly examples?: readonly {
     readonly title: string;
     readonly content: string;
@@ -159,6 +161,14 @@ Deno.test("OpenCLI permission options match the implemented template command", a
     ["path", "format"],
   );
   assertEquals(command.flags?.[0].aliases, ["p"]);
+  assertEquals(
+    command.flags?.[1].choices?.map(({ value }) => value),
+    ["text", "json", "github-output"],
+  );
+  assertStringIncludes(
+    command.examples?.map(({ content }) => content).join("\n") ?? "",
+    "--format github-output",
+  );
   assertStringIncludes(
     usage(),
     "template",
