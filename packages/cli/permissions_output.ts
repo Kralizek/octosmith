@@ -59,19 +59,17 @@ function getPermissionInputName(
   requirement: GitHubPermissionRequirement,
 ): string {
   switch (requirement.scope) {
-    case "repository":
-      {
-        const inputName =
-          repositoryPermissionInputNames[requirement.permission];
-        if (inputName === null) {
-          throw new Error(
-            "The actions_variables permission is not supported by " +
-              "actions/create-github-app-token and cannot be rendered as " +
-              "github-output.",
-          );
-        }
-        return inputName;
+    case "repository": {
+      const inputName = repositoryPermissionInputNames[requirement.permission];
+      if (inputName === null) {
+        throw new Error(
+          "The actions_variables permission is not supported by " +
+            "actions/create-github-app-token and cannot be rendered as " +
+            "github-output.",
+        );
       }
+      return inputName;
+    }
     case "organization":
       return organizationPermissionInputNames[requirement.permission];
     default: {
