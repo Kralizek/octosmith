@@ -262,7 +262,7 @@ repository:
   files:
     .github/workflows/ci.yml:
       ensure: exact
-      source: ../files/ci.yml
+      source: files/ci.yml
 `,
     );
     await Deno.mkdir(root + "/files");
