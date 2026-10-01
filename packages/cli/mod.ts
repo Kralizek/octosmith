@@ -10,6 +10,7 @@
 import { Command } from "@cliffy/command";
 import {
   createPersistedPlanArtifact,
+  describeRuntimeReferenceDiagnostic,
   getGitHubPermissionDescriptor,
   type GitHubPermissionRequirement,
   inspectResource,
@@ -18,10 +19,12 @@ import {
   renderReport,
   renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
+  renderRuntimeReferenceReference,
   type Report,
   type RepositoryReport,
   requiredPermissionsForConfiguration,
   type ResourceInspection,
+  type RuntimeReferenceDiagnostic,
   summarizeResourceInspection,
   validateConfigurationDirectory,
   validateLoadedConfiguration,
@@ -78,10 +81,8 @@ function createCli(
         format,
         result,
         (value) => {
-          const warnings = value.diagnostics.map((diagnostic) =>
-            "Warning: " + renderRuntimeReferenceDiagnostic(diagnostic)
-          );
-          return ["Configuration is valid.", ...warnings].join("\n\n");
+          const diagnostics = renderValidationDiagnostics(value.diagnostics);
+          return ["Configuration is valid.", ...diagnostics].join("\n\n");
         },
       ),
     );
@@ -533,6 +534,78 @@ function validateRawResourceArgument(args: readonly string[]): void {
   if (rest.includes("")) {
     throw new Error("Resource target must not be empty");
   }
+}
+
+function renderValidationDiagnostics(
+  diagnostics: readonly RuntimeReferenceDiagnostic[],
+): readonly string[] {
+  const rendered: ValidationDiagnosticGroup[] = [];
+  const groups = new Map<string, ValidationDiagnosticGroup>();
+
+  for (const diagnostic of diagnostics) {
+    const key = diagnostic.code === "unresolved_secret"
+      ? validationDiagnosticKey(diagnostic)
+      : undefined;
+    let group = key === undefined ? undefined : groups.get(key);
+
+    if (key === undefined || group === undefined) {
+      group = {
+        diagnostics: [],
+      };
+      if (key !== undefined) {
+        groups.set(key, group);
+      }
+      rendered.push(group);
+    }
+
+    group.diagnostics.push(diagnostic);
+  }
+
+  return rendered.map((value) =>
+    value.diagnostics.length === 1
+      ? renderValidationDiagnostic(value.diagnostics[0])
+      : renderGroupedRuntimeReferenceDiagnostic(value.diagnostics)
+  );
+}
+
+function renderGroupedRuntimeReferenceDiagnostic(
+  diagnostics: readonly RuntimeReferenceDiagnostic[],
+): string {
+  const references = diagnostics.flatMap((diagnostic, index) => [
+    ...(index === 0 ? [] : [""]),
+    ...renderRuntimeReferenceReference(diagnostic),
+  ]);
+
+  return [
+    renderValidationDiagnosticPrefix(diagnostics[0].severity) +
+    describeRuntimeReferenceDiagnostic(diagnostics[0]),
+    "",
+    "Referenced by:",
+    ...references,
+  ].join("\n");
+}
+
+function renderValidationDiagnostic(
+  diagnostic: RuntimeReferenceDiagnostic,
+): string {
+  return renderValidationDiagnosticPrefix(diagnostic.severity) +
+    renderRuntimeReferenceDiagnostic(diagnostic);
+}
+
+function renderValidationDiagnosticPrefix(
+  severity: RuntimeReferenceDiagnostic["severity"],
+): string {
+  return severity === "error" ? "Error: " : "Warning: ";
+}
+
+function validationDiagnosticKey(
+  diagnostic: Pick<RuntimeReferenceDiagnostic, "severity" | "code" | "name">,
+): string {
+  return `${diagnostic.severity}\0${diagnostic.code}\0${diagnostic.name}`;
+}
+
+interface ValidationDiagnosticGroup {
+  readonly diagnostics: RuntimeReferenceDiagnostic[];
 }
 
 function assertResourcePosition(

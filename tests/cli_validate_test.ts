@@ -54,6 +54,155 @@ Deno.test("validate emits machine-readable success", async () => {
   }
 });
 
+Deno.test("validate groups repeated runtime references in text output", async () => {
+  const root = await repeatedRuntimeReferenceConfiguration();
+  const output: string[] = [];
+
+  try {
+    assertEquals(
+      await main(
+        ["template", "validate", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+    const text = output[0];
+    assertStringIncludes(text, "Configuration is valid.");
+    assertEquals((text.match(/Warning: Required /g) ?? []).length, 6);
+    assertEquals((text.match(/Required variable "/g) ?? []).length, 4);
+    assertEquals((text.match(/SLACK_BOT_OPERATION_TOKEN/g) ?? []).length, 1);
+    assertEquals((text.match(/COPILOT_REVIEW_TOKEN/g) ?? []).length, 1);
+    assertEquals((text.match(/DEPLOY_ENV/g) ?? []).length, 4);
+    assertGroupedReferences(
+      warningSection(text, "secret", "SLACK_BOT_OPERATION_TOKEN"),
+      "repository.actions.secrets[0]",
+    );
+    assertGroupedReferences(
+      warningSection(text, "secret", "COPILOT_REVIEW_TOKEN"),
+      "repository.actions.secrets[1]",
+    );
+    for (const name of ["infrastructure", "libraries", "services", "toolkit"]) {
+      assertStringIncludes(
+        text,
+        `Warning: Required variable "DEPLOY_ENV" requires a runtime value.\n\n` +
+          `Referenced by:\n  template: repository:${name}\n` +
+          "  path: repository.actions.variables[0]",
+      );
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate preserves repeated runtime references in json output", async () => {
+  const root = await repeatedRuntimeReferenceConfiguration();
+  const output: string[] = [];
+
+  try {
+    assertEquals(
+      await main(
+        ["template", "validate", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const result = JSON.parse(output[0]);
+    assertEquals(result.valid, true);
+    assertEquals(
+      [...result.diagnostics].sort(byValidationDiagnostic),
+      [
+        {
+          severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:infrastructure",
+          path: "repository.actions.variables[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:infrastructure",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:infrastructure",
+          path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:libraries",
+          path: "repository.actions.variables[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:libraries",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:libraries",
+          path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:services",
+          path: "repository.actions.variables[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:services",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:services",
+          path: "repository.actions.secrets[1]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_variable",
+          name: "DEPLOY_ENV",
+          template: "repository:toolkit",
+          path: "repository.actions.variables[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "SLACK_BOT_OPERATION_TOKEN",
+          template: "repository:toolkit",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          severity: "warning",
+          code: "unresolved_secret",
+          name: "COPILOT_REVIEW_TOKEN",
+          template: "repository:toolkit",
+          path: "repository.actions.secrets[1]",
+        },
+      ].sort(byValidationDiagnostic),
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate fails when a managed file source is missing", async () => {
   const root = await validConfiguration(false);
   const errors: string[] = [];
@@ -796,4 +945,82 @@ async function validConfiguration(includeManagedFile = true): Promise<string> {
   );
 
   return root;
+}
+
+async function repeatedRuntimeReferenceConfiguration(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      "  scope:",
+      "    include:",
+      "      names:",
+      "        - infrastructure",
+      "        - libraries",
+      "        - services",
+      "        - toolkit",
+      "",
+    ].join("\n"),
+  );
+
+  for (const name of ["infrastructure", "libraries", "services", "toolkit"]) {
+    await Deno.writeTextFile(
+      root + `/templates/${name}.yml`,
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        "    names:",
+        `      - ${name}`,
+        "repository:",
+        "  actions:",
+        "    variables:",
+        "      - DEPLOY_ENV",
+        "    secrets:",
+        "      - SLACK_BOT_OPERATION_TOKEN",
+        "      - COPILOT_REVIEW_TOKEN",
+        "",
+      ].join("\n"),
+    );
+  }
+
+  return root;
+}
+
+function byValidationDiagnostic(
+  left: { template: string; path: string; name: string },
+  right: { template: string; path: string; name: string },
+): number {
+  return `${left.template}\0${left.path}\0${left.name}`.localeCompare(
+    `${right.template}\0${right.path}\0${right.name}`,
+  );
+}
+
+function warningSection(text: string, kind: string, name: string): string {
+  const prefix =
+    `Warning: Required ${kind} "${name}" requires a runtime value.`;
+  const start = text.indexOf(prefix);
+  assertEquals(start >= 0, true);
+  const next = text.indexOf("\n\nWarning:", start + prefix.length);
+  return next >= 0 ? text.slice(start, next) : text.slice(start);
+}
+
+function assertGroupedReferences(section: string, path: string): void {
+  const referencedBy = section.split("Referenced by:\n")[1];
+  assertEquals(referencedBy === undefined, false);
+  assertEquals(
+    referencedBy.split("\n\n").sort(),
+    [
+      "  template: repository:infrastructure\n  path: " + path,
+      "  template: repository:libraries\n  path: " + path,
+      "  template: repository:services\n  path: " + path,
+      "  template: repository:toolkit\n  path: " + path,
+    ].sort(),
+  );
 }
