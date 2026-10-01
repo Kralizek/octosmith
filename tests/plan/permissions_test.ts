@@ -41,7 +41,7 @@ Deno.test("repository operation permissions are available by operation and type"
     }),
     [{
       scope: "repository",
-      permission: "actions_variables",
+      permission: "variables",
       access: "write",
     }],
   );
@@ -126,18 +126,39 @@ Deno.test("file operations can request direct delivery explicitly", () => {
   ]);
 });
 
+Deno.test("workflow file operations require workflows permission", () => {
+  assertEquals(
+    requiredPermissionsForOperation({
+      type: "update-file",
+      sha: "abc",
+      file: {
+        path: ".github/workflows/ci.yml",
+        ensure: "exact",
+        content: "name: CI\n",
+      },
+    }),
+    [
+      { scope: "repository", permission: "contents", access: "write" },
+      { scope: "repository", permission: "issues", access: "write" },
+      { scope: "repository", permission: "pull_requests", access: "write" },
+      { scope: "repository", permission: "workflows", access: "write" },
+    ],
+  );
+});
+
+
 Deno.test("permission aggregation retains strongest access and deterministic order", () => {
   const requirements: GitHubPermissionRequirement[] = [
     { scope: "repository", permission: "contents", access: "read" },
     { scope: "organization", permission: "members", access: "read" },
-    { scope: "repository", permission: "actions_variables", access: "write" },
+    { scope: "repository", permission: "variables", access: "write" },
     { scope: "repository", permission: "contents", access: "write" },
     { scope: "repository", permission: "contents", access: "read" },
   ];
 
   assertEquals(aggregateGitHubPermissionRequirements(requirements), [
     { scope: "organization", permission: "members", access: "read" },
-    { scope: "repository", permission: "actions_variables", access: "write" },
+    { scope: "repository", permission: "variables", access: "write" },
     { scope: "repository", permission: "contents", access: "write" },
   ]);
 });
@@ -162,7 +183,7 @@ Deno.test("plan permissions aggregate duplicate operation requirements", () => {
       ],
     }),
     [
-      { scope: "repository", permission: "actions_variables", access: "write" },
+      { scope: "repository", permission: "variables", access: "write" },
       { scope: "repository", permission: "secrets", access: "write" },
     ],
   );
