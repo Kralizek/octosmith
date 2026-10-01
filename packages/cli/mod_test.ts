@@ -154,7 +154,7 @@ Deno.test("template permissions --format github-output renders permission-* line
     );
     await Deno.writeTextFile(
       `${root}/templates/sample.yml`,
-      "version: 1\nkind: repository\nmatch:\n  include: all\nrepository:\n  teams:\n    - slug: backend\n      permission: push\n",
+      "version: 1\nkind: repository\nmatch:\n  include: all\nrepository:\n  teams:\n    - name: backend\n      permission: push\n",
     );
 
     assertEquals(
