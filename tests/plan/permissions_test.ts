@@ -146,7 +146,6 @@ Deno.test("workflow file operations require workflows permission", () => {
   );
 });
 
-
 Deno.test("permission aggregation retains strongest access and deterministic order", () => {
   const requirements: GitHubPermissionRequirement[] = [
     { scope: "repository", permission: "contents", access: "read" },
