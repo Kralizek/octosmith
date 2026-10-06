@@ -1,7 +1,6 @@
 # Example Octosmith configuration
 
-This directory is a design fixture for the initial Octosmith configuration
-model.
+This directory is a design fixture for the Octosmith configuration model.
 
 The filesystem acts as the registry:
 
@@ -10,7 +9,8 @@ The filesystem acts as the registry:
 - `files/` contains content copied into managed repositories.
 
 Every repository in scope is expected to match exactly one template. Templates
-are intentionally self-contained, even when that means some duplication.
+in this example are intentionally self-contained. Real configurations can also
+compose reusable fragments when policy is shared across templates.
 
 The corresponding organization/repository preconditions and expected resolved
 desired states live under `tests/fixtures/configuration/`. The fixtures reuse

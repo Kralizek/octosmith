@@ -107,6 +107,10 @@ repository:
       source: files/dependabot.yml
 ```
 
+Repository templates can include reusable fragments, allowing common policy to
+be composed without duplicating it across template files. Fragment composition
+is resolved before validation, permission analysis, and desired-state planning.
+
 A repository template can manage:
 
 - repository settings
@@ -208,6 +212,9 @@ The package's default export surface includes:
 - structured reports and text rendering
 - GitHub discovery and state readers
 - GitHub mutation sinks and apply helpers
+- resource inspection and template classification
+- worst-case GitHub permission analysis
+- persisted-plan creation, validation, and preflight helpers
 
 The package intentionally contains the reusable engine. CLI argument parsing,
 console output selection, and Hooksmith event serialization live in
@@ -229,7 +236,9 @@ Useful options are:
 - `--event-streaming`
 
 The generated repository starts scoped to itself so the initial apply cannot
-unexpectedly manage an entire organization.
+unexpectedly manage an entire organization. Its README includes the current
+`template validate`, `template permissions`, `resource list`, `plan`, and
+`apply` workflows, including template-scoped plan/apply examples.
 
 `include` is required and may be either a selector or the literal `all`. Use
 `include: all` when the scope starts from every resource and only `exclude`
