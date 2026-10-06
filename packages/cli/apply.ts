@@ -547,5 +547,8 @@ function filterSkippedItems<T>(
   );
   const filtered = items.filter((item) => !skippedNames.has(name(item)));
 
-  return skippedNames.size > 0 && filtered.length === 0 ? undefined : filtered;
+  return scope === "environment" && skippedNames.size > 0 &&
+      filtered.length === 0
+    ? undefined
+    : filtered;
 }

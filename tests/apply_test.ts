@@ -1,6 +1,7 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
   type CurrentState,
+  type ExecutableResourcePlan,
   loadConfigurationDirectory,
   type LoadedConfiguration,
   MissingRuntimeValueError,
@@ -198,6 +199,7 @@ Deno.test(
         const loaded = await loadConfigurationDirectory(root);
         const results: RepositoryReport[] = [];
         const planned: Plan[] = [];
+        const executableResources: ExecutableResourcePlan[] = [];
 
         await apply(runtime, loaded, {
           mode,
@@ -211,6 +213,7 @@ Deno.test(
           },
           onPlanBuilt: (resource) => {
             planned.push(resource.plan);
+            executableResources.push(resource);
           },
         });
 
@@ -229,6 +232,16 @@ Deno.test(
           type: "set-actions-variable",
           variable: { name: "AVAILABLE", value: "" },
         }]);
+        assertEquals(executableResources[0].desired.actions?.secrets, []);
+        assertEquals(executableResources[0].desired.dependabot?.secrets, []);
+        assertEquals(
+          executableResources[0].desired.environments?.[0].secrets,
+          undefined,
+        );
+        assertEquals(
+          executableResources[0].desired.environments?.[0].variables,
+          undefined,
+        );
         if (mode === "apply") {
           assertEquals(runtime.applied[0].operations, [{
             type: "set-actions-variable",
@@ -236,6 +249,47 @@ Deno.test(
           }]);
         }
       }
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
+);
+
+Deno.test(
+  "failed apply reports skipped runtime value diagnostics",
+  async () => {
+    const root = await runtimeValuesConfigurationDirectory();
+    try {
+      const runtime = new FakeRuntime(
+        [metadata("sample")],
+        new Set(),
+        [],
+        new Set(["sample"]),
+      );
+      const loaded = await loadConfigurationDirectory(root);
+      const results: RepositoryReport[] = [];
+
+      await apply(runtime, loaded, {
+        mode: "apply",
+        skipMissingValues: true,
+        values: (name) => {
+          if (name === "AVAILABLE") return "";
+          throw new MissingRuntimeValueError(name);
+        },
+        onRepositoryApplied: (report) => {
+          results.push(report);
+        },
+      });
+
+      assertEquals(results[0].status, "failed");
+      assertEquals(results[0].diagnostics?.length, 5);
+      assertEquals(
+        results[0].diagnostics?.every((diagnostic) =>
+          diagnostic.severity === "warning" &&
+          diagnostic.code.startsWith("skipped_")
+        ),
+        true,
+      );
     } finally {
       await Deno.remove(root, { recursive: true });
     }
