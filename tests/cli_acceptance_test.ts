@@ -23,10 +23,12 @@ Deno.test("template list reports configured templates with source paths", async 
       output.join("\n"),
       [
         "TEMPLATE                     NAME              PATH",
+        "repository:Alpha             Uppercase         templates/Alpha.yml",
         "repository:alpha             -                 templates/alpha.yml",
         "repository:services/backend  Backend Services  templates/services/backend.yml",
+        "repository:éclair            Éclair            templates/éclair.yml",
         "",
-        "Summary: 2 templates",
+        "Summary: 4 templates",
       ].join("\n"),
     );
     assertEquals(output.join("\n").includes("fragments/common.yml"), false);
@@ -132,8 +134,10 @@ async function templateListConfigurationDirectory(): Promise<string> {
       "  scope:",
       "    include:",
       "      names:",
+      "        - Alpha",
       "        - alpha",
       "        - backend",
+      "        - éclair",
       "",
     ].join("\n"),
   );
@@ -150,6 +154,20 @@ async function templateListConfigurationDirectory(): Promise<string> {
     ].join("\n"),
   );
   await Deno.writeTextFile(
+    root + "/templates/Alpha.yml",
+    [
+      "version: 1",
+      "kind: repository",
+      "name: Uppercase",
+      "match:",
+      "  include:",
+      "    names:",
+      "      - Alpha",
+      "repository: {}",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
     root + "/templates/alpha.yml",
     [
       "version: 1",
@@ -160,6 +178,20 @@ async function templateListConfigurationDirectory(): Promise<string> {
       "  include:",
       "    names:",
       "      - alpha",
+      "repository: {}",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/éclair.yml",
+    [
+      "version: 1",
+      "kind: repository",
+      "name: Éclair",
+      "match:",
+      "  include:",
+      "    names:",
+      "      - éclair",
       "repository: {}",
       "",
     ].join("\n"),
