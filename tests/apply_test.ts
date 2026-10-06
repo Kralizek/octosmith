@@ -3,10 +3,10 @@ import {
   type CurrentState,
   loadConfigurationDirectory,
   type LoadedConfiguration,
+  MissingRuntimeValueError,
   type Plan,
   type RepositoryMetadata,
   type RepositoryReport,
-  MissingRuntimeValueError,
 } from "@octosmith/octosmith";
 import type {
   ApplyPlanResult,
@@ -137,8 +137,7 @@ Deno.test("apply rejects resource and template targets before discovery", async 
   } finally {
     await Deno.remove(root, { recursive: true });
   }
-  },
-);
+});
 
 Deno.test("apply rejects an unknown template before discovery", async () => {
   const runtime = new FakeRuntime([]);
@@ -242,31 +241,34 @@ Deno.test(
     }
 });
 
-Deno.test("skip-missing-values does not swallow other runtime failures", async () => {
-  const root = await runtimeValuesConfigurationDirectory();
-  try {
-    const runtime = new FakeRuntime([metadata("sample")]);
-    const loaded = await loadConfigurationDirectory(root);
-    const results: RepositoryReport[] = [];
+Deno.test(
+  "skip-missing-values does not swallow other runtime failures",
+  async () => {
+    const root = await runtimeValuesConfigurationDirectory();
+    try {
+      const runtime = new FakeRuntime([metadata("sample")]);
+      const loaded = await loadConfigurationDirectory(root);
+      const results: RepositoryReport[] = [];
 
-    await apply(runtime, loaded, {
-      mode: "plan",
-      skipMissingValues: true,
-      values: () => {
-        throw new Error("provider outage");
-      },
-      onRepositoryApplied: (report) => {
-        results.push(report);
-      },
-    });
+      await apply(runtime, loaded, {
+        mode: "plan",
+        skipMissingValues: true,
+        values: () => {
+          throw new Error("provider outage");
+        },
+        onRepositoryApplied: (report) => {
+          results.push(report);
+        },
+      });
 
-    assertEquals(results[0].status, "failed");
-    assertEquals(results[0].error, "provider outage");
-    assertEquals(results[0].diagnostics, undefined);
-  } finally {
-    await Deno.remove(root, { recursive: true });
-  }
-});
+      assertEquals(results[0].status, "failed");
+      assertEquals(results[0].error, "provider outage");
+      assertEquals(results[0].diagnostics, undefined);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
+);
 
 Deno.test("template-scoped plan resolves only classified repositories", async () => {
   const root = await configurationDirectory();
