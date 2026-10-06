@@ -50,6 +50,7 @@ export interface LoadedConfiguration {
   readonly root: string;
   readonly configuration: Configuration;
   readonly templates: Readonly<Record<string, RepositoryTemplate>>;
+  readonly templatePaths?: Readonly<Record<string, string>>;
 }
 
 /** Describes an independently detected template loading problem. */
@@ -112,6 +113,7 @@ async function loadConfigurationDirectoryInternal(
   }
 
   const templates: Record<string, RepositoryTemplate> = {};
+  const templatePaths: Record<string, string> = {};
   const issues: ConfigurationLoadIssue[] = [];
   const selectedIdentity = selectedTemplate === undefined
     ? undefined
@@ -153,6 +155,7 @@ async function loadConfigurationDirectoryInternal(
       }
 
       templates[identity] = template;
+      templatePaths[identity] = "templates/" + relativePath;
     } catch (error) {
       if (!collectTemplateIssues) throw error;
       issues.push({
@@ -175,6 +178,7 @@ async function loadConfigurationDirectoryInternal(
       root,
       configuration,
       templates,
+      templatePaths,
     },
     issues,
   };
