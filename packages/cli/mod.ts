@@ -27,7 +27,6 @@ import {
   type ResourceInspection,
   type RuntimeReferenceDiagnostic,
   summarizeResourceInspection,
-  validateConfigurationDirectory,
   validateLoadedConfiguration,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
