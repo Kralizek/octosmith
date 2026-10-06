@@ -220,9 +220,7 @@ export function persistedOperationContract(
           ...(existing !== undefined && removesVariables && {
             variables: [...existing.variables]
               .map((item) => item.name)
-              .filter((name) =>
-                !operation.preserveVariables?.includes(name)
-              )
+              .filter((name) => !operation.preserveVariables?.includes(name))
               .sort(),
           }),
           ...(existing !== undefined && removesSecrets && {
