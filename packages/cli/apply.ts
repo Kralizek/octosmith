@@ -8,8 +8,6 @@ import {
   hashCanonical,
   inspectResource,
   type LoadedConfiguration,
-  type RuntimeReference,
-  type RuntimeReferenceDiagnostic,
   MissingRuntimeValueError,
   type Operation,
   preflightRuntimeReferences,
@@ -18,6 +16,8 @@ import {
   reportPlannedRepository,
   resolveDesiredState,
   type ResourceInspection,
+  type RuntimeReference,
+  type RuntimeReferenceDiagnostic,
   type RuntimeValueProvider,
 } from "@octosmith/octosmith";
 import { executeExecutableResources } from "./execution.ts";
@@ -471,37 +471,33 @@ export function withoutSkippedRuntimeValues(
     return desired;
   }
 
-  const actions = desired.actions === undefined
-    ? undefined
-    : {
-      ...desired.actions,
-      secrets: filterSkippedItems(
-        desired.actions.secrets,
-        skipped,
-        "actions",
-        "secret",
-        (secret) => secret.name,
-      ),
-      variables: filterSkippedItems(
-        desired.actions.variables,
-        skipped,
-        "actions",
-        "variable",
-        (variable) => variable.name,
-      ),
-    };
-  const dependabot = desired.dependabot === undefined
-    ? undefined
-    : {
-      ...desired.dependabot,
-      secrets: filterSkippedItems(
-        desired.dependabot.secrets,
-        skipped,
-        "dependabot",
-        "secret",
-        (secret) => secret.name,
-      ),
-    };
+  const actions = desired.actions === undefined ? undefined : {
+    ...desired.actions,
+    secrets: filterSkippedItems(
+      desired.actions.secrets,
+      skipped,
+      "actions",
+      "secret",
+      (secret) => secret.name,
+    ),
+    variables: filterSkippedItems(
+      desired.actions.variables,
+      skipped,
+      "actions",
+      "variable",
+      (variable) => variable.name,
+    ),
+  };
+  const dependabot = desired.dependabot === undefined ? undefined : {
+    ...desired.dependabot,
+    secrets: filterSkippedItems(
+      desired.dependabot.secrets,
+      skipped,
+      "dependabot",
+      "secret",
+      (secret) => secret.name,
+    ),
+  };
   const environments = desired.environments?.map((environment) => ({
     ...environment,
     secrets: filterSkippedItems(
@@ -550,7 +546,5 @@ function filterSkippedItems<T>(
   );
   const filtered = items.filter((item) => !skippedNames.has(name(item)));
 
-  return skippedNames.size > 0 && filtered.length === 0
-    ? undefined
-    : filtered;
+  return skippedNames.size > 0 && filtered.length === 0 ? undefined : filtered;
 }
