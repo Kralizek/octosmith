@@ -505,7 +505,7 @@ interface TemplateListResult {
 
 function listTemplates(loaded: LoadedConfiguration): TemplateListResult {
   const templates = Object.entries(loaded.templates)
-    .sort(([left], [right]) => left.localeCompare(right))
+    .sort(([left], [right]) => compareCodeUnits(left, right))
     .map(([identity, template]) => {
       const path = loaded.templatePaths?.[identity];
       if (path === undefined) {
@@ -523,6 +523,10 @@ function listTemplates(loaded: LoadedConfiguration): TemplateListResult {
     templates,
     summary: { total: templates.length },
   };
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
 }
 
 function renderTemplateList(result: TemplateListResult): string {
