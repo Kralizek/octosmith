@@ -9,6 +9,7 @@
 
 import { Command } from "@cliffy/command";
 import {
+  type ConfigurationValidationIssue,
   createPersistedPlanArtifact,
   describeRuntimeReferenceDiagnostic,
   getGitHubPermissionDescriptor,
@@ -19,14 +20,13 @@ import {
   renderReport,
   renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
-  renderRuntimeReferenceReference,
   type Report,
   type RepositoryReport,
   requiredPermissionsForConfiguration,
   type ResourceInspection,
   type RuntimeReferenceDiagnostic,
   summarizeResourceInspection,
-  validateConfigurationDirectory,
+  validateConfigurationDirectoryDetailed,
   validateLoadedConfiguration,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
@@ -73,20 +73,37 @@ function createCli(
     }
 
     const format = parseOutputFormat(commandOptions.format);
-    const diagnostics = await validateConfigurationDirectory(
+    const validation = await validateConfigurationDirectoryDetailed(
       commandOptions.path,
     );
-    const result = { valid: true, diagnostics };
-    write(
-      renderOutput(
-        format,
-        result,
-        (value) => {
-          const diagnostics = renderValidationDiagnostics(value.diagnostics);
-          return ["Configuration is valid.", ...diagnostics].join("\n\n");
-        },
-      ),
+    const result = validation.issues.length === 0
+      ? { valid: true as const, diagnostics: validation.diagnostics }
+      : {
+        valid: false as const,
+        diagnostics: validation.diagnostics,
+        issues: validation.issues,
+      };
+    const rendered = renderOutput(
+      format,
+      result,
+      (value) =>
+        renderValidationResult(
+          value.valid,
+          value.diagnostics,
+          value.valid ? [] : value.issues,
+        ),
     );
+
+    if (validation.issues.length > 0) {
+      if (format === "json") {
+        write(rendered);
+      } else {
+        writeError(rendered);
+      }
+      throw new ValidationFailedError();
+    }
+
+    write(rendered);
   };
 
   const root = new Command()
@@ -503,6 +520,12 @@ class ApplyFailedError extends Error {
   }
 }
 
+class ValidationFailedError extends Error {
+  constructor() {
+    super("Configuration validation failed");
+  }
+}
+
 function hasFailures(report: Report): boolean {
   return report.repositories.some((repository) =>
     repository.status === "failed" ||
@@ -526,7 +549,10 @@ export async function main(
     await createCli(options, args).parse(args);
     return 0;
   } catch (error) {
-    if (error instanceof ApplyFailedError) {
+    if (
+      error instanceof ApplyFailedError ||
+      error instanceof ValidationFailedError
+    ) {
       return 1;
     }
 
@@ -560,6 +586,25 @@ function validateRawResourceArgument(args: readonly string[]): void {
   }
 }
 
+function renderValidationResult(
+  valid: boolean,
+  diagnostics: readonly RuntimeReferenceDiagnostic[],
+  issues: readonly ConfigurationValidationIssue[],
+): string {
+  const errors = issues.map((issue) =>
+    "Error: " +
+    (issue.template === undefined ? "" : "[" + issue.template + "] ") +
+    issue.message
+  );
+  const warnings = renderValidationDiagnostics(diagnostics);
+
+  return [
+    valid ? "Configuration is valid." : "Configuration is invalid.",
+    ...errors,
+    ...warnings,
+  ].join("\n\n");
+}
+
 function renderValidationDiagnostics(
   diagnostics: readonly RuntimeReferenceDiagnostic[],
 ): readonly string[] {
@@ -589,17 +634,25 @@ function renderValidationDiagnostics(
 function renderGroupedRuntimeReferenceDiagnostic(
   diagnostics: readonly RuntimeReferenceDiagnostic[],
 ): string {
-  const references = diagnostics.flatMap((diagnostic, index) => [
-    ...(index === 0 ? [] : [""]),
-    ...renderRuntimeReferenceReference(diagnostic),
-  ]);
+  const references = diagnostics.map((diagnostic) => ({
+    source: diagnostic.resource === undefined
+      ? diagnostic.template
+      : diagnostic.template + " / " + diagnostic.resource.type + ":" +
+        diagnostic.resource.name,
+    path: diagnostic.path,
+  }));
+  const sourceWidth = Math.max(
+    ...references.map((reference) => reference.source.length),
+  );
 
   return [
     renderValidationDiagnosticPrefix(diagnostics[0].severity) +
     describeRuntimeReferenceDiagnostic(diagnostics[0]),
     "",
     "Referenced by:",
-    ...references,
+    ...references.map((reference) =>
+      "  " + reference.source.padEnd(sourceWidth) + "  " + reference.path
+    ),
   ].join("\n");
 }
 

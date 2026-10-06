@@ -52,11 +52,51 @@ export interface LoadedConfiguration {
   readonly templates: Readonly<Record<string, RepositoryTemplate>>;
 }
 
+/** Describes an independently detected template loading problem. */
+export interface ConfigurationLoadIssue {
+  readonly message: string;
+  readonly template: string;
+}
+
+/** Describes a partially loaded configuration and its template loading issues. */
+export interface ConfigurationDirectoryLoadResult {
+  readonly loaded: LoadedConfiguration;
+  readonly issues: readonly ConfigurationLoadIssue[];
+}
+
 /** Load and validate an Octosmith configuration directory. */
 export async function loadConfigurationDirectory(
   root: string,
   selectedTemplate?: string,
 ): Promise<LoadedConfiguration> {
+  const result = await loadConfigurationDirectoryInternal(
+    root,
+    selectedTemplate,
+    false,
+  );
+  if (result.issues.length > 0) {
+    throw new Error(result.issues[0].message);
+  }
+  return result.loaded;
+}
+
+/** Load a configuration directory while collecting individual template failures. */
+export async function loadConfigurationDirectoryCollectingIssues(
+  root: string,
+  selectedTemplate?: string,
+): Promise<ConfigurationDirectoryLoadResult> {
+  return await loadConfigurationDirectoryInternal(
+    root,
+    selectedTemplate,
+    true,
+  );
+}
+
+async function loadConfigurationDirectoryInternal(
+  root: string,
+  selectedTemplate: string | undefined,
+  collectTemplateIssues: boolean,
+): Promise<ConfigurationDirectoryLoadResult> {
   const configuration = await loadYaml<Configuration>(
     join(root, "octosmith.yml"),
     validateConfiguration,
@@ -72,6 +112,7 @@ export async function loadConfigurationDirectory(
   }
 
   const templates: Record<string, RepositoryTemplate> = {};
+  const issues: ConfigurationLoadIssue[] = [];
   const selectedIdentity = selectedTemplate === undefined
     ? undefined
     : selectedTemplate.startsWith("repository:")
@@ -82,44 +123,60 @@ export async function loadConfigurationDirectory(
     const relativePath = relative(templatesDirectory, path)
       .replaceAll("\\", "/");
     const extension = extname(relativePath);
-    if (extension.length === 0) {
-      throw new Error(
-        "Template filename must include a name before the YAML extension: " +
-          relativePath,
-      );
-    }
-    const id = relativePath.slice(0, -extension.length);
+    const id = extension.length === 0
+      ? relativePath
+      : relativePath.slice(0, -extension.length);
     const identity = "repository:" + id;
     if (selectedIdentity !== undefined && identity !== selectedIdentity) {
       continue;
     }
 
-    const rawTemplate = await loadYaml<RepositoryTemplate>(
-      path,
-      validateTemplate,
-    );
-    const template = await composeRepositoryTemplate(
-      canonicalRoot,
-      path,
-      rawTemplate,
-    );
-    if (templates[identity] !== undefined) {
-      throw new Error("Duplicate template identity: " + identity);
-    }
+    try {
+      if (extension.length === 0) {
+        throw new Error(
+          "Template filename must include a name before the YAML extension: " +
+            relativePath,
+        );
+      }
 
-    templates[identity] = template;
+      const rawTemplate = await loadYaml<RepositoryTemplate>(
+        path,
+        validateTemplate,
+      );
+      const template = await composeRepositoryTemplate(
+        canonicalRoot,
+        path,
+        rawTemplate,
+      );
+      if (templates[identity] !== undefined) {
+        throw new Error("Duplicate template identity: " + identity);
+      }
+
+      templates[identity] = template;
+    } catch (error) {
+      if (!collectTemplateIssues) throw error;
+      issues.push({
+        template: identity,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
   }
 
   if (
-    selectedIdentity !== undefined && templates[selectedIdentity] === undefined
+    selectedIdentity !== undefined &&
+    templates[selectedIdentity] === undefined &&
+    !issues.some((issue) => issue.template === selectedIdentity)
   ) {
     throw new Error("Unknown template: " + selectedTemplate);
   }
 
   return {
-    root,
-    configuration,
-    templates,
+    loaded: {
+      root,
+      configuration,
+      templates,
+    },
+    issues,
   };
 }
 
