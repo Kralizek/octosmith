@@ -161,7 +161,6 @@ Deno.test("targeted discovery rejects malformed qualified repository targets", a
   assertEquals(client.requests, []);
 });
 
-
 Deno.test("targeted discovery reads repository property values once", async () => {
   const propertyValues = Array.from({ length: 99 }, (_, index) => ({
     property_name: "unrelated-" + index,
