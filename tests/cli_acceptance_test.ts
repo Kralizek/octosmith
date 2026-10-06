@@ -96,9 +96,11 @@ Deno.test("template list does not resolve credentials or access GitHub", async (
               envReads++;
               throw new Error("template list must not resolve credentials");
             },
-            runGhAuthToken: async () => {
+            runGhAuthToken: () => {
               ghCalls++;
-              throw new Error("template list must not invoke gh");
+              return Promise.reject(
+                new Error("template list must not invoke gh"),
+              );
             },
           },
           fetch: () => {
