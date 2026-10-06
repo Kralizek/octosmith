@@ -46,12 +46,14 @@ export interface ConfigurationValidationResult {
 /** Validate a configuration directory and return all independently detectable issues. */
 export async function validateConfigurationDirectoryDetailed(
   root: string,
+  isSecretAvailable?: (name: string) => boolean,
 ): Promise<ConfigurationValidationResult> {
   const loading = await loadConfigurationDirectoryCollectingIssues(root);
   const validation = await collectLoadedConfigurationValidation(
     loading.loaded,
     undefined,
     loading.issues.length === 0,
+    isSecretAvailable,
   );
   return {
     diagnostics: validation.diagnostics,
@@ -63,6 +65,7 @@ async function collectLoadedConfigurationValidation(
   loaded: LoadedConfiguration,
   selectedTemplate?: string,
   templateSetComplete = true,
+  isSecretAvailable?: (name: string) => boolean,
 ): Promise<ConfigurationValidationResult> {
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
   const issues: ConfigurationValidationIssue[] = [];
@@ -95,7 +98,13 @@ async function collectLoadedConfigurationValidation(
 
   for (const [name, template] of Object.entries(loaded.templates)) {
     if (selectedIdentity !== undefined && name !== selectedIdentity) continue;
-    diagnostics.push(...runtimeReferenceWarnings(name, template));
+    diagnostics.push(
+      ...runtimeReferenceWarnings(
+        name,
+        template,
+        isSecretAvailable,
+      ),
+    );
     const repository = templateScopeWitness(scope, template, name);
 
     if (repository === undefined) {

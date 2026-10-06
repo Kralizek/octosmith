@@ -75,6 +75,7 @@ function createCli(
     const format = parseOutputFormat(commandOptions.format);
     const validation = await validateConfigurationDirectoryDetailed(
       commandOptions.path,
+      environmentHas,
     );
     const result = validation.issues.length === 0
       ? { valid: true as const, diagnostics: validation.diagnostics }
@@ -583,6 +584,14 @@ function validateRawResourceArgument(args: readonly string[]): void {
 
   if (rest.includes("")) {
     throw new Error("Resource target must not be empty");
+  }
+}
+
+function environmentHas(name: string): boolean {
+  try {
+    return Deno.env.has(name);
+  } catch {
+    return false;
   }
 }
 

@@ -127,16 +127,21 @@ export function preflightRuntimeReferences(
 export function runtimeReferenceWarnings(
   templateName: string,
   template: RepositoryTemplate,
+  isSecretAvailable: (name: string) => boolean = () => false,
 ): readonly RuntimeReferenceDiagnostic[] {
-  return collectRuntimeReferences(template).map((reference) => ({
-    severity: "warning",
-    code: reference.kind === "variable"
-      ? "unresolved_variable"
-      : "unresolved_secret",
-    name: reference.name,
-    template: templateName,
-    path: reference.path,
-  }));
+  return collectRuntimeReferences(template)
+    .filter((reference) =>
+      reference.kind !== "secret" || !isSecretAvailable(reference.name)
+    )
+    .map((reference) => ({
+      severity: "warning",
+      code: reference.kind === "variable"
+        ? "unresolved_variable"
+        : "unresolved_secret",
+      name: reference.name,
+      template: templateName,
+      path: reference.path,
+    }));
 }
 
 /** Render the summary line for a runtime-reference diagnostic. */
