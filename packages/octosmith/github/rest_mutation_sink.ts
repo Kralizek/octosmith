@@ -231,6 +231,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           operation.environment,
           false,
           operation.collections,
+          operation.preserveSecrets,
+          operation.preserveVariables,
         );
         return;
       case "delete-environment":
@@ -406,6 +408,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     environment: DesiredEnvironment,
     create: boolean,
     collections: "explicit" | "strict",
+    preserveSecrets: readonly string[] = [],
+    preserveVariables: readonly string[] = [],
   ): Promise<void> {
     const name = encodeURIComponent(environment.name);
     const base = this.repo(repository) + "/environments/" + name;
@@ -419,6 +423,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         base,
         environment.variables,
         collections,
+        preserveVariables,
       );
     }
 
@@ -427,6 +432,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         base,
         environment.secrets,
         collections,
+        preserveSecrets,
       );
     }
   }
@@ -435,6 +441,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     base: string,
     variables: readonly Variable[],
     collections: "explicit" | "strict",
+    preserve: readonly string[] = [],
   ): Promise<void> {
     const currentVariables = await getAllWrappedPages<{
       readonly name: string;
@@ -452,7 +459,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     const removeUndeclared = collections === "strict" || variables.length === 0;
 
     for (const variable of currentVariables) {
-      if (removeUndeclared && !desired.has(variable.name)) {
+      if (
+        removeUndeclared && !desired.has(variable.name) &&
+        !preserve.includes(variable.name)
+      ) {
         await this.#client.request(
           "DELETE",
           base + "/variables/" + encodeURIComponent(variable.name),
@@ -476,6 +486,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     base: string,
     secrets: readonly import("../mod.ts").DesiredSecret[],
     collections: "explicit" | "strict",
+    preserve: readonly string[] = [],
   ): Promise<void> {
     const currentSecrets = await getAllWrappedPages<{
       readonly name: string;
@@ -489,7 +500,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     const removeUndeclared = collections === "strict" || secrets.length === 0;
 
     for (const secret of currentSecrets) {
-      if (removeUndeclared && !desired.has(secret.name)) {
+      if (
+        removeUndeclared && !desired.has(secret.name) &&
+        !preserve.includes(secret.name)
+      ) {
         await this.#client.request(
           "DELETE",
           base + "/secrets/" + encodeURIComponent(secret.name),

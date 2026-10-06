@@ -8,6 +8,9 @@ import {
   hashCanonical,
   inspectResource,
   type LoadedConfiguration,
+  type RuntimeReference,
+  type RuntimeReferenceDiagnostic,
+  MissingRuntimeValueError,
   type Operation,
   preflightRuntimeReferences,
   projectOwnedCurrentState,
@@ -171,6 +174,7 @@ export function createGitHubRuntime(
           resource.current,
           resource.desired,
           resource.plan.operations,
+          resource.skippedRuntimeReferences,
         ),
       );
       const after = await hashCanonical(
@@ -178,6 +182,7 @@ export function createGitHubRuntime(
           current,
           resource.desired,
           resource.plan.operations,
+          resource.skippedRuntimeReferences,
         ),
       );
 
@@ -210,6 +215,7 @@ export interface ApplyOptions {
   readonly resource?: string;
   readonly template?: string;
   readonly values?: RuntimeValueProvider;
+  readonly skipMissingValues?: boolean;
   readonly onResourceInspected?: (resource: ResourceInspection) => void;
   readonly onRepositoryApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
@@ -270,6 +276,8 @@ export async function apply(
         continue;
       }
       let runtimeValues = values;
+      const skippedRuntimeReferences: RuntimeReference[] = [];
+      const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
       if (inspection.status === "matched") {
         template = inspection.template;
@@ -278,24 +286,46 @@ export async function apply(
           loaded.templates[template],
           repository,
           values,
+          {
+            skipMissingValues: options.skipMissingValues,
+            onSkipped: (reference, diagnostic) => {
+              skippedRuntimeReferences.push(reference);
+              diagnostics.push(diagnostic);
+            },
+          },
         );
       }
 
-      const desired = await resolveDesiredState(
+      const resolvedDesired = await resolveDesiredState(
         loaded,
         repository,
         runtimeValues,
       );
-      template = desired.template;
-      templateName = desired.templateName;
+      template = resolvedDesired.template;
+      templateName = resolvedDesired.templateName;
 
-      const current = await runtime.read(desired);
-      const plan = buildPlan(current, desired);
+      const current = await runtime.read(resolvedDesired);
+      const plan = buildPlan(current, resolvedDesired, {
+        skippedRuntimeReferences,
+      });
+      const desired = withoutSkippedRuntimeValues(
+        resolvedDesired,
+        skippedRuntimeReferences,
+      );
       const evaluations = buildApplyEvaluations(
         desired,
         plan.operations,
       );
-      const executable = { desired, current, plan, evaluations };
+      const executable = {
+        desired,
+        current,
+        plan,
+        evaluations,
+        ...(diagnostics.length > 0 && { diagnostics }),
+        ...(skippedRuntimeReferences.length > 0 && {
+          skippedRuntimeReferences,
+        }),
+      };
 
       prepared.push(executable);
       await options.onPlanBuilt?.(executable);
@@ -322,6 +352,7 @@ export async function apply(
           resource.plan,
           resource.evaluations,
           resource.desired.templateName,
+          resource.diagnostics,
         ),
       );
     }
@@ -424,8 +455,100 @@ function environmentValue(name: string): string {
   const value = Deno.env.get(name);
 
   if (value === undefined) {
-    throw new Error("Missing environment value: " + name);
+    throw new MissingRuntimeValueError(name);
   }
 
   return value;
+}
+
+export function withoutSkippedRuntimeValues(
+  desired: DesiredState,
+  skipped: readonly RuntimeReference[],
+): DesiredState {
+  if (skipped.length === 0) {
+    return desired;
+  }
+
+  const actions = desired.actions === undefined
+    ? undefined
+    : {
+      ...desired.actions,
+      secrets: filterSkippedItems(
+        desired.actions.secrets,
+        skipped,
+        "actions",
+        "secret",
+        (secret) => secret.name,
+      ),
+      variables: filterSkippedItems(
+        desired.actions.variables,
+        skipped,
+        "actions",
+        "variable",
+        (variable) => variable.name,
+      ),
+    };
+  const dependabot = desired.dependabot === undefined
+    ? undefined
+    : {
+      ...desired.dependabot,
+      secrets: filterSkippedItems(
+        desired.dependabot.secrets,
+        skipped,
+        "dependabot",
+        "secret",
+        (secret) => secret.name,
+      ),
+    };
+  const environments = desired.environments?.map((environment) => ({
+    ...environment,
+    secrets: filterSkippedItems(
+      environment.secrets,
+      skipped,
+      "environment",
+      "secret",
+      (secret) => secret.name,
+      environment.name,
+    ),
+    variables: filterSkippedItems(
+      environment.variables,
+      skipped,
+      "environment",
+      "variable",
+      (variable) => variable.name,
+      environment.name,
+    ),
+  }));
+
+  return {
+    ...desired,
+    ...(actions !== undefined && { actions }),
+    ...(dependabot !== undefined && { dependabot }),
+    ...(environments !== undefined && { environments }),
+  };
+}
+
+function filterSkippedItems<T>(
+  items: readonly T[] | undefined,
+  skipped: readonly RuntimeReference[],
+  scope: RuntimeReference["scope"],
+  kind: RuntimeReference["kind"],
+  name: (item: T) => string,
+  environment?: string,
+): readonly T[] | undefined {
+  if (items === undefined) {
+    return undefined;
+  }
+
+  const skippedNames = new Set(
+    skipped.filter((reference) =>
+      reference.scope === scope && reference.kind === kind &&
+      (environment === undefined || reference.environment === environment)
+    ).map((reference) => reference.target),
+  );
+  const filtered = items.filter((item) => !skippedNames.has(name(item)));
+
+  return skippedNames.size > 0 && filtered.length === 0
+    ? undefined
+    : filtered;
 }

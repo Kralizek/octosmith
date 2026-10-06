@@ -7,7 +7,12 @@ import {
   hashEffectiveConfiguration,
   hashEffectiveTemplate,
   type LoadedConfiguration,
+  MissingRuntimeValueError,
   persistedOperationSecretSources,
+  preflightRuntimeReferences,
+  RuntimeReferenceError,
+  type RuntimeReference,
+  type RuntimeReferenceDiagnostic,
   type PersistedPlanArtifact,
   type PersistedResourcePlan,
   projectOwnedCurrentState,
@@ -15,6 +20,7 @@ import {
   restoreEvaluations,
 } from "@octosmith/octosmith";
 import type { ApplyRuntime } from "./apply.ts";
+import { withoutSkippedRuntimeValues } from "./apply.ts";
 import { executeExecutableResources } from "./execution.ts";
 
 /** Persisted-plan preflight state for one resource. */
@@ -52,6 +58,7 @@ export async function applyPersistedPlan(
   onResourceApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
   ) => void | Promise<void>,
+  options: { readonly skipMissingValues?: boolean } = {},
 ): Promise<PersistedPlanPreflight> {
   const configuration = equalContentHash(
       await hashEffectiveConfiguration(loaded.configuration),
@@ -65,7 +72,12 @@ export async function applyPersistedPlan(
   const resources: PersistedResourcePreflight[] = [];
   const prepared: ExecutableResourcePlan[] = [];
   for (const resource of artifact.resources) {
-    const inspected = await inspectResource(runtime, loaded, resource);
+    const inspected = await inspectResource(
+      runtime,
+      loaded,
+      resource,
+      options.skipMissingValues ?? false,
+    );
     resources.push({
       type: resource.type,
       name: resource.name,
@@ -88,6 +100,12 @@ export async function applyPersistedPlan(
           resource.evaluations,
           resource.operations,
         ),
+        ...(inspected.diagnostics !== undefined && {
+          diagnostics: inspected.diagnostics,
+        }),
+        ...(resource.skippedRuntimeReferences !== undefined && {
+          skippedRuntimeReferences: resource.skippedRuntimeReferences,
+        }),
       });
     }
   }
@@ -171,10 +189,12 @@ async function inspectResource(
   runtime: ApplyRuntime,
   loaded: LoadedConfiguration,
   resource: PersistedResourcePlan,
+  skipMissingValues: boolean,
 ): Promise<{
   readonly state: PersistedResourcePreflightState;
   readonly desired?: import("@octosmith/octosmith").DesiredState;
   readonly current?: import("@octosmith/octosmith").CurrentState;
+  readonly diagnostics?: readonly RuntimeReferenceDiagnostic[];
 }> {
   let metadata: import("@octosmith/octosmith").RepositoryMetadata;
 
@@ -191,7 +211,9 @@ async function inspectResource(
   }
 
   let desired: import("@octosmith/octosmith").DesiredState;
-  let secretPreflightError: unknown;
+  let runtimePreflightError: unknown;
+  const skipped: RuntimeReference[] = [];
+  const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
   try {
     const classification = classifyResource(loaded, metadata);
@@ -205,28 +227,56 @@ async function inspectResource(
 
     const template = loaded.templates[classification.template];
     const values = runtime.value;
-    for (const reference of collectRuntimeReferences(template)) {
-      if (reference.kind !== "secret") {
-        continue;
-      }
-      if (values === undefined) {
-        throw new Error(
-          'Required secret "' + reference.name +
-            '" is not available in the current context',
-        );
-      }
-      try {
-        values(reference.name);
-      } catch (error) {
-        secretPreflightError = error;
-        throw error;
+    let runtimeValues: (name: string) => string = (name) =>
+      "persisted-plan:" + name;
+    if (skipMissingValues) {
+      runtimeValues = preflightRuntimeReferences(
+        classification.template,
+        template,
+        metadata,
+        (name) => {
+          if (values === undefined) {
+            throw new MissingRuntimeValueError(name);
+          }
+          try {
+            return values(name);
+          } catch (error) {
+            runtimePreflightError = error;
+            throw error;
+          }
+        },
+        {
+          skipMissingValues: true,
+          onSkipped: (reference, diagnostic) => {
+            skipped.push(reference);
+            diagnostics.push(diagnostic);
+          },
+        },
+      );
+    } else {
+      for (
+        const reference of collectRuntimeReferences(template).filter((item) =>
+          item.kind === "secret"
+        )
+      ) {
+        if (values === undefined) {
+          throw new Error(
+            'Required secret "' + reference.name +
+              '" is not available in the current context',
+          );
+        }
+        try {
+          values(reference.name);
+        } catch (error) {
+          runtimePreflightError = error;
+          throw error;
+        }
       }
     }
 
-    desired = await resolveDesiredState(
-      loaded,
-      metadata,
-      (name) => "persisted-plan:" + name,
+    desired = withoutSkippedRuntimeValues(
+      await resolveDesiredState(loaded, metadata, runtimeValues),
+      resource.skippedRuntimeReferences ?? [],
     );
     const templateHash = await hashEffectiveTemplate(template, desired);
 
@@ -234,7 +284,10 @@ async function inspectResource(
       return { state: "template" };
     }
   } catch (error) {
-    if (secretPreflightError !== undefined) {
+    if (
+      runtimePreflightError !== undefined ||
+      error instanceof RuntimeReferenceError
+    ) {
       throw error;
     }
     return { state: "template" };
@@ -243,13 +296,19 @@ async function inspectResource(
   try {
     const current = await runtime.read(desired, resource.operations);
     const stateHash = await hashCanonical(
-      projectOwnedCurrentState(current, desired, resource.operations),
+      projectOwnedCurrentState(
+        current,
+        desired,
+        resource.operations,
+        resource.skippedRuntimeReferences,
+      ),
     );
 
     return {
       state: equalContentHash(stateHash, resource.state) ? "valid" : "state",
       desired,
       current,
+      ...(diagnostics.length > 0 && { diagnostics }),
     };
   } catch {
     return { state: "state" };

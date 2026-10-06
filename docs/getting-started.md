@@ -59,6 +59,11 @@ GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 plan --path ./github-config
 Review the plan before applying, especially when strict collection management is
 enabled.
 
+When planning or applying locally without orchestration-provided values, pass
+`--skip-missing-values` to preserve those remote values and receive a warning
+instead of failing. Available values, including explicitly empty values, are
+still reconciled normally.
+
 To persist the exact reviewed operations:
 
 ```sh

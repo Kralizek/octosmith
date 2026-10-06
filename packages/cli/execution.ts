@@ -40,6 +40,7 @@ export async function executeExecutableResources(
           resource.evaluations,
           applied.operations,
           resource.desired.templateName,
+          resource.diagnostics,
         ),
       );
 

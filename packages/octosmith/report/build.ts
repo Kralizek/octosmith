@@ -1,4 +1,7 @@
-import { RuntimeReferenceError } from "../configuration/runtime_references.ts";
+import {
+  RuntimeReferenceError,
+  type RuntimeReferenceDiagnostic,
+} from "../configuration/runtime_references.ts";
 import type { ApplyEvaluation, Plan } from "../plan/types.ts";
 import type {
   AppliedOperationLike,
@@ -12,6 +15,7 @@ export function reportPlannedRepository(
   plan: Plan,
   evaluations: readonly ApplyEvaluation[],
   templateName?: string,
+  diagnostics?: readonly RuntimeReferenceDiagnostic[],
 ): RepositoryReport {
   return {
     repository: plan.repository,
@@ -23,6 +27,7 @@ export function reportPlannedRepository(
       status: evaluation.operation === undefined ? "unchanged" : "planned",
       details: evaluation.details,
     })),
+    ...(diagnostics !== undefined && diagnostics.length > 0 && { diagnostics }),
   };
 }
 
@@ -33,6 +38,7 @@ export function reportAppliedRepository(
   evaluations: readonly ApplyEvaluation[],
   operations: readonly AppliedOperationLike[],
   templateName?: string,
+  diagnostics?: readonly RuntimeReferenceDiagnostic[],
 ): RepositoryReport {
   const applied = operations.filter((item) => item.status === "applied").length;
   const failed = operations.some((item) => item.status === "failed");
@@ -81,6 +87,7 @@ export function reportAppliedRepository(
       ? "unchanged"
       : "applied",
     items,
+    ...(diagnostics !== undefined && diagnostics.length > 0 && { diagnostics }),
   };
 }
 

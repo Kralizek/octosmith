@@ -264,24 +264,33 @@ Deno.test("plan and apply reject combining a template filter with a repository t
   }
 });
 
-Deno.test("plan reports an unknown template clearly", async () => {
+Deno.test("plan and apply accept skip-missing-values", async () => {
   const root = await authenticationConfiguration();
-  const errors: string[] = [];
   try {
-    assertEquals(
-      await main(["plan", "--path", root, "--template", "repository:missing"], {
-        credentials: { getEnv: () => "test-token" },
-        fetch: () => {
-          throw new Error("fetch must not be called");
-        },
-        writeError: (value) => errors.push(value),
-      }),
-      1,
-    );
-    assertStringIncludes(
-      errors.join("\n"),
-      "Unknown template: repository:missing",
-    );
+    for (const mode of ["plan", "apply"] as const) {
+      const errors: string[] = [];
+      assertEquals(
+        await main([
+          mode,
+          "--path",
+          root,
+          "--template",
+          "repository:missing",
+          "--skip-missing-values",
+        ], {
+          credentials: { getEnv: () => "test-token" },
+          fetch: () => {
+            throw new Error("fetch must not be called");
+          },
+          writeError: (value) => errors.push(value),
+        }),
+        1,
+      );
+      assertStringIncludes(
+        errors.join("\n"),
+        "Unknown template: repository:missing",
+      );
+    }
   } finally {
     await Deno.remove(root, { recursive: true });
   }

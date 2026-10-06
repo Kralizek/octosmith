@@ -6,6 +6,7 @@ import type {
   DesiredState,
   Operation,
 } from "../mod.ts";
+import type { RuntimeReference } from "../configuration/runtime_references.ts";
 import { persistedOperationContract } from "./operation_contract.ts";
 
 /**
@@ -22,8 +23,20 @@ export function projectOwnedCurrentState(
   current: CurrentState,
   desired: DesiredState,
   operations: readonly Operation[] = [],
+  skippedRuntimeReferences: readonly RuntimeReference[] = [],
 ): OwnedCurrentState {
   const strict = desired.collections === "strict";
+  const skipped = (
+    scope: RuntimeReference["scope"],
+    kind: RuntimeReference["kind"],
+    environment?: string,
+  ) =>
+    new Set(
+      skippedRuntimeReferences.filter((reference) =>
+        reference.scope === scope && reference.kind === kind &&
+        (environment === undefined || reference.environment === environment)
+      ).map((reference) => reference.target),
+    );
   const projected: Record<string, unknown> = {
     repository: current.repository,
   };
@@ -113,15 +126,21 @@ export function projectOwnedCurrentState(
     }
 
     if (desired.actions.secrets !== undefined && strict) {
-      actions.secrets = [...current.actions.secrets].sort();
+      const skippedNames = skipped("actions", "secret");
+      actions.secrets = current.actions.secrets
+        .filter((name) => !skippedNames.has(name))
+        .sort();
     }
 
     if (desired.actions.variables !== undefined) {
+      const skippedNames = skipped("actions", "variable");
       actions.variables = projectNamedCollection(
         current.actions.variables,
         desired.actions.variables,
         "name",
         strict,
+      ).filter((item) =>
+        !skippedNames.has(String(Reflect.get(item as object, "name")))
       );
     }
 
@@ -129,8 +148,11 @@ export function projectOwnedCurrentState(
   }
 
   if (desired.dependabot?.secrets !== undefined && strict) {
+    const skippedNames = skipped("dependabot", "secret");
     projected.dependabot = {
-      secrets: [...current.dependabot.secrets].sort(),
+      secrets: current.dependabot.secrets
+        .filter((name) => !skippedNames.has(name))
+        .sort(),
     };
   }
 
@@ -156,6 +178,7 @@ export function projectOwnedCurrentState(
       current.environments,
       desired.environments,
       strict,
+      skippedRuntimeReferences,
     );
   }
 
@@ -292,11 +315,24 @@ function projectEnvironments(
   current: CurrentState["environments"],
   desired: NonNullable<DesiredState["environments"]>,
   strict: boolean,
+  skippedRuntimeReferences: readonly RuntimeReference[],
 ): readonly unknown[] {
   const desiredByName = new Map(desired.map((item) => [item.name, item]));
 
   return current.flatMap((environment) => {
     const owned = desiredByName.get(environment.name);
+    const skippedSecrets = new Set(
+      skippedRuntimeReferences.filter((reference) =>
+        reference.scope === "environment" && reference.kind === "secret" &&
+        reference.environment === environment.name
+      ).map((reference) => reference.target),
+    );
+    const skippedVariables = new Set(
+      skippedRuntimeReferences.filter((reference) =>
+        reference.scope === "environment" && reference.kind === "variable" &&
+        reference.environment === environment.name
+      ).map((reference) => reference.target),
+    );
 
     if (owned === undefined) {
       return strict ? [{ name: environment.name }] : [];
@@ -306,7 +342,9 @@ function projectEnvironments(
       name: environment.name,
       ...(owned.secrets !== undefined &&
         (strict || owned.secrets.length === 0) && {
-        secrets: [...environment.secrets].sort(),
+        secrets: environment.secrets
+          .filter((name) => !skippedSecrets.has(name))
+          .sort(),
       }),
       ...(owned.variables !== undefined && {
         variables: projectNamedCollection(
@@ -314,6 +352,8 @@ function projectEnvironments(
           owned.variables,
           "name",
           strict || owned.variables.length === 0,
+        ).filter((item) =>
+          !skippedVariables.has(String(Reflect.get(item as object, "name")))
         ),
       }),
     }];

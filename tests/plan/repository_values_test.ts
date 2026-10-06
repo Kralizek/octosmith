@@ -138,6 +138,94 @@ Deno.test("Dependabot secrets are independent from Actions secrets", () => {
   });
 });
 
+Deno.test("skipped runtime values are preserved across strict value scopes", () => {
+  const current = currentState({
+    actions: {
+      secrets: ["ACTIONS_SECRET"],
+      variables: [{ name: "ACTIONS_VARIABLE", value: "remote" }],
+    },
+    dependabot: { secrets: ["DEPENDABOT_SECRET"] },
+    environments: [{
+      name: "production",
+      secrets: ["ENVIRONMENT_SECRET"],
+      variables: [
+        { name: "ENVIRONMENT_VARIABLE", value: "remote" },
+        { name: "REMOVE", value: "old" },
+      ],
+    }],
+  });
+  const desired = {
+    repository: "sample",
+    template: "code",
+    collections: "strict",
+    actions: { secrets: [], variables: [] },
+    dependabot: { secrets: [] },
+    environments: [{
+      name: "production",
+      secrets: [],
+      variables: [{ name: "SET", value: "new" }],
+    }],
+  } as const;
+
+  assertEquals(
+    buildPlan(current, desired, {
+      skippedRuntimeReferences: [
+        {
+          kind: "secret",
+          name: "ACTIONS_SECRET",
+          target: "ACTIONS_SECRET",
+          scope: "actions",
+          path: "repository.actions.secrets[0]",
+        },
+        {
+          kind: "variable",
+          name: "ACTIONS_VARIABLE",
+          target: "ACTIONS_VARIABLE",
+          scope: "actions",
+          path: "repository.actions.variables[0]",
+        },
+        {
+          kind: "secret",
+          name: "DEPENDABOT_SECRET",
+          target: "DEPENDABOT_SECRET",
+          scope: "dependabot",
+          path: "repository.dependabot.secrets[0]",
+        },
+        {
+          kind: "secret",
+          name: "ENVIRONMENT_SECRET",
+          target: "ENVIRONMENT_SECRET",
+          scope: "environment",
+          environment: "production",
+          path: "repository.environments[0].secrets[0]",
+        },
+        {
+          kind: "variable",
+          name: "ENVIRONMENT_VARIABLE",
+          target: "ENVIRONMENT_VARIABLE",
+          scope: "environment",
+          environment: "production",
+          path: "repository.environments[0].variables[0]",
+        },
+      ],
+    }),
+    {
+      repository: "sample",
+      operations: [{
+        type: "update-environment",
+        environment: {
+          name: "production",
+          secrets: [],
+          variables: [{ name: "SET", value: "new" }],
+        },
+        collections: "strict",
+        preserveSecrets: ["ENVIRONMENT_SECRET"],
+        preserveVariables: ["ENVIRONMENT_VARIABLE"],
+      }],
+    },
+  );
+});
+
 Deno.test("Actions and Dependabot values reject duplicate desired names", () => {
   assertThrows(
     () =>

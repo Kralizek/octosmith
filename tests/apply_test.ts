@@ -6,6 +6,7 @@ import {
   type Plan,
   type RepositoryMetadata,
   type RepositoryReport,
+  MissingRuntimeValueError,
 } from "@octosmith/octosmith";
 import type {
   ApplyPlanResult,
@@ -136,7 +137,8 @@ Deno.test("apply rejects resource and template targets before discovery", async 
   } finally {
     await Deno.remove(root, { recursive: true });
   }
-});
+  },
+);
 
 Deno.test("apply rejects an unknown template before discovery", async () => {
   const runtime = new FakeRuntime([]);
@@ -182,6 +184,85 @@ Deno.test("apply apply executes the fresh plan", async () => {
 
     assertEquals(results[0].status, "applied");
     assertEquals(runtime.applied.length, 1);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test(
+  "skip-missing-values preserves unavailable runtime values in plan and apply",
+  async () => {
+    const root = await runtimeValuesConfigurationDirectory();
+    try {
+      for (const mode of ["plan", "apply"] as const) {
+        const runtime = new FakeRuntime([metadata("sample")]);
+        const loaded = await loadConfigurationDirectory(root);
+        const results: RepositoryReport[] = [];
+        const planned: Plan[] = [];
+
+        await apply(runtime, loaded, {
+          mode,
+          skipMissingValues: true,
+          values: (name) => {
+            if (name === "AVAILABLE") return "";
+            throw new MissingRuntimeValueError(name);
+          },
+          onRepositoryApplied: (report) => {
+            results.push(report);
+          },
+          onPlanBuilt: (resource) => {
+            planned.push(resource.plan);
+          },
+        });
+
+        const report = results[0];
+        assertEquals(report.diagnostics?.length, 5);
+        assertEquals(
+          report.diagnostics?.every((diagnostic) =>
+            diagnostic.severity === "warning" &&
+            diagnostic.code.startsWith("skipped_")
+          ),
+          true,
+        );
+        assertEquals(report.diagnostics?.[0].name, "MISSING_VARIABLE");
+        assertEquals(planned.length, 1);
+        assertEquals(planned[0].operations, [{
+          type: "set-actions-variable",
+          variable: { name: "AVAILABLE", value: "" },
+        }]);
+        if (mode === "apply") {
+          assertEquals(runtime.applied[0].operations, [{
+            type: "set-actions-variable",
+            variable: { name: "AVAILABLE", value: "" },
+          }]);
+        }
+      }
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+});
+
+Deno.test("skip-missing-values does not swallow other runtime failures", async () => {
+  const root = await runtimeValuesConfigurationDirectory();
+  try {
+    const runtime = new FakeRuntime([metadata("sample")]);
+    const loaded = await loadConfigurationDirectory(root);
+    const results: RepositoryReport[] = [];
+
+    await apply(runtime, loaded, {
+      mode: "plan",
+      skipMissingValues: true,
+      values: () => {
+        throw new Error("provider outage");
+      },
+      onRepositoryApplied: (report) => {
+        results.push(report);
+      },
+    });
+
+    assertEquals(results[0].status, "failed");
+    assertEquals(results[0].error, "provider outage");
+    assertEquals(results[0].diagnostics, undefined);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -476,6 +557,44 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
     ].join("\n"),
   );
 
+  return root;
+}
+
+async function runtimeValuesConfigurationDirectory(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      '  scope: { include: { names: ["sample"] } }',
+      "  settings:",
+      "    collection_management: strict",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/code.yml",
+    [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      '  include: { names: ["sample"] }',
+      "repository:",
+      "  actions:",
+      "    variables: [AVAILABLE, MISSING_VARIABLE]",
+      "    secrets: [MISSING_ACTIONS_SECRET]",
+      "  dependabot:",
+      "    secrets: [MISSING_DEPENDABOT_SECRET]",
+      "  environments:",
+      "    - name: production",
+      "      variables: [MISSING_ENVIRONMENT_VARIABLE]",
+      "      secrets: [MISSING_ENVIRONMENT_SECRET]",
+      "",
+    ].join("\n"),
+  );
   return root;
 }
 

@@ -169,6 +169,8 @@ export interface UpdateEnvironmentOperation {
   readonly type: "update-environment";
   readonly environment: DesiredEnvironment;
   readonly collections: CollectionManagementMode;
+  readonly preserveSecrets?: readonly string[];
+  readonly preserveVariables?: readonly string[];
 }
 
 /** Describes delete environment operation. */

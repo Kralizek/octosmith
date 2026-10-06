@@ -33,6 +33,89 @@ Deno.test("canonical hashing is independent of object key order", async () => {
   );
 });
 
+Deno.test("persisted state projection excludes skipped runtime-backed values", () => {
+  const left = currentState({
+    actions: {
+      secrets: ["ACTIONS_SECRET"],
+      variables: [{ name: "ACTIONS_VARIABLE", value: "before" }],
+    },
+    dependabot: { secrets: ["DEPENDABOT_SECRET"] },
+    environments: [{
+      name: "production",
+      secrets: ["ENVIRONMENT_SECRET"],
+      variables: [{ name: "ENVIRONMENT_VARIABLE", value: "before" }],
+    }],
+  });
+  const right = currentState({
+    actions: {
+      secrets: ["ACTIONS_SECRET"],
+      variables: [{ name: "ACTIONS_VARIABLE", value: "after" }],
+    },
+    dependabot: { secrets: ["DEPENDABOT_SECRET"] },
+    environments: [{
+      name: "production",
+      secrets: ["ENVIRONMENT_SECRET"],
+      variables: [{ name: "ENVIRONMENT_VARIABLE", value: "after" }],
+    }],
+  });
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:code",
+    collections: "strict",
+    actions: { secrets: [], variables: [] },
+    dependabot: { secrets: [] },
+    environments: [{
+      name: "production",
+      secrets: [],
+      variables: [],
+    }],
+  };
+  const skipped = [
+    {
+      kind: "secret",
+      name: "ACTIONS_SECRET",
+      target: "ACTIONS_SECRET",
+      scope: "actions",
+      path: "repository.actions.secrets[0]",
+    },
+    {
+      kind: "variable",
+      name: "ACTIONS_VARIABLE",
+      target: "ACTIONS_VARIABLE",
+      scope: "actions",
+      path: "repository.actions.variables[0]",
+    },
+    {
+      kind: "secret",
+      name: "DEPENDABOT_SECRET",
+      target: "DEPENDABOT_SECRET",
+      scope: "dependabot",
+      path: "repository.dependabot.secrets[0]",
+    },
+    {
+      kind: "secret",
+      name: "ENVIRONMENT_SECRET",
+      target: "ENVIRONMENT_SECRET",
+      scope: "environment",
+      environment: "production",
+      path: "repository.environments[0].secrets[0]",
+    },
+    {
+      kind: "variable",
+      name: "ENVIRONMENT_VARIABLE",
+      target: "ENVIRONMENT_VARIABLE",
+      scope: "environment",
+      environment: "production",
+      path: "repository.environments[0].variables[0]",
+    },
+  ] as const;
+
+  assertEquals(
+    projectOwnedCurrentState(left, desired, [], skipped),
+    projectOwnedCurrentState(right, desired, [], skipped),
+  );
+});
+
 Deno.test("replay contract captures sparse apply-time live state", () => {
   const current = currentState({
     rulesets: [{

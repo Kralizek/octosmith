@@ -138,6 +138,10 @@ function createCli(
       .option("-v, --verbose", "Show additional result details.")
       .option("--trace", "Emit GitHub API request traces to stderr.")
       .option(
+        "--skip-missing-values",
+        "Skip runtime-backed values that are unavailable locally.",
+      )
+      .option(
         "--events-output <path:string>",
         "Write Hooksmith resource events as NDJSON.",
       );
@@ -162,6 +166,7 @@ function createCli(
           readonly plan?: string;
           readonly out?: string;
           readonly template?: string;
+          readonly skipMissingValues?: boolean;
         };
 
         if (modeOptions.template === "") {
@@ -256,6 +261,7 @@ function createCli(
                 loaded,
                 artifact,
                 onRepositoryApplied,
+                { skipMissingValues: modeOptions.skipMissingValues },
               );
             } catch (error) {
               if (error instanceof PersistedPlanStaleError) {
@@ -275,6 +281,7 @@ function createCli(
               mode,
               ...(resource !== undefined && { resource }),
               ...(template !== undefined && { template }),
+              skipMissingValues: modeOptions.skipMissingValues,
               onRepositoryApplied,
               onResourceInspected: (resource) =>
                 inspectedResources.push(resource),

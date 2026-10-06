@@ -9,6 +9,9 @@ import type {
 export interface RuntimeReference {
   readonly kind: "variable" | "secret";
   readonly name: string;
+  readonly target: string;
+  readonly scope: "actions" | "dependabot" | "environment";
+  readonly environment?: string;
   readonly path: string;
 }
 
@@ -19,7 +22,9 @@ export interface RuntimeReferenceDiagnostic {
     | "unresolved_variable"
     | "unresolved_secret"
     | "missing_variable"
-    | "missing_secret";
+    | "missing_secret"
+    | "skipped_variable"
+    | "skipped_secret";
   readonly name: string;
   readonly template: string;
   readonly path: string;
@@ -37,6 +42,14 @@ export class RuntimeReferenceError extends Error {
   }
 }
 
+/** Error raised when a runtime provider confirms that a value is unavailable. */
+export class MissingRuntimeValueError extends Error {
+  constructor(readonly valueName: string) {
+    super("Missing environment value: " + valueName);
+    this.name = "MissingRuntimeValueError";
+  }
+}
+
 /** Collect runtime-backed variables and secrets referenced by a template. */
 export function collectRuntimeReferences(
   template: RepositoryTemplate,
@@ -48,16 +61,19 @@ export function collectRuntimeReferences(
     references,
     actions?.variables,
     "repository.actions.variables",
+    "actions",
   );
   collectSecrets(
     references,
     actions?.secrets,
     "repository.actions.secrets",
+    "actions",
   );
   collectSecrets(
     references,
     template.repository.dependabot?.secrets,
     "repository.dependabot.secrets",
+    "dependabot",
   );
 
   for (
@@ -68,11 +84,15 @@ export function collectRuntimeReferences(
       references,
       environment.variables,
       `repository.environments[${environmentIndex}].variables`,
+      "environment",
+      environment.name,
     );
     collectSecrets(
       references,
       environment.secrets,
       `repository.environments[${environmentIndex}].secrets`,
+      "environment",
+      environment.name,
     );
   }
 
@@ -90,20 +110,37 @@ export function preflightRuntimeReferences(
   template: RepositoryTemplate,
   repository: RepositoryMetadata,
   values: (name: string) => string,
+  options: {
+    readonly skipMissingValues?: boolean;
+    readonly onSkipped?: (
+      reference: RuntimeReference,
+      diagnostic: RuntimeReferenceDiagnostic,
+    ) => void;
+  } = {},
 ): (name: string) => string {
   const resolved = new Map<string, string>();
+  const references = collectRuntimeReferences(template);
 
-  for (const reference of collectRuntimeReferences(template)) {
+  for (const reference of references) {
     if (resolved.has(reference.name)) {
       continue;
     }
 
     try {
       resolved.set(reference.name, values(reference.name));
-    } catch {
-      throw new RuntimeReferenceError({
-        severity: "error",
-        code: reference.kind === "variable"
+    } catch (error) {
+      if (!isMissingRuntimeValueError(error, reference.name)) {
+        throw error;
+      }
+
+      const skipped = options.skipMissingValues === true;
+      const diagnostic: RuntimeReferenceDiagnostic = {
+        severity: skipped ? "warning" : "error",
+        code: skipped
+          ? reference.kind === "variable"
+            ? "skipped_variable"
+            : "skipped_secret"
+          : reference.kind === "variable"
           ? "missing_variable"
           : "missing_secret",
         name: reference.name,
@@ -113,6 +150,26 @@ export function preflightRuntimeReferences(
           type: "repository",
           name: repository.name,
         },
+      };
+
+      if (skipped) {
+        resolved.set(reference.name, "");
+        for (const skippedReference of references) {
+          if (skippedReference.name === reference.name) {
+            options.onSkipped?.(skippedReference, {
+              ...diagnostic,
+              code: skippedReference.kind === "variable"
+                ? "skipped_variable"
+                : "skipped_secret",
+              path: skippedReference.path,
+            });
+          }
+        }
+        continue;
+      }
+
+      throw new RuntimeReferenceError({
+        ...diagnostic,
       });
     }
   }
@@ -121,6 +178,12 @@ export function preflightRuntimeReferences(
     const value = resolved.get(name);
     return value === undefined ? values(name) : value;
   };
+}
+
+function isMissingRuntimeValueError(error: unknown, name: string): boolean {
+  return error instanceof MissingRuntimeValueError ||
+    error instanceof Error &&
+      error.message === "Missing environment value: " + name;
 }
 
 /** Build static warnings for runtime-backed references without resolving them. */
@@ -149,6 +212,9 @@ export function describeRuntimeReferenceDiagnostic(
   diagnostic: Pick<RuntimeReferenceDiagnostic, "severity" | "code" | "name">,
 ): string {
   const kind = diagnostic.code.endsWith("_secret") ? "secret" : "variable";
+  if (diagnostic.code.startsWith("skipped_")) {
+    return `Skipped ${kind} "${diagnostic.name}": runtime value unavailable.`;
+  }
   const availability = diagnostic.severity === "error"
     ? "is not available in the current context"
     : "requires a runtime value";
@@ -192,18 +258,26 @@ function collectVariables(
   target: RuntimeReference[],
   variables: readonly VariableConfiguration[] | undefined,
   path: string,
+  scope: "actions" | "environment",
+  environment?: string,
 ): void {
   for (const [index, variable] of (variables ?? []).entries()) {
     if (typeof variable === "string") {
       target.push({
         kind: "variable",
         name: variable,
+        target: variable,
+        scope,
+        ...(environment !== undefined && { environment }),
         path: `${path}[${index}]`,
       });
     } else if ("from" in variable) {
       target.push({
         kind: "variable",
         name: variable.from,
+        target: variable.to,
+        scope,
+        ...(environment !== undefined && { environment }),
         path: `${path}[${index}]`,
       });
     }
@@ -214,11 +288,16 @@ function collectSecrets(
   target: RuntimeReference[],
   secrets: readonly SecretConfiguration[] | undefined,
   path: string,
+  scope: "actions" | "dependabot" | "environment",
+  environment?: string,
 ): void {
   for (const [index, secret] of (secrets ?? []).entries()) {
     target.push({
       kind: "secret",
       name: typeof secret === "string" ? secret : secret.from,
+      target: typeof secret === "string" ? secret : secret.to,
+      scope,
+      ...(environment !== undefined && { environment }),
       path: `${path}[${index}]`,
     });
   }

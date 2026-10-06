@@ -63,6 +63,11 @@ class EnvironmentClient implements GitHubClient {
 
       return Promise.resolve({ variables } as T);
     }
+    if (path.endsWith("/secrets")) {
+      return Promise.resolve({
+        secrets: [{ name: "KEEP_SECRET" }, { name: "REMOVE_SECRET" }],
+      } as T);
+    }
 
     throw new Error("Unexpected GET " + path);
   }
@@ -100,8 +105,11 @@ Deno.test("environment sync preserves sparse siblings and paginates strict clean
   await strictSink.apply("sample", {
     type: "update-environment",
     collections: "strict",
+    preserveSecrets: ["KEEP_SECRET"],
+    preserveVariables: ["LATE"],
     environment: {
       name: "production",
+      secrets: [],
       variables: [{ name: "KEEP", value: "new" }],
     },
   });
@@ -116,8 +124,27 @@ Deno.test("environment sync preserves sparse siblings and paginates strict clean
   assert(
     strictClient.calls.some((call) =>
       call.method === "DELETE" &&
-      call.path.endsWith("/variables/LATE")
+      call.path.endsWith("/variables/EXTRA_0")
     ),
+  );
+  assertEquals(
+    strictClient.calls.some((call) =>
+      call.method === "DELETE" && call.path.endsWith("/variables/LATE")
+    ),
+    false,
+  );
+  assert(
+    strictClient.calls.some((call) =>
+      call.method === "DELETE" &&
+      call.path.endsWith("/secrets/REMOVE_SECRET")
+    ),
+  );
+  assertEquals(
+    strictClient.calls.some((call) =>
+      call.method === "DELETE" &&
+      call.path.endsWith("/secrets/KEEP_SECRET")
+    ),
+    false,
   );
 });
 

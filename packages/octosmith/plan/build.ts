@@ -29,12 +29,16 @@ import type {
   DesiredEnvironment,
   DesiredState,
 } from "../state/types.ts";
+import type { RuntimeReference } from "../configuration/runtime_references.ts";
 import type { ApplyEvaluation, Operation, Plan } from "./types.ts";
 
 /** Build the operations required to move current state to desired state. */
 export function buildPlan(
   current: CurrentState,
   desired: DesiredState,
+  options: {
+    readonly skippedRuntimeReferences?: readonly RuntimeReference[];
+  } = {},
 ): Plan {
   if (current.repository !== desired.repository) {
     throw new Error(
@@ -45,6 +49,7 @@ export function buildPlan(
 
   const operations: Operation[] = [];
   const collections = desired.collections ?? "explicit";
+  const skipped = options.skippedRuntimeReferences ?? [];
 
   if (
     desired.files?.length &&
@@ -58,11 +63,33 @@ export function buildPlan(
 
   planRepositorySettings(current, desired, operations);
   planCustomProperties(current, desired, operations, collections);
-  planActions(current, desired, operations, collections);
-  planDependabot(current, desired, operations, collections);
+  planActions(
+    current,
+    desired,
+    operations,
+    collections,
+    skipped.filter((reference) => reference.scope === "actions"),
+  );
+  planDependabot(
+    current,
+    desired,
+    operations,
+    collections,
+    new Set(
+      skipped.filter((reference) =>
+        reference.scope === "dependabot" && reference.kind === "secret"
+      ).map((reference) => reference.target),
+    ),
+  );
   planTeams(current, desired, operations, collections);
   planRulesets(current, desired, operations, collections);
-  planEnvironments(current, desired, operations, collections);
+  planEnvironments(
+    current,
+    desired,
+    operations,
+    collections,
+    skipped.filter((reference) => reference.scope === "environment"),
+  );
   planFiles(current, desired, operations);
 
   return {
@@ -130,6 +157,7 @@ function planActions(
   desired: DesiredState,
   operations: Operation[],
   collections: CollectionManagementMode,
+  skipped: readonly RuntimeReference[],
 ): void {
   if (!desired.actions) {
     return;
@@ -155,8 +183,24 @@ function planActions(
     }
   }
 
-  planActionsSecrets(current, desired, operations, collections);
-  planActionsVariables(current, desired, operations, collections);
+  planActionsSecrets(
+    current,
+    desired,
+    operations,
+    collections,
+    new Set(skipped.filter((reference) => reference.kind === "secret").map(
+      (reference) => reference.target,
+    )),
+  );
+  planActionsVariables(
+    current,
+    desired,
+    operations,
+    collections,
+    new Set(skipped.filter((reference) => reference.kind === "variable").map(
+      (reference) => reference.target,
+    )),
+  );
 }
 
 function planTeams(
@@ -203,6 +247,7 @@ function planActionsSecrets(
   desired: DesiredState,
   operations: Operation[],
   collections: CollectionManagementMode,
+  skipped: ReadonlySet<string>,
 ): void {
   if (desired.actions?.secrets === undefined) {
     return;
@@ -219,7 +264,7 @@ function planActionsSecrets(
     );
 
     for (const secret of current.actions.secrets) {
-      if (!desiredNames.has(secret)) {
+      if (!desiredNames.has(secret) && !skipped.has(secret)) {
         operations.push({
           type: "remove-actions-secret",
           secret,
@@ -231,6 +276,7 @@ function planActionsSecrets(
   // GitHub exposes secret names but never values, so declared secrets must be
   // written on every apply to guarantee their desired runtime value.
   for (const secret of desired.actions.secrets) {
+    if (skipped.has(secret.name)) continue;
     operations.push({
       type: "set-actions-secret",
       secret,
@@ -243,6 +289,7 @@ function planActionsVariables(
   desired: DesiredState,
   operations: Operation[],
   collections: CollectionManagementMode,
+  skipped: ReadonlySet<string>,
 ): void {
   if (desired.actions?.variables === undefined) {
     return;
@@ -259,7 +306,7 @@ function planActionsVariables(
     );
 
     for (const variable of current.actions.variables) {
-      if (!desiredNames.has(variable.name)) {
+      if (!desiredNames.has(variable.name) && !skipped.has(variable.name)) {
         operations.push({
           type: "remove-actions-variable",
           name: variable.name,
@@ -273,6 +320,7 @@ function planActionsVariables(
   );
 
   for (const variable of desired.actions.variables) {
+    if (skipped.has(variable.name)) continue;
     const actual = currentByName.get(variable.name);
 
     if (!actual || actual.value !== variable.value) {
@@ -289,6 +337,7 @@ function planDependabot(
   desired: DesiredState,
   operations: Operation[],
   collections: CollectionManagementMode,
+  skipped: ReadonlySet<string>,
 ): void {
   if (desired.dependabot?.secrets === undefined) {
     return;
@@ -305,7 +354,7 @@ function planDependabot(
     );
 
     for (const secret of current.dependabot.secrets) {
-      if (!desiredNames.has(secret)) {
+      if (!desiredNames.has(secret) && !skipped.has(secret)) {
         operations.push({
           type: "remove-dependabot-secret",
           secret,
@@ -315,6 +364,7 @@ function planDependabot(
   }
 
   for (const secret of desired.dependabot.secrets) {
+    if (skipped.has(secret.name)) continue;
     operations.push({
       type: "set-dependabot-secret",
       secret,
@@ -381,6 +431,7 @@ function planEnvironments(
   desired: DesiredState,
   operations: Operation[],
   collections: CollectionManagementMode,
+  skipped: readonly RuntimeReference[],
 ): void {
   if (desired.environments === undefined) {
     return;
@@ -423,21 +474,69 @@ function planEnvironments(
 
   for (const environment of desired.environments) {
     const actual = currentByName.get(environment.name);
+    const skippedSecrets = new Set(
+      skipped.filter((reference) =>
+        reference.environment === environment.name && reference.kind === "secret"
+      ).map((reference) => reference.target),
+    );
+    const skippedVariables = new Set(
+      skipped.filter((reference) =>
+        reference.environment === environment.name &&
+        reference.kind === "variable"
+      ).map((reference) => reference.target),
+    );
+    const filteredEnvironment: DesiredEnvironment = {
+      name: environment.name,
+      ...(environment.secrets !== undefined &&
+        (skippedSecrets.size === 0 || collections === "strict" ||
+          environment.secrets.some((secret) =>
+            !skippedSecrets.has(secret.name)
+          )) && {
+        secrets: environment.secrets.filter((secret) =>
+          !skippedSecrets.has(secret.name)
+        ),
+      }),
+      ...(environment.variables !== undefined &&
+        (skippedVariables.size === 0 || collections === "strict" ||
+          environment.variables.some((variable) =>
+            !skippedVariables.has(variable.name)
+          )) && {
+        variables: environment.variables.filter((variable) =>
+          !skippedVariables.has(variable.name)
+        ),
+      }),
+    };
 
     if (!actual) {
+      if (
+        skipped.some((reference) =>
+          reference.environment === environment.name
+        ) &&
+        (filteredEnvironment.secrets?.length ?? 0) === 0 &&
+        (filteredEnvironment.variables?.length ?? 0) === 0
+      ) {
+        continue;
+      }
+
       operations.push({
         type: "create-environment",
-        environment: materializeEnvironment(environment),
+        environment: materializeEnvironment(filteredEnvironment),
       });
 
       continue;
     }
 
-    if (environmentNeedsUpdate(actual, environment, collections)) {
+    if (environmentNeedsUpdate(actual, filteredEnvironment, collections)) {
       operations.push({
         type: "update-environment",
-        environment,
+        environment: filteredEnvironment,
         collections,
+        ...(collections === "strict" && skippedSecrets.size > 0 && {
+          preserveSecrets: [...skippedSecrets].sort(),
+        }),
+        ...(collections === "strict" && skippedVariables.size > 0 && {
+          preserveVariables: [...skippedVariables].sort(),
+        }),
       });
     }
   }
