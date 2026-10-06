@@ -2,7 +2,6 @@ import {
   buildPlan,
   type CurrentState,
   loadConfigurationDirectory,
-  loadConfigurationDirectoryCollectingIssues,
   type LoadedConfiguration,
   matchesSelector,
   type PropertyValue,
@@ -14,6 +13,7 @@ import {
   runtimeReferenceWarnings,
   type Scope,
 } from "../mod.ts";
+import { loadConfigurationDirectoryCollectingIssues } from "./load.ts";
 
 /**
  * Validate a configuration directory without consulting GitHub.
