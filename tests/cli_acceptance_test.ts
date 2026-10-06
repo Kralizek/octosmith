@@ -2,7 +2,6 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { stringify } from "@std/yaml";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
 
-
 Deno.test("template list reports configured templates with source paths", async () => {
   const root = await templateListConfigurationDirectory();
   try {
