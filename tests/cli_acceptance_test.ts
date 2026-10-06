@@ -2682,6 +2682,48 @@ Deno.test("template validate reports unresolved runtime references without readi
   }
 });
 
+Deno.test("template validate checks secret environment presence without exposing values", async () => {
+  const root = await secretConfigurationDirectory();
+  const previous = Deno.env.get("TOKEN");
+  const secret = "validation-secret-must-not-appear";
+
+  try {
+    Deno.env.set("TOKEN", secret);
+
+    for (const format of ["text", "json"] as const) {
+      const output: string[] = [];
+      const errors: string[] = [];
+      assertEquals(
+        await main(
+          ["template", "validate", "--format", format, "--path", root],
+          {
+            write: (value) => output.push(value),
+            writeError: (value) => errors.push(value),
+          },
+        ),
+        0,
+      );
+
+      const rendered = output.join("\n");
+      assertEquals(errors, []);
+      assertEquals(rendered.includes("unresolved_secret"), false);
+      assertEquals(rendered.includes(secret), false);
+      if (format === "text") {
+        assertStringIncludes(rendered, "Configuration is valid.");
+      } else {
+        assertEquals(JSON.parse(rendered), { valid: true, diagnostics: [] });
+      }
+    }
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("TOKEN");
+    } else {
+      Deno.env.set("TOKEN", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("persisted apply preflights secret sources stored in operations", async () => {
   const root = await secretConfigurationDirectory();
   const planPath = root + "/plan.json";
