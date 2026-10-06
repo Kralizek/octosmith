@@ -43,8 +43,8 @@ export interface ConfigurationValidationResult {
   readonly issues: readonly ConfigurationValidationIssue[];
 }
 
-/** Validate a configuration directory and collect all semantic issues after loading succeeds. */
-export async function collectConfigurationValidation(
+/** Validate a configuration directory and return all independently detectable issues. */
+export async function validateConfigurationDirectoryDetailed(
   root: string,
 ): Promise<ConfigurationValidationResult> {
   const loading = await loadConfigurationDirectoryCollectingIssues(root);
@@ -59,8 +59,7 @@ export async function collectConfigurationValidation(
   };
 }
 
-/** Validate a loaded configuration and collect all independently detectable issues. */
-export async function collectLoadedConfigurationValidation(
+async function collectLoadedConfigurationValidation(
   loaded: LoadedConfiguration,
   selectedTemplate?: string,
   templateSetComplete = true,
