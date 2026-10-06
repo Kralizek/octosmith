@@ -57,6 +57,7 @@ Deno.test("OpenCLI contract tracks the implemented root command surface", async 
       "octosmith resource list",
       "octosmith resource create",
       "octosmith template",
+      "octosmith template list",
       "octosmith template validate",
       "octosmith template permissions",
     ],
@@ -142,6 +143,7 @@ Deno.test("OpenCLI contract includes representative canonical examples", async (
       "octosmith apply",
       "octosmith resource list",
       "octosmith resource create",
+      "octosmith template list",
       "octosmith template validate",
       "octosmith template permissions",
     ]
@@ -151,6 +153,20 @@ Deno.test("OpenCLI contract includes representative canonical examples", async (
       true,
     );
   }
+});
+
+Deno.test("OpenCLI template list options match the implemented command", async () => {
+  const document = await loadContract();
+  const command = document.commands["octosmith template list"];
+  assertEquals(
+    command.flags?.map((flag) => flag.name),
+    ["path", "format"],
+  );
+  assertEquals(command.flags?.[0].aliases, ["p"]);
+  assertEquals(
+    command.flags?.[1].choices?.map(({ value }) => value),
+    ["text", "json"],
+  );
 });
 
 Deno.test("OpenCLI permission options match the implemented template command", async () => {

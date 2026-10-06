@@ -91,6 +91,9 @@ CLI. Use `--template <template>` with `plan` or `apply` to target all
 repositories classified by one template, or pass a repository name directly to
 target one repository.
 
+`template list` is offline and reports each template's canonical identity,
+optional display name, and source file path relative to the configuration root.
+
 See the [CLI package README](packages/cli/README.md) for command options,
 targeted runs, output formats, exit behavior, and event output.
 

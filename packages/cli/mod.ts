@@ -16,6 +16,7 @@ import {
   type GitHubPermissionRequirement,
   inspectResource,
   loadConfigurationDirectory,
+  type LoadedConfiguration,
   parsePersistedPlanArtifact,
   renderReport,
   renderResourceInspection,
@@ -410,6 +411,26 @@ function createCli(
     new Command()
       .description("Template operations.")
       .command(
+        "list",
+        new Command()
+          .description("List configured repository templates.")
+          .option("-p, --path <path:string>", "Configuration directory.", {
+            default: ".",
+          })
+          .option("--format <format:string>", "Output format: text or json.", {
+            default: "text",
+          })
+          .action(async (commandOptions) => {
+            const format = parseOutputFormat(commandOptions.format);
+            const loaded = await loadConfigurationDirectory(
+              commandOptions.path,
+            );
+            await validateLoadedConfiguration(loaded);
+            const result = listTemplates(loaded);
+            write(renderOutput(format, result, renderTemplateList));
+          }),
+      )
+      .command(
         "validate",
         new Command()
           .description(
@@ -467,6 +488,72 @@ function createCli(
   );
 
   return root;
+}
+
+interface TemplateListEntry {
+  readonly identity: string;
+  readonly name: string | null;
+  readonly path: string;
+}
+
+interface TemplateListResult {
+  readonly templates: readonly TemplateListEntry[];
+  readonly summary: {
+    readonly total: number;
+  };
+}
+
+function listTemplates(loaded: LoadedConfiguration): TemplateListResult {
+  const templates = Object.entries(loaded.templates)
+    .sort(([left], [right]) => compareCodeUnits(left, right))
+    .map(([identity, template]) => {
+      const path = loaded.templatePaths?.[identity];
+      if (path === undefined) {
+        throw new Error("Template source path is unavailable: " + identity);
+      }
+
+      return {
+        identity,
+        name: template.name ?? null,
+        path,
+      };
+    });
+
+  return {
+    templates,
+    summary: { total: templates.length },
+  };
+}
+
+function compareCodeUnits(left: string, right: string): number {
+  return left < right ? -1 : left > right ? 1 : 0;
+}
+
+function renderTemplateList(result: TemplateListResult): string {
+  const rows = result.templates.map((template) => [
+    template.identity,
+    template.name ?? "-",
+    template.path,
+  ]);
+  const headers = ["TEMPLATE", "NAME", "PATH"];
+  const widths = headers.map((header, index) =>
+    Math.max(
+      header.length,
+      ...rows.map((row) => row[index].length),
+    )
+  );
+  const line = (values: readonly string[]) =>
+    values.map((value, index) => value.padEnd(widths[index])).join("  ")
+      .trimEnd();
+
+  return [
+    line(headers),
+    ...rows.map(line),
+    "",
+    `Summary: ${result.summary.total} template${
+      result.summary.total === 1 ? "" : "s"
+    }`,
+  ].join("\n");
 }
 
 function renderPermissionRequirements(
