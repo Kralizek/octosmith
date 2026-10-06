@@ -139,21 +139,25 @@ export function runtimeReferenceWarnings(
   }));
 }
 
-/** Render a runtime-reference diagnostic without exposing values. */
-export function renderRuntimeReferenceDiagnostic(
-  diagnostic: RuntimeReferenceDiagnostic,
+/** Render the summary line for a runtime-reference diagnostic. */
+export function describeRuntimeReferenceDiagnostic(
+  diagnostic: Pick<RuntimeReferenceDiagnostic, "severity" | "code" | "name">,
 ): string {
   const kind = diagnostic.code.endsWith("_secret") ? "secret" : "variable";
   const availability = diagnostic.severity === "error"
     ? "is not available in the current context"
     : "requires a runtime value";
+  return `Required ${kind} "${diagnostic.name}" ${availability}.`;
+}
 
-  const lines = [
-    `Required ${kind} "${diagnostic.name}" ${availability}.`,
-    "",
-    "Referenced by:",
-    `  template: ${diagnostic.template}`,
-  ];
+/** Render the reference lines for a runtime-reference diagnostic. */
+export function renderRuntimeReferenceReference(
+  diagnostic: Pick<
+    RuntimeReferenceDiagnostic,
+    "template" | "path" | "resource"
+  >,
+): readonly string[] {
+  const lines = [`  template: ${diagnostic.template}`];
 
   if (diagnostic.resource !== undefined) {
     lines.push(
@@ -163,6 +167,19 @@ export function renderRuntimeReferenceDiagnostic(
   }
 
   lines.push(`  path: ${diagnostic.path}`);
+  return lines;
+}
+
+/** Render a runtime-reference diagnostic without exposing values. */
+export function renderRuntimeReferenceDiagnostic(
+  diagnostic: RuntimeReferenceDiagnostic,
+): string {
+  const lines = [
+    describeRuntimeReferenceDiagnostic(diagnostic),
+    "",
+    "Referenced by:",
+    ...renderRuntimeReferenceReference(diagnostic),
+  ];
   return lines.join("\n");
 }
 
