@@ -17,6 +17,7 @@ import { currentRepositorySettings } from "./plan/fixtures.ts";
 class FakeRuntime implements ApplyRuntime {
   readonly applied: Plan[] = [];
   readonly discoveredTargets: (string | undefined)[] = [];
+  readonly readRepositories: string[] = [];
 
   constructor(
     readonly repositories: readonly RepositoryMetadata[],
@@ -36,6 +37,7 @@ class FakeRuntime implements ApplyRuntime {
   read(
     desired: import("@octosmith/octosmith").DesiredState,
   ): Promise<CurrentState> {
+    this.readRepositories.push(desired.repository);
     if (this.failRead.has(desired.repository)) {
       return Promise.reject(new Error("read failed"));
     }
@@ -112,6 +114,53 @@ Deno.test("apply rejects an empty resource target before discovery", async () =>
   assertEquals(runtime.applied, []);
 });
 
+Deno.test("apply rejects resource and template targets before discovery", async () => {
+  const runtime = new FakeRuntime([]);
+  const root = await configurationDirectory();
+  try {
+    const loaded = await loadConfigurationDirectory(root);
+    await assertRejects(
+      () =>
+        apply(runtime, loaded, {
+          mode: "plan",
+          resource: "sample",
+          template: "repository:code",
+          onRepositoryApplied: () => {},
+        }),
+      Error,
+      "Cannot combine a template filter with a repository target",
+    );
+
+    assertEquals(runtime.discoveredTargets, []);
+    assertEquals(runtime.applied, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("apply rejects an unknown template before discovery", async () => {
+  const runtime = new FakeRuntime([]);
+  const root = await configurationDirectory();
+  try {
+    const loaded = await loadConfigurationDirectory(root);
+    await assertRejects(
+      () =>
+        apply(runtime, loaded, {
+          mode: "plan",
+          template: "repository:missing",
+          onRepositoryApplied: () => {},
+        }),
+      Error,
+      "Unknown template: repository:missing",
+    );
+
+    assertEquals(runtime.discoveredTargets, []);
+    assertEquals(runtime.applied, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("apply plan builds reports without applying", async () => {
   const root = await configurationDirectory();
   try {
@@ -133,6 +182,58 @@ Deno.test("apply apply executes the fresh plan", async () => {
 
     assertEquals(results[0].status, "applied");
     assertEquals(runtime.applied.length, 1);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template-scoped plan resolves only classified repositories", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime([
+      metadata("broken"),
+      metadata("sample"),
+      metadata("unmatched"),
+    ]);
+    const loaded = await loadConfigurationDirectory(root);
+    const results: RepositoryReport[] = [];
+
+    await apply(runtime, loaded, {
+      mode: "plan",
+      template: "repository:code",
+      onRepositoryApplied: (report) => {
+        results.push(report);
+      },
+    });
+
+    assertEquals(runtime.readRepositories, ["broken", "sample"]);
+    assertEquals(results.map((result) => result.repository), [
+      "broken",
+      "sample",
+    ]);
+    assertEquals(results.every((result) => result.status === "planned"), true);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template-scoped plan is a successful no-op without matches", async () => {
+  const root = await configurationDirectory();
+  try {
+    const runtime = new FakeRuntime([metadata("other")]);
+    const loaded = await loadConfigurationDirectory(root);
+    const results: RepositoryReport[] = [];
+
+    await apply(runtime, loaded, {
+      mode: "plan",
+      template: "repository:code",
+      onRepositoryApplied: (report) => {
+        results.push(report);
+      },
+    });
+
+    assertEquals(runtime.readRepositories, []);
+    assertEquals(results, []);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

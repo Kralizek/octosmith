@@ -361,6 +361,59 @@ function fakeInspectionGitHub(
   };
 }
 
+Deno.test("template-scoped plan and apply succeed when no repositories match", async () => {
+  const root = await inspectionConfigurationDirectory("error");
+  try {
+    await Deno.writeTextFile(
+      root + "/templates/primary.yml",
+      stringify({
+        version: 1,
+        kind: "repository",
+        match: { include: { names: ["not-present"] } },
+        repository: { settings: { has_issues: false } },
+      }),
+    );
+
+    for (const command of ["plan", "apply"] as const) {
+      const requests: CapturedRequest[] = [];
+      const output: string[] = [];
+      const runtime = createGitHubRuntime({
+        token: "test-token",
+        baseUrl: "https://github.example.test/api/v3",
+        fetch: fakeInspectionGitHub(requests),
+      });
+
+      assertEquals(
+        await main(
+          [
+            command,
+            "--path",
+            root,
+            "--template",
+            "repository:primary",
+            "--format",
+            "json",
+          ],
+          { runtime, write: (value) => output.push(value) },
+        ),
+        0,
+      );
+      const report = JSON.parse(output.join("\n"));
+      assertEquals(report.repositories, []);
+      assertEquals(report.inspection, {
+        resources: [],
+        summary: { matched: 0, unmatched: 0 },
+      });
+      assertEquals(
+        requests.map(({ method, url }) => [method, url.pathname]),
+        [["GET", "/api/v3/orgs/acme/repos"]],
+      );
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("CLI applies through the real GitHub HTTP stack", async () => {
   const root = await configurationDirectory();
   const strictRoot = await configurationDirectory(false, "strict");
@@ -1423,7 +1476,15 @@ Deno.test("persisted apply executes the reviewed operations without replanning",
 
     assertEquals(
       await main(
-        ["plan", "--out", planPath, "--path", root],
+        [
+          "plan",
+          "--out",
+          planPath,
+          "--path",
+          root,
+          "--template",
+          "repository:code",
+        ],
         { runtime, write: (value) => output.push(value) },
       ),
       0,

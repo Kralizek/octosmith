@@ -99,6 +99,17 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration
 `plan` reads GitHub and reports the operations required to reach the desired
 state. It does not mutate GitHub and does not require secret runtime values.
 
+Use `--template <template>` to limit planning to repositories classified with a
+template. The value may be a template name or its canonical identity:
+
+```sh
+GITHUB_TOKEN=... octosmith plan --path ./configuration --template repository:libraries
+```
+
+An existing template with no matching repositories produces an empty successful
+report. A template filter cannot be combined with a positional repository
+target.
+
 The text summary includes an unmatched count, even when unmatched resources are
 ignored:
 
@@ -132,10 +143,25 @@ GITHUB_TOKEN=... octosmith apply --path ./configuration
 `apply` reads fresh GitHub state, builds a new plan, and applies that plan by
 default.
 
+Use `--template <template>` to apply only repositories classified with that
+template:
+
+```sh
+GITHUB_TOKEN=... octosmith apply --path ./configuration --template repository:libraries
+```
+
 Use `--plan <file>` to execute a persisted plan:
 
 ```sh
 GITHUB_TOKEN=... octosmith apply --path ./configuration --plan plan.json
+```
+
+Template-scoped plans can be persisted and later applied without repeating the
+template filter:
+
+```sh
+GITHUB_TOKEN=... octosmith plan --path ./configuration --template repository:libraries --out libraries.plan.json
+GITHUB_TOKEN=... octosmith apply --path ./configuration --plan libraries.plan.json
 ```
 
 Persisted apply verifies root configuration, effective resource templates, and
