@@ -48,7 +48,11 @@ export async function collectConfigurationValidation(
   root: string,
 ): Promise<ConfigurationValidationResult> {
   const loading = await loadConfigurationDirectoryCollectingIssues(root);
-  const validation = await collectLoadedConfigurationValidation(loading.loaded);
+  const validation = await collectLoadedConfigurationValidation(
+    loading.loaded,
+    undefined,
+    loading.issues.length === 0,
+  );
   return {
     diagnostics: validation.diagnostics,
     issues: [...loading.issues, ...validation.issues],
@@ -59,6 +63,7 @@ export async function collectConfigurationValidation(
 export async function collectLoadedConfigurationValidation(
   loaded: LoadedConfiguration,
   selectedTemplate?: string,
+  templateSetComplete = true,
 ): Promise<ConfigurationValidationResult> {
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
   const issues: ConfigurationValidationIssue[] = [];
@@ -69,6 +74,7 @@ export async function collectLoadedConfigurationValidation(
   }
   if (
     selectedTemplate === undefined &&
+    templateSetComplete &&
     loaded.configuration.repositories.settings?.unmatchedRepositories !==
       "ignore"
   ) {

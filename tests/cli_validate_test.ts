@@ -431,6 +431,59 @@ Deno.test("validate reports independent template loading and semantic issues", a
   }
 });
 
+Deno.test("validate skips coverage for incomplete template sets", async () => {
+  const root = await Deno.makeTempDir();
+  const errors: string[] = [];
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include:",
+        "      names: [api, other]",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(root + "/templates/malformed.yml", "invalid: [\n");
+    for (const name of ["one", "two"]) {
+      await Deno.writeTextFile(
+        root + `/templates/${name}.yml`,
+        [
+          "version: 1",
+          "kind: repository",
+          "match:",
+          "  include:",
+          "    names: [other]",
+          "repository: {}",
+          "",
+        ].join("\n"),
+      );
+    }
+
+    assertEquals(
+      await main(["template", "validate", "--path", root], {
+        writeError: (value) => errors.push(value),
+      }),
+      1,
+    );
+
+    const text = errors.join("\n");
+    assertStringIncludes(text, "[repository:malformed]");
+    assertStringIncludes(text, "templates can overlap within configured scope");
+    assertEquals(
+      text.includes("Repository api cannot match any template"),
+      false,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate treats root configuration failures as blockers", async () => {
   const root = await validConfiguration();
   const errors: string[] = [];
