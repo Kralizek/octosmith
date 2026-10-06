@@ -38,6 +38,7 @@ import {
 } from "./permissions_output.ts";
 import type { ApplyRuntime } from "./apply.ts";
 import { apply, createGitHubRuntime } from "./apply.ts";
+import { resolveTemplateIdentity } from "./template.ts";
 import {
   applyPersistedPlan,
   PersistedPlanStaleError,
@@ -639,19 +640,6 @@ function assertResourcePosition(
       "Resource target must appear immediately after the command",
     );
   }
-}
-
-function resolveTemplateIdentity(
-  loaded: import("@octosmith/octosmith").LoadedConfiguration,
-  template: string,
-): string {
-  const identity = template.startsWith("repository:")
-    ? template
-    : "repository:" + template;
-  if (loaded.templates[identity] === undefined) {
-    throw new Error("Unknown template: " + template);
-  }
-  return identity;
 }
 
 export * from "./events.ts";

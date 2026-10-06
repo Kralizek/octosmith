@@ -114,6 +114,53 @@ Deno.test("apply rejects an empty resource target before discovery", async () =>
   assertEquals(runtime.applied, []);
 });
 
+Deno.test("apply rejects resource and template targets before discovery", async () => {
+  const runtime = new FakeRuntime([]);
+  const root = await configurationDirectory();
+  try {
+    const loaded = await loadConfigurationDirectory(root);
+    await assertRejects(
+      () =>
+        apply(runtime, loaded, {
+          mode: "plan",
+          resource: "sample",
+          template: "repository:code",
+          onRepositoryApplied: () => {},
+        }),
+      Error,
+      "Cannot combine a template filter with a repository target",
+    );
+
+    assertEquals(runtime.discoveredTargets, []);
+    assertEquals(runtime.applied, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("apply rejects an unknown template before discovery", async () => {
+  const runtime = new FakeRuntime([]);
+  const root = await configurationDirectory();
+  try {
+    const loaded = await loadConfigurationDirectory(root);
+    await assertRejects(
+      () =>
+        apply(runtime, loaded, {
+          mode: "plan",
+          template: "repository:missing",
+          onRepositoryApplied: () => {},
+        }),
+      Error,
+      "Unknown template: repository:missing",
+    );
+
+    assertEquals(runtime.discoveredTargets, []);
+    assertEquals(runtime.applied, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("apply plan builds reports without applying", async () => {
   const root = await configurationDirectory();
   try {
