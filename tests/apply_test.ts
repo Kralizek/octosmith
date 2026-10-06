@@ -239,7 +239,8 @@ Deno.test(
     } finally {
       await Deno.remove(root, { recursive: true });
     }
-});
+  },
+);
 
 Deno.test(
   "skip-missing-values does not swallow other runtime failures",
