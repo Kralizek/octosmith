@@ -52,6 +52,11 @@ Deno.test("template list emits deterministic JSON", async () => {
     assertEquals(JSON.parse(output.join("\n")), {
       templates: [
         {
+          identity: "repository:Alpha",
+          name: "Uppercase",
+          path: "templates/Alpha.yml",
+        },
+        {
           identity: "repository:alpha",
           name: null,
           path: "templates/alpha.yml",
@@ -61,8 +66,13 @@ Deno.test("template list emits deterministic JSON", async () => {
           name: "Backend Services",
           path: "templates/services/backend.yml",
         },
+        {
+          identity: "repository:éclair",
+          name: "Éclair",
+          path: "templates/éclair.yml",
+        },
       ],
-      summary: { total: 2 },
+      summary: { total: 4 },
     });
   } finally {
     await Deno.remove(root, { recursive: true });
