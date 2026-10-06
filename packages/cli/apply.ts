@@ -463,6 +463,7 @@ function environmentValue(name: string): string {
   return value;
 }
 
+/** Remove runtime-backed values skipped for the current reconciliation. */
 export function withoutSkippedRuntimeValues(
   desired: DesiredState,
   skipped: readonly RuntimeReference[],
