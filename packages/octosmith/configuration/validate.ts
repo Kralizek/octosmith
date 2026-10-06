@@ -92,8 +92,7 @@ export async function collectLoadedConfigurationValidation(
     if (repository === undefined) {
       if (selectedIdentity !== undefined) {
         issues.push({
-          message:
-            "Template " + selectedTemplate +
+          message: "Template " + selectedTemplate +
             " cannot match any repository within configured scope",
           template: name,
         });
@@ -247,8 +246,7 @@ function findScopeCoverageIssues(
 
     if (!possible) {
       issues.push({
-        message:
-          "Repository " + name +
+        message: "Repository " + name +
           " cannot match any template within configured scope",
       });
     }
