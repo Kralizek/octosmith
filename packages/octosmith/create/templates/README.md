@@ -40,8 +40,8 @@ Inspect template coverage before planning changes:
 deno run -A jsr:@octosmith/cli resource list --path .
 ```
 
-For local GitHub access, set `GITHUB_TOKEN` or authenticate with
-`gh auth login`, then plan or apply:
+Set `GITHUB_TOKEN` before running plan or apply locally, or authenticate with
+`gh auth login`:
 
 ```sh
 deno run -A jsr:@octosmith/cli plan --path .
