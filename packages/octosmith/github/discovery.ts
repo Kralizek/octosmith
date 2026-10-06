@@ -51,6 +51,9 @@ export async function discoverRepositories(
   }
 
   const organization = loaded.configuration.organization;
+  const targetRepository = repository === undefined
+    ? undefined
+    : normalizeRepositoryTarget(repository, organization);
   const scopes = [
     loaded.configuration.repositories.scope,
     ...Object.values(loaded.templates).map((template) => template.match),
@@ -63,11 +66,11 @@ export async function discoverRepositories(
   const referencedProperties = collectReferencedProperties(selectors);
   const teamRepositories = new Map<string, ReadonlySet<string>>();
 
-  if (repository) {
+  if (targetRepository) {
     return await discoverTargetRepository(
       client,
       loaded,
-      repository,
+      targetRepository,
       referencedTeams,
       referencedProperties,
     );
@@ -329,6 +332,32 @@ function singleVisibility(
     : visibility;
 
   return value === "public" || value === "private" ? value : undefined;
+}
+
+function normalizeRepositoryTarget(
+  target: string,
+  organization: string,
+): string {
+  const parts = target.split("/");
+
+  if (parts.length === 1) {
+    return target;
+  }
+
+  if (parts.length !== 2 || parts.some((part) => part.length === 0)) {
+    throw new Error(
+      'Repository target must be a repository name or "organization/repository"',
+    );
+  }
+
+  const [owner, repository] = parts;
+  if (owner.toLowerCase() !== organization.toLowerCase()) {
+    throw new Error(
+      `Repository target organization "${owner}" does not match configured organization "${organization}"`,
+    );
+  }
+
+  return repository;
 }
 
 function isExactRepositoryName(pattern: string): boolean {
