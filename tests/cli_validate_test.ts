@@ -253,8 +253,14 @@ Deno.test("validate reports all independent semantic issues in one run", async (
 
     const text = errors.join("\n");
     assertStringIncludes(text, "Configuration is invalid.");
-    assertStringIncludes(text, "Repository templates can overlap within configured scope");
-    assertStringIncludes(text, "Repository missing cannot match any template within configured scope");
+    assertStringIncludes(
+      text,
+      "Repository templates can overlap within configured scope",
+    );
+    assertStringIncludes(
+      text,
+      "Repository missing cannot match any template within configured scope",
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
