@@ -188,18 +188,22 @@ function planActions(
     desired,
     operations,
     collections,
-    new Set(skipped.filter((reference) => reference.kind === "secret").map(
-      (reference) => reference.target,
-    )),
+    new Set(
+      skipped.filter((reference) => reference.kind === "secret").map(
+        (reference) => reference.target,
+      ),
+    ),
   );
   planActionsVariables(
     current,
     desired,
     operations,
     collections,
-    new Set(skipped.filter((reference) => reference.kind === "variable").map(
-      (reference) => reference.target,
-    )),
+    new Set(
+      skipped.filter((reference) => reference.kind === "variable").map(
+        (reference) => reference.target,
+      ),
+    ),
   );
 }
 
@@ -476,7 +480,8 @@ function planEnvironments(
     const actual = currentByName.get(environment.name);
     const skippedSecrets = new Set(
       skipped.filter((reference) =>
-        reference.environment === environment.name && reference.kind === "secret"
+        reference.environment === environment.name &&
+        reference.kind === "secret"
       ).map((reference) => reference.target),
     );
     const skippedVariables = new Set(
@@ -491,20 +496,22 @@ function planEnvironments(
         (skippedSecrets.size === 0 || collections === "strict" ||
           environment.secrets.some((secret) =>
             !skippedSecrets.has(secret.name)
-          )) && {
-        secrets: environment.secrets.filter((secret) =>
-          !skippedSecrets.has(secret.name)
-        ),
-      }),
+          )) &&
+        {
+          secrets: environment.secrets.filter((secret) =>
+            !skippedSecrets.has(secret.name)
+          ),
+        }),
       ...(environment.variables !== undefined &&
         (skippedVariables.size === 0 || collections === "strict" ||
           environment.variables.some((variable) =>
             !skippedVariables.has(variable.name)
-          )) && {
-        variables: environment.variables.filter((variable) =>
-          !skippedVariables.has(variable.name)
-        ),
-      }),
+          )) &&
+        {
+          variables: environment.variables.filter((variable) =>
+            !skippedVariables.has(variable.name)
+          ),
+        }),
     };
 
     if (!actual) {
