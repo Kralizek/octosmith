@@ -180,6 +180,27 @@ commands:
     kind: group
     summary: Template operations.
 
+  octosmith template list:
+    kind: action
+    summary: List configured repository templates.
+    flags:
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: text
+        choices:
+          - value: text
+          - value: json
+        summary: Output format.
+    examples:
+      - title: List templates as JSON
+        content: |
+          $ octosmith template list --format json
+
   octosmith template validate:
     kind: action
     summary: Validate configuration and templates without accessing GitHub.
