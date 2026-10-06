@@ -87,6 +87,81 @@ Deno.test("targeted discovery fetches only the requested repository and selector
   ]);
 });
 
+Deno.test("targeted discovery accepts organization/repository targets", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+  });
+
+  const result = await discoverRepositories(
+    client,
+    configuration({ scope: { names: ["*"] } }),
+    "acme/api",
+  );
+
+  assertEquals(result.repositories, [{
+    name: "api",
+    visibility: "private",
+    teams: [],
+    properties: {},
+  }]);
+  assertEquals(result.failures, []);
+  assertEquals(client.requests.map((request) => request.path), [
+    "/repos/acme/api",
+  ]);
+});
+
+Deno.test("targeted discovery accepts organization/repository targets case-insensitively", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/api": [{ name: "api", visibility: "private" }],
+  });
+
+  const result = await discoverRepositories(
+    client,
+    configuration({ scope: { names: ["*"] } }),
+    "ACME/api",
+  );
+
+  assertEquals(result.repositories.map((repository) => repository.name), [
+    "api",
+  ]);
+  assertEquals(result.failures, []);
+});
+
+Deno.test("targeted discovery rejects a mismatched organization before calling GitHub", async () => {
+  const client = new FakeGitHubClient({});
+
+  await assertRejects(
+    () =>
+      discoverRepositories(
+        client,
+        configuration({ scope: { names: ["*"] } }),
+        "other/api",
+      ),
+    Error,
+    'Repository target organization "other" does not match configured organization "acme"',
+  );
+
+  assertEquals(client.requests, []);
+});
+
+Deno.test("targeted discovery rejects malformed qualified repository targets", async () => {
+  const client = new FakeGitHubClient({});
+
+  await assertRejects(
+    () =>
+      discoverRepositories(
+        client,
+        configuration({ scope: { names: ["*"] } }),
+        "acme/team/api",
+      ),
+    Error,
+    'Repository target must be a repository name or "organization/repository"',
+  );
+
+  assertEquals(client.requests, []);
+});
+
+
 Deno.test("targeted discovery reads repository property values once", async () => {
   const propertyValues = Array.from({ length: 99 }, (_, index) => ({
     property_name: "unrelated-" + index,
