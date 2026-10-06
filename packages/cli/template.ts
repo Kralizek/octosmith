@@ -1,5 +1,6 @@
 import type { LoadedConfiguration } from "@octosmith/octosmith";
 
+/** Resolve and validate a template filter against the loaded configuration. */
 export function resolveTemplateIdentity(
   loaded: LoadedConfiguration,
   template: string,
