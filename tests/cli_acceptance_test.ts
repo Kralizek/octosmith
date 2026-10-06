@@ -79,6 +79,47 @@ Deno.test("template list emits deterministic JSON", async () => {
   }
 });
 
+Deno.test("template list does not resolve credentials or access GitHub", async () => {
+  const root = await templateListConfigurationDirectory();
+  try {
+    let envReads = 0;
+    let ghCalls = 0;
+    let fetchCalls = 0;
+    const output: string[] = [];
+
+    assertEquals(
+      await main(
+        ["template", "list", "--path", root],
+        {
+          credentials: {
+            getEnv: () => {
+              envReads++;
+              throw new Error("template list must not resolve credentials");
+            },
+            runGhAuthToken: async () => {
+              ghCalls++;
+              throw new Error("template list must not invoke gh");
+            },
+          },
+          fetch: () => {
+            fetchCalls++;
+            throw new Error("template list must not access GitHub");
+          },
+          write: (value) => output.push(value),
+        },
+      ),
+      0,
+    );
+
+    assertEquals(envReads, 0);
+    assertEquals(ghCalls, 0);
+    assertEquals(fetchCalls, 0);
+    assertStringIncludes(output.join("\n"), "repository:alpha");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("template list rejects semantically invalid configuration", async () => {
   const root = await Deno.makeTempDir();
   try {
