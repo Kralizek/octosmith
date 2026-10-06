@@ -6,7 +6,7 @@ working with Octosmith.
 ## Consumer documentation
 
 - [Getting started](getting-started.md) — create a control repository, validate,
-  plan, and apply.
+  inspect resources and permissions, plan, and apply.
 - [Configuration](configuration.md) — repository scope, templates, collection
   management, runtime values, secrets, and managed files.
 - [Automation](automation.md) — GitHub Action usage, generated workflows,

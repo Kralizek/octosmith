@@ -73,15 +73,23 @@ Install the CLI:
 deno install -A -n octosmith jsr:@octosmith/cli@0
 ```
 
-Then validate, plan, or apply:
+The main workflows are available as grouped inspection commands plus plan/apply:
 
 ```sh
 octosmith template validate --path .
+octosmith template permissions --path .
+octosmith resource list --path .
 octosmith plan --path .
 octosmith apply --path .
 ```
 
-`plan` and `apply` use `GITHUB_TOKEN`. `template validate` is fully offline.
+`template validate` and `template permissions` do not access GitHub.
+`template validate` treats environment-backed secrets already present in the
+process as available without reading their values. `resource list`, `plan`, and
+`apply` authenticate with an injected token, `GITHUB_TOKEN`, or the local GitHub
+CLI. Use `--template <template>` with `plan` or `apply` to target all
+repositories classified by one template, or pass a repository name directly to
+target one repository.
 
 See the [CLI package README](packages/cli/README.md) for command options,
 targeted runs, output formats, exit behavior, and event output.

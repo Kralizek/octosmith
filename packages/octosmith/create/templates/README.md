@@ -25,15 +25,37 @@ more repositories.
 
 ## Local usage
 
-Validation is offline and does not require `GITHUB_TOKEN`:
+Validation and permission analysis do not access GitHub and do not require
+GitHub credentials. Validation treats environment-backed secrets already present
+in the process as available without reading their values:
 
 ```sh
 deno run -A jsr:@octosmith/cli template validate --path .
+deno run -A jsr:@octosmith/cli template permissions --path .
 ```
 
-Set `GITHUB_TOKEN` before running plan or apply locally:
+Inspect template coverage before planning changes:
+
+```sh
+deno run -A jsr:@octosmith/cli resource list --path .
+```
+
+For local GitHub access, set `GITHUB_TOKEN` or authenticate with
+`gh auth login`, then plan or apply:
 
 ```sh
 deno run -A jsr:@octosmith/cli plan --path .
 deno run -A jsr:@octosmith/cli apply --path .
 ```
+
+Target one repository positionally, or use `--template` to operate on every
+repository classified by one template:
+
+```sh
+deno run -A jsr:@octosmith/cli plan api-service --path .
+deno run -A jsr:@octosmith/cli plan --template repository:libraries --path .
+deno run -A jsr:@octosmith/cli apply --template repository:libraries --path .
+```
+
+Persist a reviewed plan with `plan --out <file>` and execute those exact stored
+operations later with `apply --plan <file>`.

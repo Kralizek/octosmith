@@ -25,12 +25,14 @@ deno run -A jsr:@octosmith/cli@0 --help
 
 ## Commands
 
-| Command             | GitHub access | Mutates GitHub | Purpose                                              |
-| ------------------- | ------------- | -------------- | ---------------------------------------------------- |
-| `template validate` | No            | No             | Validate configuration and static planner invariants |
-| `resource list`     | Yes           | No             | Inspect in-scope resources and template coverage     |
-| `plan`              | Yes           | No             | Compare current GitHub state with desired state      |
-| `apply`             | Yes           | Yes            | Build a fresh plan and apply its operations          |
+| Command                           | GitHub access | Mutates GitHub | Purpose                                                              |
+| --------------------------------- | ------------- | -------------- | -------------------------------------------------------------------- |
+| `template validate`               | No            | No             | Validate configuration and static planner invariants                 |
+| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates      |
+| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                     |
+| `resource create <template>`      | No            | No             | Reserved command; currently reports that creation is not implemented |
+| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                      |
+| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                     |
 
 ### template validate
 
@@ -38,7 +40,29 @@ deno run -A jsr:@octosmith/cli@0 --help
 octosmith template validate --path ./configuration
 ```
 
-Validation is offline and does not resolve GitHub credentials.
+Validation does not access GitHub or resolve GitHub credentials. It reports all
+discovered configuration errors and runtime-reference diagnostics in one run.
+Repeated diagnostics are compacted into a single message with a `Referenced by`
+list, so shared problems across templates/resources do not have to be fixed one
+at a time.
+
+For environment-backed secrets, validation checks only whether the environment
+variable is present. Present secrets do not produce `unresolved_secret`
+warnings, and their values are never read into configuration, diagnostics, or
+output. Missing secrets continue to produce warnings.
+
+### template permissions
+
+```sh
+octosmith template permissions --path ./configuration
+octosmith template permissions repository:libraries --path ./configuration
+```
+
+This offline command calculates the strongest GitHub permissions that the
+reachable effective templates could require. Use `--format json` for structured
+output or `--format github-output` to emit `permission-<name>=<access>` lines
+for GitHub App token workflows. See [Permission output](#permission-output)
+below for the exact semantics and limitations.
 
 ### resource list
 
@@ -210,7 +234,8 @@ token takes precedence over GitHub CLI credentials. The CLI requests the
 `github.com` token, matching Octosmith's GitHub API host. GitHub Actions
 continues to use its `github-token` input through `GITHUB_TOKEN` and does not
 invoke `gh` when the input is missing. `template validate` and
-`template permissions` are offline and do not resolve credentials.
+`template permissions` do not resolve GitHub credentials; validation only checks
+environment-backed secret presence as described above.
 
 The token needs read permissions for every resource used by planning, plus the
 corresponding write permissions for resources managed by apply. For
@@ -288,6 +313,8 @@ The CLI returns:
 `resource list` also supports `--trace`. `resource list`, `resource create`,
 `template validate`, and `template permissions` support `--path` and `--format`.
 
+### Permission output
+
 `template permissions [template]` analyzes possible operations for all reachable
 templates or one named template without a GitHub token or live repository state.
 It uses the effective configuration (including fragments) and reports the
@@ -333,6 +360,6 @@ The canonical grouped command surface is:
 ```text
 octosmith resource list
 octosmith resource create <template>
-octosmith template validate [template]
+octosmith template validate
 octosmith template permissions [template]
 ```
