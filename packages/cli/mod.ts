@@ -75,11 +75,13 @@ function createCli(
     const validation = await collectConfigurationValidation(
       commandOptions.path,
     );
-    const result = {
-      valid: validation.issues.length === 0,
-      diagnostics: validation.diagnostics,
-      issues: validation.issues,
-    };
+    const result = validation.issues.length === 0
+      ? { valid: true as const, diagnostics: validation.diagnostics }
+      : {
+        valid: false as const,
+        diagnostics: validation.diagnostics,
+        issues: validation.issues,
+      };
     const rendered = renderOutput(
       format,
       result,
@@ -87,7 +89,7 @@ function createCli(
         renderValidationResult(
           value.valid,
           value.diagnostics,
-          value.issues,
+          value.valid ? [] : value.issues,
         ),
     );
 

@@ -2,6 +2,7 @@ import {
   buildPlan,
   type CurrentState,
   loadConfigurationDirectory,
+  loadConfigurationDirectoryCollectingIssues,
   type LoadedConfiguration,
   matchesSelector,
   type PropertyValue,
@@ -46,9 +47,12 @@ export interface ConfigurationValidationResult {
 export async function collectConfigurationValidation(
   root: string,
 ): Promise<ConfigurationValidationResult> {
-  return await collectLoadedConfigurationValidation(
-    await loadConfigurationDirectory(root),
-  );
+  const loading = await loadConfigurationDirectoryCollectingIssues(root);
+  const validation = await collectLoadedConfigurationValidation(loading.loaded);
+  return {
+    diagnostics: validation.diagnostics,
+    issues: [...loading.issues, ...validation.issues],
+  };
 }
 
 /** Validate a loaded configuration and collect all independently detectable issues. */

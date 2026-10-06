@@ -51,7 +51,6 @@ Deno.test("validate emits machine-readable success", async () => {
     assertEquals(JSON.parse(output[0]), {
       valid: true,
       diagnostics: [],
-      issues: [],
     });
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -316,6 +315,139 @@ Deno.test("validate emits all semantic issues as json", async () => {
     assertEquals(result.valid, false);
     assertEquals(result.issues.length, 3);
     assertEquals(result.diagnostics, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate reports independent template loading and semantic issues", async () => {
+  const root = await Deno.makeTempDir();
+  const errors: string[] = [];
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.mkdir(root + "/fragments");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(root + "/templates/malformed.yml", "invalid: [\n");
+    await Deno.writeTextFile(
+      root + "/templates/schema.yml",
+      [
+        "version: 1",
+        "kind: invalid",
+        "match:",
+        "  include: all",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/include.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include: all",
+        "includes:",
+        "  - missing-fragment.yml",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/fragments/invalid-combination.yml",
+      [
+        "version: 1",
+        "kind: fragment",
+        "resource: repository",
+        "repository:",
+        "  files:",
+        "    managed:",
+        "      ensure: exact",
+        "      source: managed.txt",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/effective.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include: all",
+        "includes:",
+        "  - ../fragments/invalid-combination.yml",
+        "repository:",
+        "  files:",
+        "    managed:",
+        "      ensure: absent",
+        "",
+      ].join("\n"),
+    );
+    for (const name of ["one", "two"]) {
+      await Deno.writeTextFile(
+        root + `/templates/${name}.yml`,
+        [
+          "version: 1",
+          "kind: repository",
+          "match:",
+          "  include: all",
+          "repository: {}",
+          "",
+        ].join("\n"),
+      );
+    }
+
+    assertEquals(
+      await main(["template", "validate", "--path", root], {
+        writeError: (value) => errors.push(value),
+      }),
+      1,
+    );
+
+    const text = errors.join("\n");
+    for (
+      const template of [
+        "repository:malformed",
+        "repository:schema",
+        "repository:include",
+        "repository:effective",
+      ]
+    ) {
+      assertStringIncludes(text, `[${template}]`);
+    }
+    assertStringIncludes(text, "templates can overlap within configured scope");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate treats root configuration failures as blockers", async () => {
+  const root = await validConfiguration();
+  const errors: string[] = [];
+
+  try {
+    await Deno.writeTextFile(root + "/octosmith.yml", "invalid: [\n");
+    assertEquals(
+      await main(["template", "validate", "--path", root], {
+        writeError: (value) => errors.push(value),
+      }),
+      1,
+    );
+    assertStringIncludes(errors.join("\n"), "octosmith.yml");
+    assertEquals(
+      errors.some((value) => value.includes("Configuration is invalid.")),
+      false,
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
