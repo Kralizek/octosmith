@@ -2,6 +2,187 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import { stringify } from "@std/yaml";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
 
+
+Deno.test("template list reports configured templates with source paths", async () => {
+  const root = await templateListConfigurationDirectory();
+  try {
+    const output: string[] = [];
+    const errors: string[] = [];
+    assertEquals(
+      await main(
+        ["template", "list", "--path", root],
+        {
+          write: (value) => output.push(value),
+          writeError: (value) => errors.push(value),
+        },
+      ),
+      0,
+    );
+
+    assertEquals(errors, []);
+    assertEquals(
+      output.join("\n"),
+      [
+        "TEMPLATE                     NAME              PATH",
+        "repository:alpha             -                 templates/alpha.yml",
+        "repository:services/backend  Backend Services  templates/services/backend.yml",
+        "",
+        "Summary: 2 templates",
+      ].join("\n"),
+    );
+    assertEquals(output.join("\n").includes("fragments/common.yml"), false);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template list emits deterministic JSON", async () => {
+  const root = await templateListConfigurationDirectory();
+  try {
+    const output: string[] = [];
+    assertEquals(
+      await main(
+        ["template", "list", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    assertEquals(JSON.parse(output.join("\n")), {
+      templates: [
+        {
+          identity: "repository:alpha",
+          name: null,
+          path: "templates/alpha.yml",
+        },
+        {
+          identity: "repository:services/backend",
+          name: "Backend Services",
+          path: "templates/services/backend.yml",
+        },
+      ],
+      summary: { total: 2 },
+    });
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template list rejects semantically invalid configuration", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include: all",
+        "",
+      ].join("\n"),
+    );
+    for (const name of ["one", "two"]) {
+      await Deno.writeTextFile(
+        root + `/templates/${name}.yml`,
+        [
+          "version: 1",
+          "kind: repository",
+          "match:",
+          "  include: all",
+          "repository: {}",
+          "",
+        ].join("\n"),
+      );
+    }
+
+    const output: string[] = [];
+    const errors: string[] = [];
+    assertEquals(
+      await main(
+        ["template", "list", "--path", root],
+        {
+          write: (value) => output.push(value),
+          writeError: (value) => errors.push(value),
+        },
+      ),
+      1,
+    );
+    assertEquals(output, []);
+    assertStringIncludes(
+      errors.join("\n"),
+      "Repository templates can overlap within configured scope",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+async function templateListConfigurationDirectory(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates/services", { recursive: true });
+  await Deno.mkdir(root + "/fragments");
+
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      "  scope:",
+      "    include:",
+      "      names:",
+      "        - alpha",
+      "        - backend",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/fragments/common.yml",
+    [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  settings:",
+      "    has_issues: true",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/alpha.yml",
+    [
+      "version: 1",
+      "kind: repository",
+      "includes:",
+      "  - ../fragments/common.yml",
+      "match:",
+      "  include:",
+      "    names:",
+      "      - alpha",
+      "repository: {}",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/services/backend.yml",
+    [
+      "version: 1",
+      "kind: repository",
+      "name: Backend Services",
+      "match:",
+      "  include:",
+      "    names:",
+      "      - backend",
+      "repository: {}",
+      "",
+    ].join("\n"),
+  );
+
+  return root;
+}
+
 interface CapturedRequest {
   readonly method: string;
   readonly url: URL;
