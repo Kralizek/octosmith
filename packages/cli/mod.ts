@@ -9,7 +9,7 @@
 
 import { Command } from "@cliffy/command";
 import {
-  collectConfigurationValidation,
+  validateConfigurationDirectoryDetailed,
   type ConfigurationValidationIssue,
   createPersistedPlanArtifact,
   describeRuntimeReferenceDiagnostic,
@@ -72,7 +72,7 @@ function createCli(
     }
 
     const format = parseOutputFormat(commandOptions.format);
-    const validation = await collectConfigurationValidation(
+    const validation = await validateConfigurationDirectoryDetailed(
       commandOptions.path,
     );
     const result = validation.issues.length === 0
