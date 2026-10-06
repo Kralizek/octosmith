@@ -109,6 +109,10 @@ function createCli(
       .option("-p, --path <path:string>", "Configuration directory.", {
         default: ".",
       })
+      .option(
+        "--template <template:string>",
+        "Limit operations to repositories classified with this template.",
+      )
       .option("--format <format:string>", "Output format: text or json.", {
         default: "text",
       })
@@ -138,8 +142,17 @@ function createCli(
         const modeOptions = commandOptions as typeof commandOptions & {
           readonly plan?: string;
           readonly out?: string;
+          readonly template?: string;
         };
 
+        if (modeOptions.template === "") {
+          throw new Error("Template filter must not be empty");
+        }
+        if (modeOptions.template !== undefined && resource !== undefined) {
+          throw new Error(
+            "Cannot combine a template filter with a repository target",
+          );
+        }
         if (
           mode === "apply" &&
           modeOptions.plan !== undefined &&
@@ -168,6 +181,9 @@ function createCli(
         const loaded = await loadConfigurationDirectory(
           commandOptions.path,
         );
+        const template = modeOptions.template === undefined
+          ? undefined
+          : resolveTemplateIdentity(loaded, modeOptions.template);
         if (
           commandOptions.eventsOutput !== undefined &&
           commandOptions.eventsOutput.length === 0
@@ -210,10 +226,16 @@ function createCli(
         try {
           if (mode === "apply" && persistedArtifact !== undefined) {
             try {
+              const artifact = template === undefined ? persistedArtifact : {
+                ...persistedArtifact,
+                resources: persistedArtifact.resources.filter((resource) =>
+                  resource.template.id === template
+                ),
+              };
               await applyPersistedPlan(
                 runtime,
                 loaded,
-                persistedArtifact,
+                artifact,
                 onRepositoryApplied,
               );
             } catch (error) {
@@ -233,6 +255,7 @@ function createCli(
             await apply(runtime, loaded, {
               mode,
               ...(resource !== undefined && { resource }),
+              ...(template !== undefined && { template }),
               onRepositoryApplied,
               onResourceInspected: (resource) =>
                 inspectedResources.push(resource),
@@ -616,6 +639,19 @@ function assertResourcePosition(
       "Resource target must appear immediately after the command",
     );
   }
+}
+
+function resolveTemplateIdentity(
+  loaded: import("@octosmith/octosmith").LoadedConfiguration,
+  template: string,
+): string {
+  const identity = template.startsWith("repository:")
+    ? template
+    : "repository:" + template;
+  if (loaded.templates[identity] === undefined) {
+    throw new Error("Unknown template: " + template);
+  }
+  return identity;
 }
 
 export * from "./events.ts";

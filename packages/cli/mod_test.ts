@@ -240,6 +240,53 @@ Deno.test("apply rejects combining a resource target with --plan", async () => {
   }
 });
 
+Deno.test("plan and apply reject combining a template filter with a repository target", async () => {
+  for (const command of ["plan", "apply"] as const) {
+    const errors: string[] = [];
+    const originalError = console.error;
+
+    try {
+      console.error = (...values: unknown[]) => {
+        errors.push(values.map(String).join(" "));
+      };
+
+      assertEquals(
+        await main([command, "sample", "--template", "repository:code"]),
+        1,
+      );
+      assertStringIncludes(
+        errors.join("\n"),
+        "Cannot combine a template filter with a repository target",
+      );
+    } finally {
+      console.error = originalError;
+    }
+  }
+});
+
+Deno.test("plan reports an unknown template clearly", async () => {
+  const root = await authenticationConfiguration();
+  const errors: string[] = [];
+  try {
+    assertEquals(
+      await main(["plan", "--path", root, "--template", "repository:missing"], {
+        credentials: { getEnv: () => "test-token" },
+        fetch: () => {
+          throw new Error("fetch must not be called");
+        },
+        writeError: (value) => errors.push(value),
+      }),
+      1,
+    );
+    assertStringIncludes(
+      errors.join("\n"),
+      "Unknown template: repository:missing",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("version is available from grouped commands without a short alias", async () => {
   const output: string[] = [];
   const originalLog = console.log;

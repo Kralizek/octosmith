@@ -207,6 +207,7 @@ export function createGitHubRuntime(
 export interface ApplyOptions {
   readonly mode: ApplyMode;
   readonly resource?: string;
+  readonly template?: string;
   readonly values?: RuntimeValueProvider;
   readonly onResourceInspected?: (resource: ResourceInspection) => void;
   readonly onRepositoryApplied: (
@@ -228,6 +229,13 @@ export async function apply(
   }
 
   const discovery = await runtime.discover(loaded, options.resource);
+  const repositories = options.template === undefined
+    ? discovery.repositories
+    : discovery.repositories.filter((repository) => {
+      const classification = classifyResource(loaded, repository);
+      return classification.status === "matched" &&
+        classification.template === options.template;
+    });
   const values = options.values ?? runtime.value ?? environmentValue;
   const failures: import("@octosmith/octosmith").RepositoryReport[] = [];
   const prepared: ExecutableResourcePlan[] = [];
@@ -238,7 +246,7 @@ export async function apply(
     );
   }
 
-  for (const repository of discovery.repositories) {
+  for (const repository of repositories) {
     let template: string | undefined;
     let templateName: string | undefined;
 
