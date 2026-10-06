@@ -78,7 +78,7 @@ function createCli(
     const result = {
       valid: validation.issues.length === 0,
       diagnostics: validation.diagnostics,
-      ...(validation.issues.length > 0 && { issues: validation.issues }),
+      issues: validation.issues,
     };
     const rendered = renderOutput(
       format,
@@ -87,7 +87,7 @@ function createCli(
         renderValidationResult(
           value.valid,
           value.diagnostics,
-          "issues" in value ? value.issues : [],
+          value.issues,
         ),
     );
 
