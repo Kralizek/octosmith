@@ -1,6 +1,6 @@
 import {
-  RuntimeReferenceError,
   type RuntimeReferenceDiagnostic,
+  RuntimeReferenceError,
 } from "../configuration/runtime_references.ts";
 import type { ApplyEvaluation, Plan } from "../plan/types.ts";
 import type {
