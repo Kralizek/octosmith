@@ -9,7 +9,6 @@
 
 import { Command } from "@cliffy/command";
 import {
-  validateConfigurationDirectoryDetailed,
   type ConfigurationValidationIssue,
   createPersistedPlanArtifact,
   describeRuntimeReferenceDiagnostic,
@@ -27,6 +26,7 @@ import {
   type ResourceInspection,
   type RuntimeReferenceDiagnostic,
   summarizeResourceInspection,
+  validateConfigurationDirectoryDetailed,
   validateLoadedConfiguration,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
