@@ -34,6 +34,18 @@ deno run -A jsr:@octosmith/cli@0 --help
 | `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                      |
 | `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                     |
 
+### template list
+
+```sh
+octosmith template list --path ./configuration
+octosmith template list --path ./configuration --format json
+```
+
+The command is fully offline and lists root repository templates only. Each row
+contains the canonical template identity, optional display name, and defining
+template path relative to the configuration root. Reusable fragments are not
+listed. Invalid configuration fails rather than returning a partial list.
+
 ### template validate
 
 ```sh
