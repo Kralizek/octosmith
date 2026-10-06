@@ -154,7 +154,9 @@ Deno.test("template-scoped plan resolves only classified repositories", async ()
     await apply(runtime, loaded, {
       mode: "plan",
       template: "repository:code",
-      onRepositoryApplied: (report) => results.push(report),
+      onRepositoryApplied: (report) => {
+        results.push(report);
+      },
     });
 
     assertEquals(runtime.readRepositories, ["broken", "sample"]);
@@ -178,7 +180,9 @@ Deno.test("template-scoped plan is a successful no-op without matches", async ()
     await apply(runtime, loaded, {
       mode: "plan",
       template: "repository:code",
-      onRepositoryApplied: (report) => results.push(report),
+      onRepositoryApplied: (report) => {
+        results.push(report);
+      },
     });
 
     assertEquals(runtime.readRepositories, []);
