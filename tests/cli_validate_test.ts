@@ -436,7 +436,7 @@ Deno.test("validate treats root configuration failures as blockers", async () =>
   const errors: string[] = [];
 
   try {
-    await Deno.writeTextFile(root + "/octosmith.yml", "invalid: [\n");
+    await Deno.writeTextFile(root + "/octosmith.yml", "version: 2\n");
     assertEquals(
       await main(["template", "validate", "--path", root], {
         writeError: (value) => errors.push(value),
