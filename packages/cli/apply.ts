@@ -264,6 +264,8 @@ export async function apply(
   for (const repository of repositories) {
     let template: string | undefined;
     let templateName: string | undefined;
+    const skippedRuntimeReferences: RuntimeReference[] = [];
+    const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
     try {
       const inspection = inspectResource(loaded, repository);
@@ -276,8 +278,6 @@ export async function apply(
         continue;
       }
       let runtimeValues = values;
-      const skippedRuntimeReferences: RuntimeReference[] = [];
-      const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
       if (inspection.status === "matched") {
         template = inspection.template;
@@ -336,6 +336,7 @@ export async function apply(
           error,
           template,
           templateName,
+          diagnostics,
         ),
       );
     }
@@ -372,6 +373,7 @@ export async function apply(
           ),
           resource.desired.template,
           resource.desired.templateName,
+          resource.diagnostics,
         ),
       );
     }

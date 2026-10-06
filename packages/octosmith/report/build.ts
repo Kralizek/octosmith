@@ -97,7 +97,13 @@ export function reportFailedRepository(
   error: unknown,
   template?: string,
   templateName?: string,
+  diagnostics: readonly RuntimeReferenceDiagnostic[] = [],
 ): RepositoryReport {
+  const allDiagnostics = [
+    ...diagnostics,
+    ...(error instanceof RuntimeReferenceError ? [error.diagnostic] : []),
+  ];
+
   return {
     repository,
     ...(template !== undefined && { template }),
@@ -105,8 +111,6 @@ export function reportFailedRepository(
     status: "failed",
     items: [],
     error: error instanceof Error ? error.message : String(error),
-    ...(error instanceof RuntimeReferenceError && {
-      diagnostics: [error.diagnostic],
-    }),
+    ...(allDiagnostics.length > 0 && { diagnostics: allDiagnostics }),
   };
 }
