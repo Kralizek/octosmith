@@ -9,15 +9,15 @@ import {
   type LoadedConfiguration,
   MissingRuntimeValueError,
   persistedOperationSecretSources,
-  preflightRuntimeReferences,
-  RuntimeReferenceError,
-  type RuntimeReference,
-  type RuntimeReferenceDiagnostic,
   type PersistedPlanArtifact,
   type PersistedResourcePlan,
+  preflightRuntimeReferences,
   projectOwnedCurrentState,
   resolveDesiredState,
   restoreEvaluations,
+  type RuntimeReference,
+  type RuntimeReferenceDiagnostic,
+  RuntimeReferenceError,
 } from "@octosmith/octosmith";
 import type { ApplyRuntime } from "./apply.ts";
 import { withoutSkippedRuntimeValues } from "./apply.ts";
