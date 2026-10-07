@@ -8,6 +8,7 @@ export {
   type ConfigurationValidationIssue,
   type ConfigurationValidationIssueCode,
   type ConfigurationValidationResult,
+  type EffectiveRepositorySelectorChoices,
   type EffectiveRepositorySelectorConstraint,
   type EffectiveRepositorySelectorConstraints,
   type EffectiveRepositorySelectorIntersection,

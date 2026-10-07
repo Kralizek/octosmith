@@ -143,11 +143,23 @@ export interface EffectiveRepositorySelectorConstraints {
   readonly exclude: readonly EffectiveRepositorySelectorConstraint[];
 }
 
+/** Normalized dimensions a consumer can use to construct or prompt for a repository. */
+export interface EffectiveRepositorySelectorChoices {
+  readonly names: {
+    readonly choices?: readonly string[];
+    readonly witness?: string;
+  };
+  readonly visibility: readonly ("public" | "private" | "internal")[];
+  readonly requiredTeams: readonly string[];
+  readonly requiredProperties: Readonly<Record<string, PropertyValue>>;
+}
+
 /** The constructible repository constraints shared by scope and template. */
 export interface EffectiveRepositorySelectorIntersection {
   readonly template: string;
   readonly reachable: boolean;
   readonly constraints: EffectiveRepositorySelectorConstraints;
+  readonly effective: EffectiveRepositorySelectorChoices;
   readonly witness?: RepositoryMetadata;
 }
 
@@ -322,11 +334,55 @@ export function effectiveRepositorySelectorIntersection(
     exclude.map((constraint) => constraint.selector),
     templateIdentity,
   );
+  const positiveSelectors = include.map((constraint) => constraint.selector);
+  const negativeSelectors = exclude.map((constraint) => constraint.selector);
+  const finiteNameGroup = positiveSelectors
+    .map((selector) => selector.names)
+    .filter((names): names is readonly string[] =>
+      names !== undefined &&
+      names.every((name) => !name.includes("*") && !name.includes("?"))
+    )
+    .sort((left, right) => left.length - right.length)[0];
+  const nameChoices = finiteNameGroup === undefined
+    ? undefined
+    : [...new Set(finiteNameGroup)].filter((name) =>
+      scopeIntersectionWitness(
+        [...positiveSelectors, { names: [name] }],
+        negativeSelectors,
+        templateIdentity,
+      ) !== undefined
+    ).sort();
+  const visibilityChoices = ([
+    "public",
+    "private",
+    "internal",
+  ] as const).filter((visibility) =>
+    scopeIntersectionWitness(
+      [...positiveSelectors, { visibility }],
+      negativeSelectors,
+      templateIdentity,
+    ) !== undefined
+  );
+  const requiredTeams = [
+    ...new Set(positiveSelectors.flatMap((selector) => selector.teams ?? [])),
+  ].sort();
+  const requiredProperties = mergeProperties(
+    positiveSelectors.map((selector) => selector.properties),
+  );
 
   return {
     template: templateIdentity,
     reachable: witness !== undefined,
     constraints: { include, exclude },
+    effective: {
+      names: {
+        ...(nameChoices === undefined ? {} : { choices: nameChoices }),
+        ...(witness === undefined ? {} : { witness: witness.name }),
+      },
+      visibility: visibilityChoices,
+      requiredTeams,
+      requiredProperties,
+    },
     witness,
   };
 }

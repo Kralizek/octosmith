@@ -32,7 +32,8 @@ Deno.test("effective selector intersection matches candidates with exclusions", 
       kind: "repository",
       match: {
         include: {
-          names: ["team-*"],
+          names: ["team-api", "team-secret-api"],
+          visibility: "private",
           teams: ["platform"],
           properties: { tier: "backend" },
         },
@@ -50,6 +51,11 @@ Deno.test("effective selector intersection matches candidates with exclusions", 
   };
 
   assertEquals(intersection.reachable, true);
+  assertEquals(intersection.effective.names.choices, ["team-api"]);
+  assertEquals(intersection.effective.names.witness, "team-api");
+  assertEquals(intersection.effective.visibility, ["private"]);
+  assertEquals(intersection.effective.requiredTeams, ["platform"]);
+  assertEquals(intersection.effective.requiredProperties, { tier: "backend" });
   assertEquals(
     matchesEffectiveRepositorySelectorIntersection(intersection, candidate),
     true,
