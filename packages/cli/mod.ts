@@ -69,12 +69,12 @@ function createCli(
     commandOptions: { path: string; format: string; quiet?: boolean },
     template?: string,
   ) => {
-    if (template !== undefined) {
-      throw new Error("Template-specific validation is not implemented yet");
-    }
-
     if (commandOptions.quiet && commandOptions.format === "json") {
       throw new Error("Cannot combine --quiet with --format json");
+    }
+
+    if (template !== undefined) {
+      throw new Error("Template-specific validation is not implemented yet");
     }
 
     const format = parseOutputFormat(commandOptions.format);

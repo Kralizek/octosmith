@@ -93,6 +93,34 @@ Deno.test("validate rejects quiet JSON output", async () => {
       errors.join("\n"),
       "Cannot combine --quiet with --format json",
     );
+
+    errors.length = 0;
+    assertEquals(
+      await main(
+        [
+          "template",
+          "validate",
+          "teams/backend",
+          "--quiet",
+          "--format",
+          "json",
+          "--path",
+          root,
+        ],
+        { writeError: (value) => errors.push(value) },
+      ),
+      1,
+    );
+    assertStringIncludes(
+      errors.join("\n"),
+      "Cannot combine --quiet with --format json",
+    );
+    assertEquals(
+      errors.some((value) =>
+        value.includes("Template-specific validation is not implemented yet")
+      ),
+      false,
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
