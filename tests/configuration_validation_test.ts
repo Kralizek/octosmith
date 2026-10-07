@@ -4,6 +4,7 @@ import {
   effectiveRepositorySelectorIntersection,
   loadConfigurationDirectory,
   matchesEffectiveRepositorySelectorIntersection,
+  templateCanMatchScope,
 } from "../packages/octosmith/mod.ts";
 
 const configuration = {
@@ -147,6 +148,52 @@ Deno.test("wildcard name intersections expose patterns, not semantic witnesses a
       false,
     );
   }
+});
+
+Deno.test("template reachability checks include selectors without deriving choices", () => {
+  const template = {
+    version: 1,
+    kind: "repository",
+    match: {
+      include: {
+        names: ["team-api"],
+        visibility: "private",
+        teams: ["platform"],
+        properties: { tier: "backend" },
+      },
+    },
+    repository: {},
+  } as const;
+
+  assertEquals(
+    templateCanMatchScope(
+      {
+        include: { names: ["team-*"], visibility: ["private", "internal"] },
+        exclude: { names: ["team-secret-*"] },
+      },
+      template,
+    ),
+    true,
+  );
+  assertEquals(
+    templateCanMatchScope(
+      {
+        include: { names: ["team-*"] },
+        exclude: { names: ["team-api"] },
+      },
+      template,
+    ),
+    false,
+  );
+  assertEquals(
+    templateCanMatchScope(
+      {
+        include: { properties: { tier: "frontend" } },
+      },
+      template,
+    ),
+    false,
+  );
 });
 
 Deno.test("configuration rejects misspelled scope selectors", async () => {

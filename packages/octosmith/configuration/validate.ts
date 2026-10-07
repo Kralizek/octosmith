@@ -305,11 +305,22 @@ export function templateCanMatchScope(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
 ): boolean {
-  return effectiveRepositorySelectorIntersection(
-    scope,
-    template,
+  const positiveSelectors = [
+    scope.include === "all" ? {} : scope.include,
+    template.match.include === "all" ? {} : template.match.include,
+  ];
+  const negativeSelectors = [
+    scope.exclude,
+    template.match.exclude,
+  ].filter(
+    (selector): selector is RepositorySelector => selector !== undefined,
+  );
+
+  return scopeIntersectionWitness(
+    positiveSelectors,
+    negativeSelectors,
     "repository:template",
-  ).reachable;
+  ) !== undefined;
 }
 
 /** Expose exact include/exclude constraints and a witness for a template in scope. */
