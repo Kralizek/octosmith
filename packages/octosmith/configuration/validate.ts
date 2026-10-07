@@ -104,6 +104,7 @@ async function validateDirectoryDetailed(
     isSecretAvailable,
     true,
     true,
+    true,
   );
   const selectedIdentity = selectedTemplate === undefined
     ? undefined
@@ -175,13 +176,14 @@ async function collectLoadedConfigurationValidation(
   isSecretAvailable?: (name: string) => boolean,
   reportUnreachableTemplates = false,
   validateRootScopeCoverage = false,
+  validateRootTemplateOverlap = false,
 ): Promise<ConfigurationValidationResult> {
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
   const issues: ConfigurationValidationIssue[] = [];
   const intersections: EffectiveRepositorySelectorIntersection[] = [];
 
   const scope = loaded.configuration.repositories.scope;
-  if (selectedTemplate === undefined) {
+  if (selectedTemplate === undefined || validateRootTemplateOverlap) {
     issues.push(...findTemplateOverlapIssues(scope, loaded.templates));
   }
   if (
@@ -277,6 +279,7 @@ export async function validateLoadedConfigurationDetailed(
     selectedTemplate,
     true,
     undefined,
+    true,
     true,
     true,
   );

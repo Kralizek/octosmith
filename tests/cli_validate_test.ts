@@ -1381,6 +1381,46 @@ Deno.test("selected validation uses the complete template set for root coverage"
   }
 });
 
+Deno.test("selected validation reports overlaps across the full template set", async () => {
+  const root = await Deno.makeTempDir();
+  const output: string[] = [];
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      "version: 1\norganization: acme\nrepositories:\n  scope:\n    include: all\n",
+    );
+    for (const name of ["one", "two"]) {
+      await Deno.writeTextFile(
+        root + `/templates/${name}.yml`,
+        "version: 1\nkind: repository\nmatch:\n  include:\n    names: [team-*]\nrepository: {}\n",
+      );
+    }
+
+    assertEquals(
+      await main(
+        ["template", "validate", "one", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      1,
+    );
+    const result = JSON.parse(output[0]);
+    const overlapIssue = result.issues.find((issue: { code: string }) =>
+      issue.code === "template_overlap"
+    );
+    assertEquals(overlapIssue !== undefined, true);
+    assertEquals(
+      overlapIssue.templates.sort(),
+      ["repository:one", "repository:two"],
+    );
+    assertEquals(result.intersections.length, 1);
+    assertEquals(result.intersections[0].template, "repository:one");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate selected template ignores unrelated template load errors", async () => {
   const root = await validConfiguration();
 
