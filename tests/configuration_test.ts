@@ -9,6 +9,7 @@ import {
   MissingRuntimeValueError,
   preflightRuntimeReferences,
   resolveDesiredState,
+  RuntimeReferenceError,
   validateConfigurationDirectory,
 } from "../packages/octosmith/mod.ts";
 
@@ -1199,6 +1200,45 @@ Deno.test("runtime preflight snapshots each source name once", () => {
   );
   assertEquals(values("SHARED"), "runtime:SHARED");
   assertEquals(calls.get("SHARED"), 1);
+});
+
+Deno.test("normal runtime preflight collects every missing prerequisite", () => {
+  const calls: string[] = [];
+  const error = assertThrows(
+    () =>
+      preflightRuntimeReferences(
+        "repository:sample",
+        {
+          version: 1,
+          kind: "repository",
+          match: { include: "all" },
+          repository: {
+            actions: {
+              variables: ["MISSING_VARIABLE"],
+              secrets: ["MISSING_SECRET"],
+            },
+            dependabot: { secrets: ["MISSING_DEPENDABOT_SECRET"] },
+          },
+        },
+        { name: "sample", teams: [], properties: {} },
+        (name) => {
+          calls.push(name);
+          throw new MissingRuntimeValueError(name);
+        },
+      ),
+    RuntimeReferenceError,
+  );
+
+  assertEquals(calls, [
+    "MISSING_VARIABLE",
+    "MISSING_SECRET",
+    "MISSING_DEPENDABOT_SECRET",
+  ]);
+  assertEquals(error.diagnostics.map(({ name, code }) => [name, code]), [
+    ["MISSING_VARIABLE", "missing_variable"],
+    ["MISSING_SECRET", "missing_secret"],
+    ["MISSING_DEPENDABOT_SECRET", "missing_secret"],
+  ]);
 });
 
 Deno.test("runtime preflight uses the mutation provider for secrets", () => {

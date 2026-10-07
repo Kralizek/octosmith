@@ -177,6 +177,34 @@ Deno.test("apply plan builds reports without applying", async () => {
   }
 });
 
+Deno.test("normal plan reports every missing prerequisite without reading state", async () => {
+  const root = await runtimeValuesConfigurationDirectory();
+  try {
+    const runtime = new FakeRuntime([metadata("sample")]);
+    const results = await applyResults(runtime, root, "plan", {
+      values: (name) => {
+        throw new MissingRuntimeValueError(name);
+      },
+    });
+
+    assertEquals(results[0].status, "failed");
+    assertEquals(
+      results[0].diagnostics?.map((diagnostic) => diagnostic.name),
+      [
+        "AVAILABLE",
+        "MISSING_VARIABLE",
+        "MISSING_ACTIONS_SECRET",
+        "MISSING_DEPENDABOT_SECRET",
+        "MISSING_ENVIRONMENT_VARIABLE",
+        "MISSING_ENVIRONMENT_SECRET",
+      ],
+    );
+    assertEquals(runtime.readRepositories, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("apply apply executes the fresh plan", async () => {
   const root = await configurationDirectory();
   try {
@@ -716,12 +744,14 @@ async function applyResults(
   runtime: ApplyRuntime,
   root: string,
   mode: "plan" | "apply",
+  options: { readonly values?: (name: string) => string } = {},
 ): Promise<RepositoryReport[]> {
   const loaded = await loadConfigurationDirectory(root);
   const results: RepositoryReport[] = [];
 
   await apply(runtime, loaded, {
     mode,
+    ...options,
     onRepositoryApplied: (report) => {
       results.push(report);
     },

@@ -101,7 +101,7 @@ export function reportFailedRepository(
 ): RepositoryReport {
   const allDiagnostics = [
     ...diagnostics,
-    ...(error instanceof RuntimeReferenceError ? [error.diagnostic] : []),
+    ...(error instanceof RuntimeReferenceError ? error.diagnostics : []),
   ];
 
   return {
