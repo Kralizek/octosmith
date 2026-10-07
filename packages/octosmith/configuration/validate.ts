@@ -147,7 +147,12 @@ export interface EffectiveRepositorySelectorConstraints {
 export interface EffectiveRepositorySelectorChoices {
   readonly names: {
     readonly choices?: readonly string[];
-    readonly witness?: string;
+    readonly includePatterns: readonly {
+      readonly path: string;
+      readonly patterns: readonly string[];
+    }[];
+    readonly excludeConstraints:
+      readonly EffectiveRepositorySelectorConstraint[];
   };
   readonly visibility: readonly ("public" | "private" | "internal")[];
   readonly requiredTeams: readonly string[];
@@ -159,8 +164,8 @@ export interface EffectiveRepositorySelectorIntersection {
   readonly template: string;
   readonly reachable: boolean;
   readonly constraints: EffectiveRepositorySelectorConstraints;
-  readonly effective: EffectiveRepositorySelectorChoices;
-  readonly witness?: RepositoryMetadata;
+  readonly effective?: EffectiveRepositorySelectorChoices;
+  readonly semanticWitness?: RepositoryMetadata;
 }
 
 async function collectLoadedConfigurationValidation(
@@ -221,7 +226,7 @@ async function collectLoadedConfigurationValidation(
       name,
     );
     intersections.push(intersection);
-    const repository = intersection.witness;
+    const repository = intersection.semanticWitness;
 
     if (repository === undefined) {
       if (selectedIdentity !== undefined || reportUnreachableTemplates) {
@@ -369,21 +374,25 @@ export function effectiveRepositorySelectorIntersection(
   const requiredProperties = mergeProperties(
     positiveSelectors.map((selector) => selector.properties),
   );
+  const effective = witness === undefined ? undefined : {
+    names: {
+      ...(nameChoices === undefined ? {} : { choices: nameChoices }),
+      includePatterns: include.flatMap(({ path, selector }) =>
+        selector.names === undefined ? [] : [{ path, patterns: selector.names }]
+      ),
+      excludeConstraints: exclude,
+    },
+    visibility: visibilityChoices,
+    requiredTeams,
+    requiredProperties,
+  };
 
   return {
     template: templateIdentity,
     reachable: witness !== undefined,
     constraints: { include, exclude },
-    effective: {
-      names: {
-        ...(nameChoices === undefined ? {} : { choices: nameChoices }),
-        ...(witness === undefined ? {} : { witness: witness.name }),
-      },
-      visibility: visibilityChoices,
-      requiredTeams,
-      requiredProperties,
-    },
-    witness,
+    ...(effective === undefined ? {} : { effective }),
+    semanticWitness: witness,
   };
 }
 
