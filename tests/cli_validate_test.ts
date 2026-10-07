@@ -1314,6 +1314,73 @@ Deno.test("validate accepts short and canonical selected template identities", a
   }
 });
 
+Deno.test("selected validation reports root scope coverage issues", async () => {
+  const root = await validConfiguration();
+  const output: string[] = [];
+
+  try {
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      [
+        "version: 1",
+        "organization: acme",
+        "repositories:",
+        "  scope:",
+        "    include:",
+        "      names: [sample, missing]",
+        "",
+      ].join("\n"),
+    );
+    assertEquals(
+      await main(
+        ["template", "validate", "default", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      1,
+    );
+    const result = JSON.parse(output[0]);
+    assertEquals(result.issues[0].code, "scope_repository_unmatched");
+    assertStringIncludes(result.issues[0].message, "missing");
+    assertEquals(result.intersections[0].template, "repository:default");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("selected validation uses the complete template set for root coverage", async () => {
+  const root = await Deno.makeTempDir();
+  const output: string[] = [];
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      "version: 1\norganization: acme\nrepositories:\n  scope:\n    include:\n      names: [sample, second]\n",
+    );
+    await Deno.writeTextFile(
+      root + "/templates/default.yml",
+      "version: 1\nkind: repository\nmatch:\n  include:\n    names: [sample]\nrepository: {}\n",
+    );
+    await Deno.writeTextFile(
+      root + "/templates/second.yml",
+      "version: 1\nkind: repository\nmatch:\n  include:\n    names: [second]\nrepository: {}\n",
+    );
+
+    assertEquals(
+      await main(
+        ["template", "validate", "default", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+    const result = JSON.parse(output[0]);
+    assertEquals(result.valid, true);
+    assertEquals(result.intersections.length, 1);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate selected template ignores unrelated template load errors", async () => {
   const root = await validConfiguration();
 
@@ -1412,9 +1479,16 @@ Deno.test("validate selected template reports unreachable scope intersection", a
       1,
     );
     const result = JSON.parse(output[0]);
-    assertEquals(result.issues[0].code, "template_unreachable");
+    const unreachableIssue = result.issues.find((issue: { code: string }) =>
+      issue.code === "template_unreachable"
+    );
+    assertEquals(unreachableIssue !== undefined, true);
+    assertEquals(
+      unreachableIssue.path,
+      "repositories.scope.intersection.repository:private.match",
+    );
     assertEquals(result.intersections[0].reachable, false);
-    assertEquals(result.issues[0].constraints.include.length, 2);
+    assertEquals(unreachableIssue.constraints.include.length, 2);
   } finally {
     await Deno.remove(root, { recursive: true });
   }

@@ -85,7 +85,6 @@ async function validateDirectoryDetailed(
   try {
     loading = await loadConfigurationDirectoryCollectingIssues(
       root,
-      selectedTemplate,
     );
   } catch (error) {
     return {
@@ -104,13 +103,23 @@ async function validateDirectoryDetailed(
     loading.issues.length === 0,
     isSecretAvailable,
     true,
+    true,
   );
-  const loadIssues = loading.issues.map((issue) => ({
-    code: issue.code,
-    message: issue.message,
-    template: issue.template,
-    path: issue.path,
-  }));
+  const selectedIdentity = selectedTemplate === undefined
+    ? undefined
+    : selectedTemplate.startsWith("repository:")
+    ? selectedTemplate
+    : "repository:" + selectedTemplate;
+  const loadIssues = loading.issues
+    .filter((issue) =>
+      selectedIdentity === undefined || issue.template === selectedIdentity
+    )
+    .map((issue) => ({
+      code: issue.code,
+      message: issue.message,
+      template: issue.template,
+      path: issue.path,
+    }));
   const issues = validation.issues.filter((issue) =>
     issue.code !== "unknown_template" ||
     !loadIssues.some((loadIssue) => loadIssue.template === issue.template)
@@ -148,6 +157,7 @@ async function collectLoadedConfigurationValidation(
   templateSetComplete = true,
   isSecretAvailable?: (name: string) => boolean,
   reportUnreachableTemplates = false,
+  validateRootScopeCoverage = false,
 ): Promise<ConfigurationValidationResult> {
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
   const issues: ConfigurationValidationIssue[] = [];
@@ -158,7 +168,7 @@ async function collectLoadedConfigurationValidation(
     issues.push(...findTemplateOverlapIssues(scope, loaded.templates));
   }
   if (
-    selectedTemplate === undefined &&
+    (selectedTemplate === undefined || validateRootScopeCoverage) &&
     templateSetComplete &&
     loaded.configuration.repositories.settings?.unmatchedRepositories !==
       "ignore"
@@ -250,6 +260,7 @@ export async function validateLoadedConfigurationDetailed(
     selectedTemplate,
     true,
     undefined,
+    true,
     true,
   );
 }
