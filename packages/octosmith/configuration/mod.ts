@@ -12,6 +12,7 @@ export {
   type EffectiveRepositorySelectorConstraints,
   type EffectiveRepositorySelectorIntersection,
   effectiveRepositorySelectorIntersection,
+  matchesEffectiveRepositorySelectorIntersection,
   templateCanMatchScope,
   validateConfigurationDirectory,
   validateConfigurationDirectoryDetailed,

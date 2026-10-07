@@ -1,6 +1,10 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
-import { loadConfigurationDirectory } from "../packages/octosmith/mod.ts";
+import {
+  effectiveRepositorySelectorIntersection,
+  loadConfigurationDirectory,
+  matchesEffectiveRepositorySelectorIntersection,
+} from "../packages/octosmith/mod.ts";
 
 const configuration = {
   version: 1,
@@ -13,6 +17,65 @@ const template = {
   match: { include: { names: ["*"] } },
   repository: {},
 };
+
+Deno.test("effective selector intersection matches candidates with exclusions", () => {
+  const intersection = effectiveRepositorySelectorIntersection(
+    {
+      include: {
+        names: ["team-*"],
+        visibility: ["private", "internal"],
+      },
+      exclude: { names: ["team-secret-*"] },
+    },
+    {
+      version: 1,
+      kind: "repository",
+      match: {
+        include: {
+          names: ["team-*"],
+          teams: ["platform"],
+          properties: { tier: "backend" },
+        },
+        exclude: { properties: { status: "archived" } },
+      },
+      repository: {},
+    },
+    "repository:team",
+  );
+  const candidate = {
+    name: "team-api",
+    teams: ["platform"],
+    visibility: "private" as const,
+    properties: { tier: "backend", status: "active" },
+  };
+
+  assertEquals(intersection.reachable, true);
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, candidate),
+    true,
+  );
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, {
+      ...candidate,
+      name: "team-secret-api",
+    }),
+    false,
+  );
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, {
+      ...candidate,
+      properties: { tier: "backend", status: "archived" },
+    }),
+    false,
+  );
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, {
+      ...candidate,
+      visibility: "public",
+    }),
+    false,
+  );
+});
 
 Deno.test("configuration rejects misspelled scope selectors", async () => {
   await withConfiguration(

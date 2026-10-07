@@ -331,6 +331,20 @@ export function effectiveRepositorySelectorIntersection(
   };
 }
 
+/** Test candidate repository metadata against every constraint in an intersection. */
+export function matchesEffectiveRepositorySelectorIntersection(
+  intersection: EffectiveRepositorySelectorIntersection,
+  repository: RepositoryMetadata,
+): boolean {
+  return intersection.reachable &&
+    intersection.constraints.include.every(({ selector }) =>
+      matchesSelector(selector, repository)
+    ) &&
+    intersection.constraints.exclude.every(({ selector }) =>
+      !matchesSelector(selector, repository)
+    );
+}
+
 function findTemplateOverlapIssues(
   scope: Scope<RepositorySelector>,
   templates: Readonly<Record<string, RepositoryTemplate>>,
