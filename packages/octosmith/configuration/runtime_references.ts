@@ -37,9 +37,36 @@ export interface RuntimeReferenceDiagnostic {
 
 /** Error raised when a required runtime value is unavailable. */
 export class RuntimeReferenceError extends Error {
-  constructor(readonly diagnostic: RuntimeReferenceDiagnostic) {
-    super(renderRuntimeReferenceDiagnostic(diagnostic));
+  readonly diagnostic: RuntimeReferenceDiagnostic;
+  readonly diagnostics: readonly RuntimeReferenceDiagnostic[];
+
+  constructor(
+    diagnostic:
+      | RuntimeReferenceDiagnostic
+      | readonly RuntimeReferenceDiagnostic[],
+  ) {
+    const diagnostics = "severity" in diagnostic ? [diagnostic] : diagnostic;
+    const first = diagnostics[0];
+    if (first === undefined) {
+      throw new Error(
+        "Runtime reference errors require at least one diagnostic",
+      );
+    }
+    super(renderRuntimeReferenceDiagnostic(first));
+    this.diagnostic = first;
+    this.diagnostics = diagnostics;
     this.name = "RuntimeReferenceError";
+  }
+}
+
+/** Error raised when a provider fails after missing references were found. */
+export class RuntimeReferenceProviderError extends Error {
+  constructor(
+    override readonly cause: unknown,
+    readonly diagnostics: readonly RuntimeReferenceDiagnostic[],
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "RuntimeReferenceProviderError";
   }
 }
 
@@ -122,6 +149,7 @@ export function preflightRuntimeReferences(
 ): (name: string) => string {
   const resolved = new Map<string, string>();
   const missing = new Set<string>();
+  const diagnostics: RuntimeReferenceDiagnostic[] = [];
   const references = collectRuntimeReferences(template);
   const key = (kind: RuntimeReference["kind"], name: string) =>
     kind + ":" + name;
@@ -139,6 +167,9 @@ export function preflightRuntimeReferences(
       resolved.set(referenceKey, provider(reference.name));
     } catch (error) {
       if (!isMissingRuntimeValueError(error, reference.name)) {
+        if (diagnostics.length > 0) {
+          throw new RuntimeReferenceProviderError(error, diagnostics);
+        }
         throw error;
       }
 
@@ -180,10 +211,13 @@ export function preflightRuntimeReferences(
         continue;
       }
 
-      throw new RuntimeReferenceError({
-        ...diagnostic,
-      });
+      missing.add(referenceKey);
+      diagnostics.push(diagnostic);
     }
+  }
+
+  if (diagnostics.length > 0) {
+    throw new RuntimeReferenceError(diagnostics);
   }
 
   return (name) => {

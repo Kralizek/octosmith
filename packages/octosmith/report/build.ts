@@ -1,6 +1,7 @@
 import {
   type RuntimeReferenceDiagnostic,
   RuntimeReferenceError,
+  RuntimeReferenceProviderError,
 } from "../configuration/runtime_references.ts";
 import type { ApplyEvaluation, Plan } from "../plan/types.ts";
 import type {
@@ -101,7 +102,12 @@ export function reportFailedRepository(
 ): RepositoryReport {
   const allDiagnostics = [
     ...diagnostics,
-    ...(error instanceof RuntimeReferenceError ? [error.diagnostic] : []),
+    ...(
+      error instanceof RuntimeReferenceError ||
+        error instanceof RuntimeReferenceProviderError
+        ? error.diagnostics
+        : []
+    ),
   ];
 
   return {

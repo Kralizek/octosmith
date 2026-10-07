@@ -151,6 +151,117 @@ Deno.test("text renderer prefers template display names", () => {
   assertEquals(rendered.includes("repository:team-a/backend"), false);
 });
 
+Deno.test("text renderer groups shared runtime failures and preserves unique errors", () => {
+  const slackDiagnostic = (repository: string) => ({
+    severity: "error" as const,
+    code: "missing_secret" as const,
+    name: "SLACK_BOT_OPERATION_TOKEN",
+    template: "repository:services",
+    path: "repository.actions.secrets[0]",
+    resource: { type: "repository" as const, name: "acme/" + repository },
+  });
+  const copilotDiagnostic = (repository: string) => ({
+    ...slackDiagnostic(repository),
+    name: "COPILOT_REVIEW_TOKEN",
+    path: "repository.actions.secrets[1]",
+  });
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [
+      {
+        repository: "repo-a",
+        template: "repository:services",
+        status: "failed",
+        items: [],
+        error:
+          'Required secret "SLACK_BOT_OPERATION_TOKEN" is not available in the current context.\n\nReferenced by:',
+        diagnostics: [slackDiagnostic("repo-a"), copilotDiagnostic("repo-a")],
+      },
+      {
+        repository: "repo-b",
+        template: "repository:services",
+        status: "failed",
+        items: [],
+        error:
+          'Required secret "SLACK_BOT_OPERATION_TOKEN" is not available in the current context.',
+        diagnostics: [slackDiagnostic("repo-b"), copilotDiagnostic("repo-b")],
+      },
+      {
+        repository: "repo-c",
+        template: "repository:infrastructure",
+        status: "failed",
+        items: [],
+        error: "resource-specific read failure",
+        diagnostics: [slackDiagnostic("repo-c")],
+      },
+    ],
+  };
+  const rendered = renderReport(report);
+  const serialized = JSON.stringify(report);
+
+  assertStringIncludes(rendered, "✗ repo-a [repository:services] — failed");
+  assertStringIncludes(rendered, "✗ repo-b [repository:services] — failed");
+  assertStringIncludes(
+    rendered,
+    "✗ repo-c [repository:infrastructure] — failed",
+  );
+  assertEquals(
+    rendered.split('Required secret "SLACK_BOT_OPERATION_TOKEN"').length - 1,
+    1,
+  );
+  assertStringIncludes(rendered, "Affected resources (3):");
+  assertStringIncludes(rendered, "Affected resources (2):");
+  assertStringIncludes(rendered, "    repo-a");
+  assertStringIncludes(rendered, "    repo-b");
+  assertStringIncludes(rendered, "    repo-c");
+  assertStringIncludes(rendered, "✗ resource-specific read failure");
+  assertStringIncludes(
+    rendered,
+    "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 3 failed",
+  );
+  assertEquals(serialized.includes("Failures:"), false);
+  assertEquals(
+    report.repositories.map((repository) => repository.diagnostics?.length),
+    [2, 2, 1],
+  );
+});
+
+Deno.test("text renderer groups skipped runtime warnings without changing severity", () => {
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: ["repo-a", "repo-b"].map((name) => ({
+      repository: name,
+      status: "planned" as const,
+      items: [],
+      diagnostics: [{
+        severity: "warning" as const,
+        code: "skipped_secret" as const,
+        name: "MISSING_TOKEN",
+        template: "repository:services",
+        path: "repository.actions.secrets[0]",
+        resource: { type: "repository" as const, name: "acme/" + name },
+      }],
+    })),
+  };
+  const rendered = renderReport(report);
+
+  assertStringIncludes(rendered, "Warnings:");
+  assertStringIncludes(
+    rendered,
+    'Skipped secret "MISSING_TOKEN": runtime value unavailable.',
+  );
+  assertStringIncludes(rendered, "Affected resources (2):");
+  assertEquals(rendered.includes("Failures:"), false);
+  assertEquals(
+    rendered.split('Skipped secret "MISSING_TOKEN"').length - 1,
+    1,
+  );
+});
+
 Deno.test("verbose text includes unchanged apply items", () => {
   const report: Report = {
     organization: "acme",
@@ -200,6 +311,49 @@ for (const unmatched of [undefined, 0, 2]) {
     );
   });
 }
+
+Deno.test("unmatched resources are grouped by type with redundant organization omitted", () => {
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [],
+    inspection: {
+      resources: [
+        {
+          type: "repository",
+          name: "acme/repo-a",
+          template: null,
+          status: "unmatched",
+        },
+        {
+          type: "repository",
+          name: "acme/repo-b",
+          template: null,
+          status: "unmatched",
+        },
+        {
+          type: "environment",
+          name: "production",
+          template: null,
+          status: "unmatched",
+        },
+      ],
+      summary: { matched: 0, unmatched: 3 },
+    },
+  };
+  const rendered = renderReport(report);
+
+  assertStringIncludes(rendered, "Unmatched repositories (2):");
+  assertStringIncludes(rendered, "  repo-a\n  repo-b");
+  assertStringIncludes(rendered, "Unmatched environments (1):");
+  assertStringIncludes(
+    rendered,
+    "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 0 failed, 3 unmatched",
+  );
+  assertEquals(rendered.includes("acme/repo-a"), false);
+  assertEquals(rendered.includes("acme/repo-b"), false);
+});
 
 Deno.test("summary counts every repository outcome exactly", () => {
   const applied = reportAppliedRepository(

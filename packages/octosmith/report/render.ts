@@ -27,18 +27,84 @@ export function renderReport(
       lines.push("  " + renderItem(item));
     }
 
-    if (repository.error) {
+    if (
+      repository.error &&
+      !(repository.diagnostics ?? []).some((diagnostic) =>
+        repository.error!.startsWith(
+          describeRuntimeReferenceDiagnostic(diagnostic),
+        )
+      )
+    ) {
       lines.push("  ✗ " + repository.error);
-    }
-
-    for (const diagnostic of repository.diagnostics ?? []) {
-      lines.push("  ⚠ " + describeRuntimeReferenceDiagnostic(diagnostic));
     }
   }
 
+  const unmatchedByType = new Map<
+    string,
+    { names: string[]; label: string }
+  >();
   for (const resource of report.inspection?.resources ?? []) {
-    if (resource.status === "unmatched") {
-      lines.push(resource.type + " " + resource.name + " - unmatched");
+    if (resource.status !== "unmatched") {
+      continue;
+    }
+    let group = unmatchedByType.get(resource.type);
+    if (group === undefined) {
+      group = {
+        names: [],
+        label: resource.type === "repository"
+          ? "repositories"
+          : resource.type + "s",
+      };
+      unmatchedByType.set(resource.type, group);
+    }
+    const prefix = report.organization + "/";
+    group.names.push(
+      resource.type === "repository" && resource.name.startsWith(prefix)
+        ? resource.name.slice(prefix.length)
+        : resource.name,
+    );
+  }
+
+  if (unmatchedByType.size > 0) {
+    lines.push("");
+    for (const group of unmatchedByType.values()) {
+      lines.push(
+        "Unmatched " + group.label + " (" + group.names.length + "):",
+        ...group.names.map((name) => "  " + name),
+      );
+    }
+  }
+
+  const diagnosticGroups = groupRuntimeDiagnostics(report.repositories);
+  for (const severity of ["error", "warning"] as const) {
+    const groups = diagnosticGroups.filter((group) =>
+      group.diagnostic.severity === severity
+    );
+    if (groups.length === 0) {
+      continue;
+    }
+
+    lines.push("", severity === "error" ? "Failures:" : "Warnings:");
+    for (const group of groups) {
+      const resources = [
+        ...new Set(
+          group.diagnostics.flatMap((diagnostic) =>
+            diagnostic.resource === undefined ? [] : [
+              diagnostic.resource.type === "repository" &&
+                diagnostic.resource.name.startsWith(report.organization + "/")
+                ? diagnostic.resource.name.slice(report.organization.length + 1)
+                : diagnostic.resource.name,
+            ]
+          ),
+        ),
+      ];
+      lines.push("  " + describeRuntimeReferenceDiagnostic(group.diagnostic));
+      if (resources.length > 0) {
+        lines.push(
+          "  Affected resources (" + resources.length + "):",
+          ...resources.map((resource) => "    " + resource),
+        );
+      }
     }
   }
 
@@ -57,6 +123,47 @@ export function renderReport(
   );
 
   return lines.join("\n");
+}
+
+function groupRuntimeDiagnostics(
+  repositories: Report["repositories"],
+): {
+  readonly diagnostic: NonNullable<
+    Report["repositories"][number]["diagnostics"]
+  >[number];
+  readonly diagnostics: NonNullable<
+    Report["repositories"][number]["diagnostics"]
+  >[number][];
+}[] {
+  const groups = new Map<
+    string,
+    {
+      diagnostic: NonNullable<
+        Report["repositories"][number]["diagnostics"]
+      >[number];
+      diagnostics: NonNullable<
+        Report["repositories"][number]["diagnostics"]
+      >[number][];
+    }
+  >();
+
+  for (const repository of repositories) {
+    for (const diagnostic of repository.diagnostics ?? []) {
+      const key = JSON.stringify([
+        diagnostic.severity,
+        diagnostic.code,
+        diagnostic.name,
+      ]);
+      let group = groups.get(key);
+      if (group === undefined) {
+        group = { diagnostic, diagnostics: [] };
+        groups.set(key, group);
+      }
+      group.diagnostics.push(diagnostic);
+    }
+  }
+
+  return [...groups.values()];
 }
 
 function renderRepository(repository: RepositoryReport): string {

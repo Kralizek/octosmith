@@ -353,7 +353,10 @@ for (const policy of ["error", "ignore"] as const) {
             );
             assertStringIncludes(text, "Summary: 2 matched, 1 unmatched");
           } else {
-            assertStringIncludes(text, "repository acme/unmatched - unmatched");
+            assertStringIncludes(
+              text,
+              "Unmatched repositories (1):\n  unmatched",
+            );
             const failed = policy === "ignore"
               ? 0
               : command[0] === "apply"
