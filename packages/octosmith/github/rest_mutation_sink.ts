@@ -223,6 +223,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           operation.environment,
           true,
           "explicit",
+          operation.preserveSecrets,
+          operation.preserveVariables,
         );
         return;
       case "update-environment":

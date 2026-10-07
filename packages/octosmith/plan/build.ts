@@ -528,6 +528,12 @@ function planEnvironments(
       operations.push({
         type: "create-environment",
         environment: materializeEnvironment(filteredEnvironment),
+        ...(skippedSecrets.size > 0 && {
+          preserveSecrets: [...skippedSecrets].sort(),
+        }),
+        ...(skippedVariables.size > 0 && {
+          preserveVariables: [...skippedVariables].sort(),
+        }),
       });
 
       continue;

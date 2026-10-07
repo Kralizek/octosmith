@@ -455,6 +455,20 @@
             },
             "environment": {
               "$ref": "#/$defs/environment"
+            },
+            "preserveSecrets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "preserveVariables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
             }
           }
         },

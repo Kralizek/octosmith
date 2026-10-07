@@ -148,6 +148,49 @@ Deno.test("environment sync preserves sparse siblings and paginates strict clean
   );
 });
 
+Deno.test("environment create preserves skipped values that appear concurrently", async () => {
+  const client = new EnvironmentClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "create-environment",
+    preserveSecrets: ["KEEP_SECRET"],
+    preserveVariables: ["LATE"],
+    environment: {
+      name: "staging",
+      secrets: [],
+      variables: [],
+    },
+  });
+
+  assertEquals(
+    client.calls.some((call) =>
+      call.method === "DELETE" && call.path.endsWith("/secrets/KEEP_SECRET")
+    ),
+    false,
+  );
+  assertEquals(
+    client.calls.some((call) =>
+      call.method === "DELETE" && call.path.endsWith("/variables/LATE")
+    ),
+    false,
+  );
+  assert(
+    client.calls.some((call) =>
+      call.method === "DELETE" && call.path.endsWith("/secrets/REMOVE_SECRET")
+    ),
+  );
+  assert(
+    client.calls.some((call) =>
+      call.method === "DELETE" && call.path.endsWith("/variables/EXTRA_0")
+    ),
+  );
+});
+
 interface RecordedRequest {
   readonly method: string;
   readonly path: string;

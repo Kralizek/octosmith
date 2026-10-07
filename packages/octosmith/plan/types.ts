@@ -162,6 +162,8 @@ export interface DeleteRulesetOperation {
 export interface CreateEnvironmentOperation {
   readonly type: "create-environment";
   readonly environment: DesiredEnvironment;
+  readonly preserveSecrets?: readonly string[];
+  readonly preserveVariables?: readonly string[];
 }
 
 /** Describes update environment operation. */
