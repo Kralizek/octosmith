@@ -1,8 +1,10 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import {
   type CurrentState,
+  type ExecutableResourcePlan,
   loadConfigurationDirectory,
   type LoadedConfiguration,
+  MissingRuntimeValueError,
   type Plan,
   type RepositoryMetadata,
   type RepositoryReport,
@@ -15,6 +17,7 @@ import { apply, type ApplyRuntime } from "../packages/cli/apply.ts";
 import { currentRepositorySettings } from "./plan/fixtures.ts";
 
 class FakeRuntime implements ApplyRuntime {
+  value?: (name: string) => string;
   readonly applied: Plan[] = [];
   readonly discoveredTargets: (string | undefined)[] = [];
   readonly readRepositories: string[] = [];
@@ -186,6 +189,189 @@ Deno.test("apply apply executes the fresh plan", async () => {
     await Deno.remove(root, { recursive: true });
   }
 });
+
+Deno.test(
+  "skip-missing-values preserves unavailable runtime values in plan and apply",
+  async () => {
+    const root = await runtimeValuesConfigurationDirectory();
+    try {
+      for (const mode of ["plan", "apply"] as const) {
+        const runtime = new FakeRuntime([metadata("sample")]);
+        const loaded = await loadConfigurationDirectory(root);
+        const results: RepositoryReport[] = [];
+        const planned: Plan[] = [];
+        const executableResources: ExecutableResourcePlan[] = [];
+
+        await apply(runtime, loaded, {
+          mode,
+          skipMissingValues: true,
+          values: (name) => {
+            if (name === "AVAILABLE") return "";
+            throw new MissingRuntimeValueError(name);
+          },
+          onRepositoryApplied: (report) => {
+            results.push(report);
+          },
+          onPlanBuilt: (resource) => {
+            planned.push(resource.plan);
+            executableResources.push(resource);
+          },
+        });
+
+        const report = results[0];
+        assertEquals(report.diagnostics?.length, 5);
+        assertEquals(
+          report.diagnostics?.every((diagnostic) =>
+            diagnostic.severity === "warning" &&
+            diagnostic.code.startsWith("skipped_")
+          ),
+          true,
+        );
+        assertEquals(report.diagnostics?.[0].name, "MISSING_VARIABLE");
+        assertEquals(planned.length, 1);
+        assertEquals(planned[0].operations, [{
+          type: "set-actions-variable",
+          variable: { name: "AVAILABLE", value: "" },
+        }]);
+        assertEquals(executableResources[0].desired.actions?.secrets, []);
+        assertEquals(executableResources[0].desired.dependabot?.secrets, []);
+        assertEquals(
+          executableResources[0].desired.environments?.[0].secrets,
+          [],
+        );
+        assertEquals(
+          executableResources[0].desired.environments?.[0].variables,
+          [],
+        );
+        if (mode === "apply") {
+          assertEquals(runtime.applied[0].operations, [{
+            type: "set-actions-variable",
+            variable: { name: "AVAILABLE", value: "" },
+          }]);
+        }
+      }
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
+);
+
+Deno.test("apply keeps variable overrides separate from the secret provider", async () => {
+  const root = await runtimeValuesConfigurationDirectory();
+  try {
+    const runtime = new FakeRuntime([metadata("sample")]);
+    const variableLookups: string[] = [];
+    const secretLookups: string[] = [];
+    runtime.value = (name) => {
+      secretLookups.push(name);
+      return "mutation-provider:" + name;
+    };
+    const loaded = await loadConfigurationDirectory(root);
+    const planned: ExecutableResourcePlan[] = [];
+
+    await apply(runtime, loaded, {
+      mode: "plan",
+      values: (name) => {
+        variableLookups.push(name);
+        return "variable-override:" + name;
+      },
+      onPlanBuilt: (resource) => {
+        planned.push(resource);
+      },
+      onRepositoryApplied: () => {},
+    });
+
+    assertEquals(variableLookups, [
+      "AVAILABLE",
+      "MISSING_VARIABLE",
+      "MISSING_ENVIRONMENT_VARIABLE",
+    ]);
+    assertEquals(secretLookups, [
+      "MISSING_ACTIONS_SECRET",
+      "MISSING_DEPENDABOT_SECRET",
+      "MISSING_ENVIRONMENT_SECRET",
+    ]);
+    assertEquals(planned[0].desired.actions?.variables, [
+      { name: "AVAILABLE", value: "variable-override:AVAILABLE" },
+      {
+        name: "MISSING_VARIABLE",
+        value: "variable-override:MISSING_VARIABLE",
+      },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test(
+  "failed apply reports skipped runtime value diagnostics",
+  async () => {
+    const root = await runtimeValuesConfigurationDirectory();
+    try {
+      const runtime = new FakeRuntime(
+        [metadata("sample")],
+        new Set(),
+        [],
+        new Set(["sample"]),
+      );
+      const loaded = await loadConfigurationDirectory(root);
+      const results: RepositoryReport[] = [];
+
+      await apply(runtime, loaded, {
+        mode: "apply",
+        skipMissingValues: true,
+        values: (name) => {
+          if (name === "AVAILABLE") return "";
+          throw new MissingRuntimeValueError(name);
+        },
+        onRepositoryApplied: (report) => {
+          results.push(report);
+        },
+      });
+
+      assertEquals(results[0].status, "failed");
+      assertEquals(results[0].diagnostics?.length, 5);
+      assertEquals(
+        results[0].diagnostics?.every((diagnostic) =>
+          diagnostic.severity === "warning" &&
+          diagnostic.code.startsWith("skipped_")
+        ),
+        true,
+      );
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
+);
+
+Deno.test(
+  "skip-missing-values does not swallow other runtime failures",
+  async () => {
+    const root = await runtimeValuesConfigurationDirectory();
+    try {
+      const runtime = new FakeRuntime([metadata("sample")]);
+      const loaded = await loadConfigurationDirectory(root);
+      const results: RepositoryReport[] = [];
+
+      await apply(runtime, loaded, {
+        mode: "plan",
+        skipMissingValues: true,
+        values: () => {
+          throw new Error("provider outage");
+        },
+        onRepositoryApplied: (report) => {
+          results.push(report);
+        },
+      });
+
+      assertEquals(results[0].status, "failed");
+      assertEquals(results[0].error, "provider outage");
+      assertEquals(results[0].diagnostics, undefined);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  },
+);
 
 Deno.test("template-scoped plan resolves only classified repositories", async () => {
   const root = await configurationDirectory();
@@ -476,6 +662,44 @@ async function sensitiveConfigurationDirectory(): Promise<string> {
     ].join("\n"),
   );
 
+  return root;
+}
+
+async function runtimeValuesConfigurationDirectory(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      '  scope: { include: { names: ["sample"] } }',
+      "  settings:",
+      "    collection_management: strict",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/code.yml",
+    [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      '  include: { names: ["sample"] }',
+      "repository:",
+      "  actions:",
+      "    variables: [AVAILABLE, MISSING_VARIABLE]",
+      "    secrets: [MISSING_ACTIONS_SECRET]",
+      "  dependabot:",
+      "    secrets: [MISSING_DEPENDABOT_SECRET]",
+      "  environments:",
+      "    - name: production",
+      "      variables: [MISSING_ENVIRONMENT_VARIABLE]",
+      "      secrets: [MISSING_ENVIRONMENT_SECRET]",
+      "",
+    ].join("\n"),
+  );
   return root;
 }
 

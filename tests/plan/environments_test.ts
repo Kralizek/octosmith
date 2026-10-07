@@ -227,6 +227,42 @@ Deno.test("new environments materialize omitted collections as empty", () => {
   );
 });
 
+Deno.test("new environments preserve skipped values if they appear concurrently", () => {
+  assertEquals(
+    buildPlan(currentState(), {
+      repository: "sample",
+      template: "code",
+      collections: "strict",
+      environments: [{
+        name: "staging",
+        secrets: [{ name: "SKIPPED_SECRET", source: "SECRET_SOURCE" }],
+        variables: [{ name: "AVAILABLE", value: "yes" }],
+      }],
+    }, {
+      skippedRuntimeReferences: [{
+        kind: "secret",
+        name: "SECRET_SOURCE",
+        target: "SKIPPED_SECRET",
+        scope: "environment",
+        environment: "staging",
+        path: "repository.environments[0].secrets[0]",
+      }],
+    }),
+    {
+      repository: "sample",
+      operations: [{
+        type: "create-environment",
+        environment: {
+          name: "staging",
+          secrets: [],
+          variables: [{ name: "AVAILABLE", value: "yes" }],
+        },
+        preserveSecrets: ["SKIPPED_SECRET"],
+      }],
+    },
+  );
+});
+
 Deno.test("environments reject duplicate nested secret and variable names", () => {
   assertThrows(
     () =>

@@ -8,6 +8,10 @@ import type {
   Plan,
   RepositoryTemplate,
 } from "../mod.ts";
+import type {
+  RuntimeReference,
+  RuntimeReferenceDiagnostic,
+} from "../configuration/runtime_references.ts";
 import { type ContentHash, hashCanonical } from "./canonical.ts";
 import { projectOwnedCurrentState } from "./owned_state.ts";
 import { assertPersistedOperationsExecutable } from "./operation_contract.ts";
@@ -45,6 +49,7 @@ export interface PersistedResourcePlan {
   readonly state: ContentHash;
   readonly operations: readonly Operation[];
   readonly evaluations: readonly PersistedApplyEvaluation[];
+  readonly skippedRuntimeReferences?: readonly RuntimeReference[];
 }
 
 /** Describes a versioned persisted executable plan. */
@@ -62,6 +67,8 @@ export interface ExecutableResourcePlan {
   readonly current: CurrentState;
   readonly plan: Plan;
   readonly evaluations: readonly ApplyEvaluation[];
+  readonly diagnostics?: readonly RuntimeReferenceDiagnostic[];
+  readonly skippedRuntimeReferences?: readonly RuntimeReference[];
 }
 
 /** @deprecated Use ExecutableResourcePlan. */
@@ -103,6 +110,7 @@ export async function createPersistedPlanArtifact(
             resource.current,
             resource.desired,
             resource.plan.operations,
+            resource.skippedRuntimeReferences,
           ),
         ),
         operations: resource.plan.operations,
@@ -110,6 +118,10 @@ export async function createPersistedPlanArtifact(
           resource.evaluations,
           resource.plan.operations,
         ),
+        ...(resource.skippedRuntimeReferences !== undefined &&
+          resource.skippedRuntimeReferences.length > 0 && {
+          skippedRuntimeReferences: resource.skippedRuntimeReferences,
+        }),
       };
     })),
   };

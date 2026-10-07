@@ -8,6 +8,7 @@ import {
   hashCanonical,
   inspectResource,
   type LoadedConfiguration,
+  MissingRuntimeValueError,
   type Operation,
   preflightRuntimeReferences,
   projectOwnedCurrentState,
@@ -15,7 +16,10 @@ import {
   reportPlannedRepository,
   resolveDesiredState,
   type ResourceInspection,
+  type RuntimeReference,
+  type RuntimeReferenceDiagnostic,
   type RuntimeValueProvider,
+  withoutSkippedRuntimeValues,
 } from "@octosmith/octosmith";
 import { executeExecutableResources } from "./execution.ts";
 import {
@@ -171,6 +175,7 @@ export function createGitHubRuntime(
           resource.current,
           resource.desired,
           resource.plan.operations,
+          resource.skippedRuntimeReferences,
         ),
       );
       const after = await hashCanonical(
@@ -178,6 +183,7 @@ export function createGitHubRuntime(
           current,
           resource.desired,
           resource.plan.operations,
+          resource.skippedRuntimeReferences,
         ),
       );
 
@@ -209,7 +215,9 @@ export interface ApplyOptions {
   readonly mode: ApplyMode;
   readonly resource?: string;
   readonly template?: string;
+  /** Override runtime values for variables; secrets use the runtime provider. */
   readonly values?: RuntimeValueProvider;
+  readonly skipMissingValues?: boolean;
   readonly onResourceInspected?: (resource: ResourceInspection) => void;
   readonly onRepositoryApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
@@ -246,6 +254,7 @@ export async function apply(
         classification.template === template;
     });
   const values = options.values ?? runtime.value ?? environmentValue;
+  const secretValues = runtime.value ?? environmentValue;
   const failures: import("@octosmith/octosmith").RepositoryReport[] = [];
   const prepared: ExecutableResourcePlan[] = [];
 
@@ -258,6 +267,8 @@ export async function apply(
   for (const repository of repositories) {
     let template: string | undefined;
     let templateName: string | undefined;
+    const skippedRuntimeReferences: RuntimeReference[] = [];
+    const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
     try {
       const inspection = inspectResource(loaded, repository);
@@ -278,24 +289,48 @@ export async function apply(
           loaded.templates[template],
           repository,
           values,
+          {
+            secretValues,
+            skipMissingValues: options.skipMissingValues,
+            onSkipped: (reference, diagnostic) => {
+              skippedRuntimeReferences.push(reference);
+              diagnostics.push(diagnostic);
+            },
+          },
         );
       }
 
-      const desired = await resolveDesiredState(
+      const resolvedDesired = await resolveDesiredState(
         loaded,
         repository,
         runtimeValues,
+        { skippedRuntimeReferences },
       );
-      template = desired.template;
-      templateName = desired.templateName;
+      template = resolvedDesired.template;
+      templateName = resolvedDesired.templateName;
 
-      const current = await runtime.read(desired);
-      const plan = buildPlan(current, desired);
+      const current = await runtime.read(resolvedDesired);
+      const plan = buildPlan(current, resolvedDesired, {
+        skippedRuntimeReferences,
+      });
+      const desired = withoutSkippedRuntimeValues(
+        resolvedDesired,
+        skippedRuntimeReferences,
+      );
       const evaluations = buildApplyEvaluations(
         desired,
         plan.operations,
       );
-      const executable = { desired, current, plan, evaluations };
+      const executable = {
+        desired,
+        current,
+        plan,
+        evaluations,
+        ...(diagnostics.length > 0 && { diagnostics }),
+        ...(skippedRuntimeReferences.length > 0 && {
+          skippedRuntimeReferences,
+        }),
+      };
 
       prepared.push(executable);
       await options.onPlanBuilt?.(executable);
@@ -306,6 +341,7 @@ export async function apply(
           error,
           template,
           templateName,
+          diagnostics,
         ),
       );
     }
@@ -322,6 +358,7 @@ export async function apply(
           resource.plan,
           resource.evaluations,
           resource.desired.templateName,
+          resource.diagnostics,
         ),
       );
     }
@@ -341,6 +378,7 @@ export async function apply(
           ),
           resource.desired.template,
           resource.desired.templateName,
+          resource.diagnostics,
         ),
       );
     }
@@ -424,7 +462,7 @@ function environmentValue(name: string): string {
   const value = Deno.env.get(name);
 
   if (value === undefined) {
-    throw new Error("Missing environment value: " + name);
+    throw new MissingRuntimeValueError(name);
   }
 
   return value;

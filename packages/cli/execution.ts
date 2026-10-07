@@ -40,6 +40,7 @@ export async function executeExecutableResources(
           resource.evaluations,
           applied.operations,
           resource.desired.templateName,
+          resource.diagnostics,
         ),
       );
 
@@ -53,6 +54,7 @@ export async function executeExecutableResources(
           error,
           resource.desired.template,
           resource.desired.templateName,
+          resource.diagnostics,
         ),
       );
       break;

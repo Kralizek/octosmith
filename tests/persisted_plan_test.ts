@@ -13,12 +13,14 @@ import {
   hashCanonical,
   hashEffectiveTemplate,
   type LoadedConfiguration,
+  MissingRuntimeValueError,
   parsePersistedPlanArtifact,
   persistedOperationContract,
   projectOwnedCurrentState,
 } from "../packages/octosmith/mod.ts";
 import { currentState } from "./plan/fixtures.ts";
 import { applyPersistedPlan } from "../packages/cli/persisted.ts";
+import { apply } from "../packages/cli/apply.ts";
 import { executeExecutableResources } from "../packages/cli/execution.ts";
 
 Deno.test("canonical hashing is independent of object key order", async () => {
@@ -30,6 +32,89 @@ Deno.test("canonical hashing is independent of object key order", async () => {
   assertNotEquals(
     await hashCanonical({ values: ["a", "b"] }),
     await hashCanonical({ values: ["b", "a"] }),
+  );
+});
+
+Deno.test("persisted state projection excludes skipped runtime-backed values", () => {
+  const left = currentState({
+    actions: {
+      secrets: ["ACTIONS_SECRET"],
+      variables: [{ name: "ACTIONS_VARIABLE", value: "before" }],
+    },
+    dependabot: { secrets: ["DEPENDABOT_SECRET"] },
+    environments: [{
+      name: "production",
+      secrets: ["ENVIRONMENT_SECRET"],
+      variables: [{ name: "ENVIRONMENT_VARIABLE", value: "before" }],
+    }],
+  });
+  const right = currentState({
+    actions: {
+      secrets: ["ACTIONS_SECRET"],
+      variables: [{ name: "ACTIONS_VARIABLE", value: "after" }],
+    },
+    dependabot: { secrets: ["DEPENDABOT_SECRET"] },
+    environments: [{
+      name: "production",
+      secrets: ["ENVIRONMENT_SECRET"],
+      variables: [{ name: "ENVIRONMENT_VARIABLE", value: "after" }],
+    }],
+  });
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:code",
+    collections: "strict",
+    actions: { secrets: [], variables: [] },
+    dependabot: { secrets: [] },
+    environments: [{
+      name: "production",
+      secrets: [],
+      variables: [],
+    }],
+  };
+  const skipped = [
+    {
+      kind: "secret",
+      name: "ACTIONS_SECRET",
+      target: "ACTIONS_SECRET",
+      scope: "actions",
+      path: "repository.actions.secrets[0]",
+    },
+    {
+      kind: "variable",
+      name: "ACTIONS_VARIABLE",
+      target: "ACTIONS_VARIABLE",
+      scope: "actions",
+      path: "repository.actions.variables[0]",
+    },
+    {
+      kind: "secret",
+      name: "DEPENDABOT_SECRET",
+      target: "DEPENDABOT_SECRET",
+      scope: "dependabot",
+      path: "repository.dependabot.secrets[0]",
+    },
+    {
+      kind: "secret",
+      name: "ENVIRONMENT_SECRET",
+      target: "ENVIRONMENT_SECRET",
+      scope: "environment",
+      environment: "production",
+      path: "repository.environments[0].secrets[0]",
+    },
+    {
+      kind: "variable",
+      name: "ENVIRONMENT_VARIABLE",
+      target: "ENVIRONMENT_VARIABLE",
+      scope: "environment",
+      environment: "production",
+      path: "repository.environments[0].variables[0]",
+    },
+  ] as const;
+
+  assertEquals(
+    projectOwnedCurrentState(left, desired, [], skipped),
+    projectOwnedCurrentState(right, desired, [], skipped),
   );
 });
 
@@ -1120,6 +1205,330 @@ Deno.test("persisted apply rechecks state immediately before mutation", async ()
   await applyPersistedPlan(runtime, loaded, artifact, () => {});
   assertEquals(reads, 1);
   assertEquals(applies, 0);
+});
+
+for (const withEnvironmentUpdate of [false, true]) {
+  Deno.test(`persisted apply replays saved exclusions (environment update: ${withEnvironmentUpdate})`, async () => {
+    const loaded: LoadedConfiguration = {
+      root: ".",
+      configuration: {
+        version: 1,
+        organization: "acme",
+        repositories: {
+          scope: { include: { names: ["sample"] } },
+          settings: { collectionManagement: "strict" },
+        },
+      },
+      templates: {
+        "repository:sample": {
+          version: 1,
+          kind: "repository",
+          match: { include: { names: ["sample"] } },
+          repository: {
+            settings: { hasIssues: false },
+            actions: {
+              variables: ["VARIABLE"],
+              secrets: ["SECRET"],
+            },
+            dependabot: { secrets: ["DEPENDABOT"] },
+            environments: [{
+              name: "production",
+              variables: [
+                "ENV_VARIABLE",
+                ...(withEnvironmentUpdate
+                  ? [{ name: "INLINE", value: "new" }]
+                  : []),
+              ],
+              secrets: ["ENV_SECRET"],
+            }],
+          },
+        },
+      },
+    };
+    let current = currentState({
+      actions: {
+        variables: [{ name: "VARIABLE", value: "remote" }],
+        secrets: ["SECRET", "REMOVE"],
+      },
+      dependabot: { secrets: ["DEPENDABOT"] },
+      environments: [{
+        name: "production",
+        variables: [{ name: "ENV_VARIABLE", value: "remote" }],
+        secrets: ["ENV_SECRET"],
+      }],
+    });
+    const planned: ExecutableResourcePlan[] = [];
+    const executed: ExecutableResourcePlan[] = [];
+    const diagnostics: string[] = [];
+    const runtime = {
+      value: (name: string): string => {
+        throw new MissingRuntimeValueError(name);
+      },
+      discover: () =>
+        Promise.resolve({
+          repositories: [{
+            name: "sample",
+            teams: [],
+            visibility: "private" as const,
+            properties: {},
+          }],
+          failures: [],
+        }),
+      read: () => Promise.resolve(current),
+      prepare: () => {},
+      recheck: () => {},
+      apply: (resource: ExecutableResourcePlan) => {
+        executed.push(resource);
+        return Promise.resolve({ repository: "sample", operations: [] });
+      },
+    };
+    await apply(runtime, loaded, {
+      mode: "plan",
+      skipMissingValues: true,
+      onPlanBuilt: (resource) => {
+        planned.push(resource);
+      },
+      onRepositoryApplied: () => {},
+    });
+    assertEquals(planned.length, 1);
+    assertEquals(
+      planned[0].plan.operations.some((operation) =>
+        operation.type === "update-environment"
+      ),
+      withEnvironmentUpdate,
+    );
+    const artifact = parsePersistedPlanArtifact(
+      JSON.parse(
+        JSON.stringify(await createPersistedPlanArtifact(loaded, planned)),
+      ),
+    );
+    current = {
+      ...current,
+      actions: { ...current.actions, variables: [], secrets: ["REMOVE"] },
+      dependabot: { secrets: [] },
+      environments: [{ name: "production", variables: [], secrets: [] }],
+    };
+
+    await applyPersistedPlan(runtime, loaded, artifact, (report) => {
+      diagnostics.push(...(report.diagnostics ?? []).map(({ code }) => code));
+    });
+
+    assertEquals(executed.length, 1);
+    assertEquals(executed[0].plan.operations, artifact.resources[0].operations);
+    assertEquals(diagnostics.sort(), [
+      "skipped_secret",
+      "skipped_secret",
+      "skipped_secret",
+      "skipped_variable",
+      "skipped_variable",
+    ]);
+
+    let replayLookups = 0;
+    await applyPersistedPlan(
+      {
+        ...runtime,
+        value: () => {
+          replayLookups++;
+          return "now available";
+        },
+      },
+      loaded,
+      artifact,
+      () => {},
+    );
+    assertEquals(replayLookups, 0);
+    assertEquals(executed[1].plan.operations, artifact.resources[0].operations);
+
+    const unchanged = current;
+    const changedStates = [
+      {
+        ...unchanged,
+        actions: { ...unchanged.actions, secrets: ["REMOVE", "ADDED"] },
+      },
+      {
+        ...unchanged,
+        actions: {
+          ...unchanged.actions,
+          variables: [{ name: "ADDED", value: "new" }],
+        },
+      },
+      { ...unchanged, dependabot: { secrets: ["ADDED"] } },
+      {
+        ...unchanged,
+        environments: [{
+          name: "production",
+          variables: [],
+          secrets: ["ADDED"],
+        }],
+      },
+      {
+        ...unchanged,
+        environments: [{
+          name: "production",
+          variables: [{ name: "ADDED", value: "new" }],
+          secrets: [],
+        }],
+      },
+    ];
+    for (const changed of changedStates) {
+      current = changed;
+      await assertRejects(
+        () => applyPersistedPlan(runtime, loaded, artifact, () => {}),
+        Error,
+        "The saved plan is stale",
+      );
+    }
+    assertEquals(executed.length, 2);
+  });
+}
+
+Deno.test("persisted apply requires every secret used by reviewed operations before preparation", async () => {
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: "all" } },
+    },
+    templates: {
+      "repository:sample": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: {
+          actions: { secrets: ["ACTIONS"] },
+          dependabot: { secrets: ["DEPENDABOT"] },
+          environments: [{ name: "production", secrets: ["ENVIRONMENT"] }],
+        },
+      },
+    },
+  };
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    actions: { secrets: [{ name: "ACTIONS", source: "ACTIONS" }] },
+    dependabot: { secrets: [{ name: "DEPENDABOT", source: "DEPENDABOT" }] },
+    environments: [{
+      name: "production",
+      secrets: [{ name: "ENVIRONMENT", source: "ENVIRONMENT" }],
+    }],
+  };
+  const current = currentState();
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    desired,
+    current,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations),
+  }]);
+  for (const missing of ["ACTIONS", "DEPENDABOT", "ENVIRONMENT"]) {
+    await assertRejects(
+      () =>
+        applyPersistedPlan(
+          {
+            value: (name) => {
+              if (name === missing) throw new MissingRuntimeValueError(name);
+              return "available";
+            },
+            discover: () => {
+              throw new Error("must fail before discovery");
+            },
+            read: () => {
+              throw new Error("must fail before reads");
+            },
+            prepare: () => {
+              throw new Error("must fail before preparation");
+            },
+            recheck: () => {
+              throw new Error("must fail before recheck");
+            },
+            apply: () => {
+              throw new Error("must fail before mutation");
+            },
+          },
+          loaded,
+          artifact,
+          () => {},
+        ),
+      MissingRuntimeValueError,
+      "Missing environment value: " + missing,
+    );
+  }
+});
+
+Deno.test("persisted apply retains reviewed values and rejects new skip requests", async () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    actions: { variables: [{ name: "TARGET", value: "runtime:SOURCE" }] },
+  };
+  const plannedCurrent = currentState();
+  const plan = buildPlan(plannedCurrent, desired);
+  const evaluations = buildApplyEvaluations(desired, plan.operations);
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: { names: ["sample"] } } },
+    },
+    templates: {
+      "repository:sample": {
+        version: 1,
+        kind: "repository",
+        match: { include: { names: ["sample"] } },
+        repository: {
+          actions: { variables: [{ from: "SOURCE", to: "TARGET" }] },
+        },
+      },
+    },
+  };
+  const artifact = await createPersistedPlanArtifact(
+    loaded,
+    [{ desired, current: plannedCurrent, plan, evaluations }],
+    new Date("2026-09-24T12:00:00Z"),
+  );
+  let prepared: ExecutableResourcePlan | undefined;
+  const runtime = {
+    value: () => {
+      throw new MissingRuntimeValueError("SOURCE");
+    },
+    discover: () =>
+      Promise.resolve({
+        repositories: [{
+          name: "sample",
+          teams: [],
+          visibility: "private" as const,
+          properties: {},
+        }],
+        failures: [],
+      }),
+    read: () => Promise.resolve(plannedCurrent),
+    prepare: (resource: ExecutableResourcePlan) => {
+      prepared = resource;
+    },
+    recheck: () => {},
+    apply: (resource: ExecutableResourcePlan) =>
+      Promise.resolve({
+        repository: resource.plan.repository,
+        operations: [],
+      }),
+  };
+
+  await assertRejects(
+    () =>
+      applyPersistedPlan(runtime, loaded, artifact, () => {}, {
+        skipMissingValues: true,
+      }),
+    Error,
+    "Create a new plan with --skip-missing-values instead",
+  );
+  assertEquals(prepared, undefined);
+
+  await applyPersistedPlan(runtime, loaded, artifact, () => {});
+
+  assertEquals(prepared?.plan.operations, plan.operations);
+  assertEquals(prepared?.skippedRuntimeReferences, undefined);
 });
 
 Deno.test("configuration precondition normalizes execution defaults", async () => {

@@ -1,4 +1,5 @@
 import type { ApplyItemReport, Report, RepositoryReport } from "./types.ts";
+import { describeRuntimeReferenceDiagnostic } from "../configuration/runtime_references.ts";
 
 /** Describes render report options. */
 export interface RenderReportOptions {
@@ -28,6 +29,10 @@ export function renderReport(
 
     if (repository.error) {
       lines.push("  ✗ " + repository.error);
+    }
+
+    for (const diagnostic of repository.diagnostics ?? []) {
+      lines.push("  ⚠ " + describeRuntimeReferenceDiagnostic(diagnostic));
     }
   }
 

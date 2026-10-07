@@ -112,6 +112,40 @@
           "items": {
             "$ref": "#/$defs/evaluation"
           }
+        },
+        "skippedRuntimeReferences": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "name",
+              "target",
+              "scope",
+              "path"
+            ],
+            "properties": {
+              "kind": {
+                "enum": ["variable", "secret"]
+              },
+              "name": {
+                "type": "string"
+              },
+              "target": {
+                "type": "string"
+              },
+              "scope": {
+                "enum": ["actions", "dependabot", "environment"]
+              },
+              "environment": {
+                "type": "string"
+              },
+              "path": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     },
@@ -421,6 +455,20 @@
             },
             "environment": {
               "$ref": "#/$defs/environment"
+            },
+            "preserveSecrets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "preserveVariables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
             }
           }
         },
@@ -444,6 +492,20 @@
                 "explicit",
                 "strict"
               ]
+            },
+            "preserveSecrets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
+            },
+            "preserveVariables": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "uniqueItems": true
             }
           }
         },

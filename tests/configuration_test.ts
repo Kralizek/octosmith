@@ -6,6 +6,7 @@ import {
   loadConfigurationDirectory,
   type LoadedConfiguration,
   matchesSelector,
+  MissingRuntimeValueError,
   preflightRuntimeReferences,
   resolveDesiredState,
   validateConfigurationDirectory,
@@ -1198,6 +1199,147 @@ Deno.test("runtime preflight snapshots each source name once", () => {
   );
   assertEquals(values("SHARED"), "runtime:SHARED");
   assertEquals(calls.get("SHARED"), 1);
+});
+
+Deno.test("runtime preflight uses the mutation provider for secrets", () => {
+  const calls: string[] = [];
+  const values = preflightRuntimeReferences(
+    "repository:sample",
+    {
+      version: 1,
+      kind: "repository",
+      match: { include: { names: ["sample"] } },
+      repository: {
+        actions: {
+          variables: ["SHARED"],
+          secrets: ["SHARED"],
+        },
+      },
+    },
+    { name: "sample", teams: [], properties: {} },
+    (name) => {
+      calls.push("variable:" + name);
+      return "variable-provider";
+    },
+    {
+      secretValues: (name) => {
+        calls.push("secret:" + name);
+        return "mutation-provider";
+      },
+    },
+  );
+
+  assertEquals(values("SHARED"), "variable-provider");
+  assertEquals(calls, ["variable:SHARED", "secret:SHARED"]);
+});
+
+Deno.test("runtime preflight never substitutes a value for a missing source", () => {
+  const skipped: string[] = [];
+  let calls = 0;
+  const values = preflightRuntimeReferences(
+    "repository:sample",
+    {
+      version: 1,
+      kind: "repository",
+      match: { include: "all" },
+      repository: {
+        actions: {
+          variables: ["SOURCE", { from: "SOURCE", to: "RENAMED" }],
+          secrets: ["SOURCE"],
+        },
+      },
+    },
+    { name: "sample", teams: [], properties: {} },
+    (name) => {
+      calls++;
+      throw new MissingRuntimeValueError(name);
+    },
+    {
+      skipMissingValues: true,
+      onSkipped: (reference) => {
+        skipped.push(reference.target);
+      },
+    },
+  );
+
+  assertEquals(calls, 2);
+  assertEquals(skipped, ["SOURCE", "RENAMED", "SOURCE"]);
+  assertThrows(() => values("SOURCE"), MissingRuntimeValueError);
+  assertEquals(calls, 2);
+});
+
+Deno.test("skipping runtime variables does not hide duplicate destinations", async () => {
+  for (const scope of ["actions", "environment"] as const) {
+    const variables = [{ from: "MISSING", to: "DUPLICATE" }, {
+      name: "DUPLICATE",
+      value: "inline",
+    }];
+    const loaded: LoadedConfiguration = {
+      root: ".",
+      configuration: {
+        version: 1,
+        organization: "acme",
+        repositories: { scope: { include: "all" } },
+      },
+      templates: {
+        "repository:sample": {
+          version: 1,
+          kind: "repository",
+          match: { include: "all" },
+          repository: scope === "actions" ? { actions: { variables } } : {
+            environments: [{ name: "production", variables }],
+          },
+        },
+      },
+    };
+    await assertRejects(
+      () =>
+        resolveDesiredState(loaded, {
+          name: "sample",
+          teams: [],
+          properties: {},
+        }, () => {
+          throw new Error("must not resolve skipped source");
+        }, {
+          skippedRuntimeReferences: [{
+            kind: "variable",
+            name: "MISSING",
+            target: "DUPLICATE",
+            scope,
+            ...(scope === "environment" && { environment: "production" }),
+            path: "unused",
+          }],
+        }),
+      Error,
+      `Duplicate ${
+        scope === "actions" ? "Actions" : "environment"
+      } variable: DUPLICATE`,
+    );
+  }
+});
+
+Deno.test("runtime preflight does not skip a different missing value", () => {
+  const template = {
+    version: 1,
+    kind: "repository",
+    match: { include: { names: ["sample"] } },
+    repository: { actions: { variables: ["EXPECTED"] } },
+  } as const;
+
+  assertThrows(
+    () =>
+      preflightRuntimeReferences(
+        "repository:sample",
+        template,
+        { name: "sample", teams: [], properties: {} },
+        () => {
+          throw new MissingRuntimeValueError("OTHER");
+        },
+        { skipMissingValues: true },
+      ),
+    MissingRuntimeValueError,
+    "Missing environment value: OTHER",
+  );
 });
 
 Deno.test("resolves variable and secret binding forms", async () => {

@@ -220,10 +220,13 @@ export function persistedOperationContract(
           ...(existing !== undefined && removesVariables && {
             variables: [...existing.variables]
               .map((item) => item.name)
+              .filter((name) => !operation.preserveVariables?.includes(name))
               .sort(),
           }),
           ...(existing !== undefined && removesSecrets && {
-            secrets: [...existing.secrets].sort(),
+            secrets: [...existing.secrets]
+              .filter((name) => !operation.preserveSecrets?.includes(name))
+              .sort(),
           }),
         });
         break;
