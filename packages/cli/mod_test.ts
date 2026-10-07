@@ -207,6 +207,39 @@ Deno.test("resource list rejects --format github-output", async () => {
   );
 });
 
+Deno.test("quiet is limited to operational commands and rejects JSON output", async () => {
+  for (
+    const args of [
+      ["plan", "--quiet", "--format", "json"],
+      ["apply", "--quiet", "--format", "json"],
+      ["resource", "list", "--quiet"],
+      ["template", "permissions", "--quiet"],
+    ]
+  ) {
+    const errors: string[] = [];
+    assertEquals(
+      await main(args, {
+        writeError: (value) => errors.push(value),
+        credentials: {
+          getEnv: () => {
+            throw new Error("command must reject before authentication");
+          },
+        },
+      }),
+      1,
+    );
+    if (args.includes("--format")) {
+      assertStringIncludes(
+        errors.join("\n"),
+        "Cannot combine --quiet with --format json",
+      );
+    } else {
+      assertStringIncludes(errors.join("\n"), "Unknown option");
+      assertStringIncludes(errors.join("\n"), "--quiet");
+    }
+  }
+});
+
 async function authenticationConfiguration(): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(`${root}/templates`);

@@ -35,6 +35,97 @@ Deno.test("validate succeeds offline without GITHUB_TOKEN", async () => {
   }
 });
 
+Deno.test("validate quiet suppresses success and keeps failures on stderr", async () => {
+  const validRoot = await validConfiguration();
+  const invalidRoot = await Deno.makeTempDir();
+  const output: string[] = [];
+  const errors: string[] = [];
+
+  try {
+    await Deno.mkdir(invalidRoot + "/templates");
+    await Deno.writeTextFile(
+      invalidRoot + "/octosmith.yml",
+      "version: 1\norganization: acme\nrepositories:\n  scope:\n    include: all\n",
+    );
+    await Deno.writeTextFile(
+      invalidRoot + "/templates/sample.yml",
+      "version: 1\nkind: invalid\n",
+    );
+
+    assertEquals(
+      await main(["template", "validate", "--quiet", "--path", validRoot], {
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      0,
+    );
+    assertEquals(output, []);
+    assertEquals(errors, []);
+
+    assertEquals(
+      await main(["template", "validate", "--quiet", "--path", invalidRoot], {
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      1,
+    );
+    assertEquals(output, []);
+    assertStringIncludes(errors.join("\n"), "Configuration is invalid.");
+  } finally {
+    await Deno.remove(validRoot, { recursive: true });
+    await Deno.remove(invalidRoot, { recursive: true });
+  }
+});
+
+Deno.test("validate rejects quiet JSON output", async () => {
+  const root = await validConfiguration();
+  const errors: string[] = [];
+
+  try {
+    assertEquals(
+      await main(
+        ["template", "validate", "--quiet", "--format", "json", "--path", root],
+        { writeError: (value) => errors.push(value) },
+      ),
+      1,
+    );
+    assertStringIncludes(
+      errors.join("\n"),
+      "Cannot combine --quiet with --format json",
+    );
+
+    errors.length = 0;
+    assertEquals(
+      await main(
+        [
+          "template",
+          "validate",
+          "teams/backend",
+          "--quiet",
+          "--format",
+          "json",
+          "--path",
+          root,
+        ],
+        { writeError: (value) => errors.push(value) },
+      ),
+      1,
+    );
+    assertStringIncludes(
+      errors.join("\n"),
+      "Cannot combine --quiet with --format json",
+    );
+    assertEquals(
+      errors.some((value) =>
+        value.includes("Template-specific validation is not implemented yet")
+      ),
+      false,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("validate emits machine-readable success", async () => {
   const root = await validConfiguration();
   const output: string[] = [];

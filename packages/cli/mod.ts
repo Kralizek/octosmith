@@ -66,9 +66,13 @@ function createCli(
   const write = options.write ?? console.log;
   const writeError = options.writeError ?? console.error;
   const executeValidation = async (
-    commandOptions: { path: string; format: string },
+    commandOptions: { path: string; format: string; quiet?: boolean },
     template?: string,
   ) => {
+    if (commandOptions.quiet && commandOptions.format === "json") {
+      throw new Error("Cannot combine --quiet with --format json");
+    }
+
     if (template !== undefined) {
       throw new Error("Template-specific validation is not implemented yet");
     }
@@ -98,14 +102,18 @@ function createCli(
 
     if (validation.issues.length > 0) {
       if (format === "json") {
-        write(rendered);
+        if (!commandOptions.quiet) {
+          write(rendered);
+        }
       } else {
         writeError(rendered);
       }
       throw new ValidationFailedError();
     }
 
-    write(rendered);
+    if (!commandOptions.quiet) {
+      write(rendered);
+    }
   };
 
   const root = new Command()
@@ -136,6 +144,7 @@ function createCli(
       .option("--format <format:string>", "Output format: text or json.", {
         default: "text",
       })
+      .option("--quiet", "Suppress normal output.")
       .option("-v, --verbose", "Show additional result details.")
       .option("--trace", "Emit GitHub API request traces to stderr.")
       .option(
@@ -168,6 +177,7 @@ function createCli(
           readonly out?: string;
           readonly template?: string;
           readonly skipMissingValues?: boolean;
+          readonly quiet?: boolean;
         };
 
         if (modeOptions.template === "") {
@@ -199,6 +209,10 @@ function createCli(
             "Cannot combine --skip-missing-values with --plan. " +
               "Create a new plan with --skip-missing-values instead.",
           );
+        }
+
+        if (commandOptions.quiet && commandOptions.format === "json") {
+          throw new Error("Cannot combine --quiet with --format json");
         }
 
         const format = parseOutputFormat(commandOptions.format);
@@ -272,13 +286,12 @@ function createCli(
               );
             } catch (error) {
               if (error instanceof PersistedPlanStaleError) {
-                write(
-                  renderOutput(
-                    format,
-                    error.preflight,
-                    renderPersistedPlanPreflight,
-                  ),
+                const rendered = renderOutput(
+                  format,
+                  error.preflight,
+                  renderPersistedPlanPreflight,
                 );
+                (commandOptions.quiet ? writeError : write)(rendered);
                 throw new ApplyFailedError();
               }
               throw error;
@@ -313,18 +326,28 @@ function createCli(
           }),
         };
 
-        write(
-          renderOutput(
-            format,
-            report,
-            (value) =>
-              renderReport(value, {
-                verbose: commandOptions.verbose,
-              }),
-          ),
+        const renderedReport = renderOutput(
+          format,
+          report,
+          (value) =>
+            renderReport(value, {
+              verbose: commandOptions.verbose,
+            }),
         );
+        const failed = hasFailures(report);
+        if (commandOptions.quiet) {
+          if (failed) {
+            writeError(
+              mode === "plan" && modeOptions.out !== undefined
+                ? "Error: Plan contains failed resources; no plan file was written."
+                : renderedReport,
+            );
+          }
+        } else {
+          write(renderedReport);
+        }
 
-        if (hasFailures(report)) {
+        if (failed) {
           throw new ApplyFailedError();
         }
 
@@ -456,6 +479,7 @@ function createCli(
           .option("--format <format:string>", "Output format: text or json.", {
             default: "text",
           })
+          .option("--quiet", "Suppress normal output.")
           .action(executeValidation),
       )
       .command(
@@ -647,6 +671,7 @@ export async function main(
   try {
     validateRawEventsOutputArgument(args);
     validateRawResourceArgument(args);
+    validateRawQuietArgument(args);
     await createCli(options, args).parse(args);
     return 0;
   } catch (error) {
@@ -684,6 +709,20 @@ function validateRawResourceArgument(args: readonly string[]): void {
 
   if (rest.includes("")) {
     throw new Error("Resource target must not be empty");
+  }
+}
+
+function validateRawQuietArgument(args: readonly string[]): void {
+  if (!args.includes("--quiet")) {
+    return;
+  }
+
+  const supportsQuiet = args[0] === "plan" ||
+    args[0] === "apply" ||
+    (args[0] === "template" && args[1] === "validate");
+
+  if (!supportsQuiet) {
+    throw new Error("Unknown option --quiet");
   }
 }
 

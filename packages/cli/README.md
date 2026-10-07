@@ -50,6 +50,7 @@ listed. Invalid configuration fails rather than returning a partial list.
 
 ```sh
 octosmith template validate --path ./configuration
+octosmith template validate --path ./configuration --quiet
 ```
 
 Validation does not access GitHub or resolve GitHub credentials. It reports all
@@ -57,6 +58,9 @@ discovered configuration errors and runtime-reference diagnostics in one run.
 Repeated diagnostics are compacted into a single message with a `Referenced by`
 list, so shared problems across templates/resources do not have to be fixed one
 at a time.
+
+Use `--quiet` to suppress successful validation output. Errors remain on stderr
+and the exit code is unchanged.
 
 For environment-backed secrets, validation checks only whether the environment
 variable is present. Present secrets do not produce `unresolved_secret`
@@ -130,6 +134,7 @@ discovered resources are still reported.
 
 ```sh
 GITHUB_TOKEN=... octosmith plan --path ./configuration
+GITHUB_TOKEN=... octosmith plan --path ./configuration --quiet
 ```
 
 `plan` reads GitHub and reports the operations required to reach the desired
@@ -145,6 +150,16 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration --template repository:lib
 An existing template with no matching repositories produces an empty successful
 report. A template filter cannot be combined with a positional repository
 target.
+
+Use `--quiet` to suppress the normal planning report. It can be combined with
+`--out` to write a persisted plan without printing the report:
+
+```sh
+GITHUB_TOKEN=... octosmith plan --path ./configuration --out plan.json --quiet
+```
+
+Planning failures remain visible on stderr; a failed persisted plan is not
+written.
 
 The text summary includes an unmatched count, even when unmatched resources are
 ignored:
@@ -174,10 +189,14 @@ resolved variables and managed-file contents, but never resolved secret values.
 
 ```sh
 GITHUB_TOKEN=... octosmith apply --path ./configuration
+GITHUB_TOKEN=... octosmith apply --path ./configuration --quiet
 ```
 
 `apply` reads fresh GitHub state, builds a new plan, and applies that plan by
 default.
+
+Use `--quiet` to suppress the normal report. Errors remain on stderr and the
+exit code is unchanged.
 
 Use `--template <template>` to apply only repositories classified with that
 template:
@@ -274,6 +293,9 @@ octosmith apply --format json --path ./configuration
 JSON contains the full structured report. Text hides unchanged items unless
 `--verbose` is supplied.
 
+`--quiet` suppresses normal stdout for `template validate`, `plan`, and `apply`.
+It cannot be combined with `--format json`.
+
 Use `--trace` to write GitHub API trace lines to stderr. Traces contain the HTTP
 method, endpoint path, and status only; they do not include bodies, headers,
 query parameters, or credentials. The final report remains on stdout.
@@ -316,6 +338,7 @@ The CLI returns:
 ```text
 --path <path>            Configuration directory (default: .)
 --format <text|json>     Output format (default: text)
+--quiet                  Suppress normal output for template validate, plan, and apply
 -v, --verbose            Include unchanged text items in reports
 --trace                  Emit GitHub API traces to stderr
 --events-output <path>   Write resource events as NDJSON
