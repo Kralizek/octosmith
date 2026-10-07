@@ -50,14 +50,19 @@ listed. Invalid configuration fails rather than returning a partial list.
 
 ```sh
 octosmith template validate --path ./configuration
+octosmith template validate teams/backend --path ./configuration
+octosmith template validate repository:teams/backend --path ./configuration
 octosmith template validate --path ./configuration --quiet
 ```
 
 Validation does not access GitHub or resolve GitHub credentials. It reports all
-discovered configuration errors and runtime-reference diagnostics in one run.
-Repeated diagnostics are compacted into a single message with a `Referenced by`
-list, so shared problems across templates/resources do not have to be fixed one
-at a time.
+discovered configuration errors, unreachable templates, and runtime-reference
+diagnostics in one run. Supplying a template validates the root configuration
+and only that template's template-specific rules. JSON output includes coded
+diagnostics and the effective include/exclude constraints for each selected
+template. Repeated diagnostics are compacted into a single message with a
+`Referenced by` list, so shared problems across templates/resources do not have
+to be fixed one at a time.
 
 Use `--quiet` to suppress successful validation output. Errors remain on stderr
 and the exit code is unchanged.

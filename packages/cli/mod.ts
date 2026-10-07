@@ -29,6 +29,7 @@ import {
   summarizeResourceInspection,
   validateConfigurationDirectoryDetailed,
   validateLoadedConfiguration,
+  validateTemplateDirectoryDetailed,
 } from "@octosmith/octosmith";
 import { openEventOutput, toRepositoryEvent } from "./events.ts";
 import { type GitHubTokenOptions, resolveGitHubToken } from "./auth.ts";
@@ -73,22 +74,23 @@ function createCli(
       throw new Error("Cannot combine --quiet with --format json");
     }
 
-    if (template !== undefined) {
-      throw new Error("Template-specific validation is not implemented yet");
-    }
-
     const format = parseOutputFormat(commandOptions.format);
-    const validation = await validateConfigurationDirectoryDetailed(
-      commandOptions.path,
-      environmentHas,
-    );
-    const result = validation.issues.length === 0
-      ? { valid: true as const, diagnostics: validation.diagnostics }
-      : {
-        valid: false as const,
-        diagnostics: validation.diagnostics,
-        issues: validation.issues,
-      };
+    const validation = template === undefined
+      ? await validateConfigurationDirectoryDetailed(
+        commandOptions.path,
+        environmentHas,
+      )
+      : await validateTemplateDirectoryDetailed(
+        commandOptions.path,
+        template,
+        environmentHas,
+      );
+    const result = {
+      valid: validation.issues.length === 0,
+      diagnostics: validation.diagnostics,
+      issues: validation.issues,
+      intersections: validation.intersections,
+    };
     const rendered = renderOutput(
       format,
       result,
@@ -740,8 +742,9 @@ function renderValidationResult(
   issues: readonly ConfigurationValidationIssue[],
 ): string {
   const errors = issues.map((issue) =>
-    "Error: " +
+    "Error [" + issue.code + "] " +
     (issue.template === undefined ? "" : "[" + issue.template + "] ") +
+    (issue.path === undefined ? "" : issue.path + ": ") +
     issue.message
   );
   const warnings = renderValidationDiagnostics(diagnostics);

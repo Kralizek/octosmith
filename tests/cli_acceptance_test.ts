@@ -3102,7 +3102,11 @@ Deno.test("template validate checks secret environment presence without exposing
       if (format === "text") {
         assertStringIncludes(rendered, "Configuration is valid.");
       } else {
-        assertEquals(JSON.parse(rendered), { valid: true, diagnostics: [] });
+        const result = JSON.parse(rendered);
+        assertEquals(result.valid, true);
+        assertEquals(result.diagnostics, []);
+        assertEquals(result.issues, []);
+        assertEquals(result.intersections.length, 1);
       }
     }
   } finally {

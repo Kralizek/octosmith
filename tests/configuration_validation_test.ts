@@ -1,6 +1,11 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
-import { loadConfigurationDirectory } from "../packages/octosmith/mod.ts";
+import {
+  effectiveRepositorySelectorIntersection,
+  loadConfigurationDirectory,
+  matchesEffectiveRepositorySelectorIntersection,
+  templateCanMatchScope,
+} from "../packages/octosmith/mod.ts";
 
 const configuration = {
   version: 1,
@@ -13,6 +18,183 @@ const template = {
   match: { include: { names: ["*"] } },
   repository: {},
 };
+
+Deno.test("effective selector intersection matches candidates with exclusions", () => {
+  const intersection = effectiveRepositorySelectorIntersection(
+    {
+      include: {
+        names: ["team-*"],
+        visibility: ["private", "internal"],
+      },
+      exclude: { names: ["team-secret-*"] },
+    },
+    {
+      version: 1,
+      kind: "repository",
+      match: {
+        include: {
+          names: ["team-api", "team-secret-api"],
+          visibility: "private",
+          teams: ["platform"],
+          properties: { tier: "backend" },
+        },
+        exclude: { properties: { status: "archived" } },
+      },
+      repository: {},
+    },
+    "repository:team",
+  );
+  const candidate = {
+    name: "team-api",
+    teams: ["platform"],
+    visibility: "private" as const,
+    properties: { tier: "backend", status: "active" },
+  };
+
+  assertEquals(intersection.reachable, true);
+  if (intersection.effective === undefined) {
+    throw new Error(
+      "Expected effective constraints for a reachable intersection",
+    );
+  }
+  const effective = intersection.effective;
+  assertEquals(effective.names.choices, ["team-api"]);
+  assertEquals(intersection.semanticWitness?.name, "team-api");
+  assertEquals(effective.names.includePatterns, [
+    {
+      path: "repositories.scope.include",
+      patterns: ["team-*"],
+    },
+    {
+      path: "templates.repository:team.match.include",
+      patterns: ["team-api", "team-secret-api"],
+    },
+  ]);
+  assertEquals(effective.names.excludeConstraints.length, 2);
+  assertEquals(effective.visibility, ["private"]);
+  assertEquals(effective.requiredTeams, ["platform"]);
+  assertEquals(effective.requiredProperties, { tier: "backend" });
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, candidate),
+    true,
+  );
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, {
+      ...candidate,
+      name: "team-secret-api",
+    }),
+    false,
+  );
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, {
+      ...candidate,
+      properties: { tier: "backend", status: "archived" },
+    }),
+    false,
+  );
+  assertEquals(
+    matchesEffectiveRepositorySelectorIntersection(intersection, {
+      ...candidate,
+      visibility: "public",
+    }),
+    false,
+  );
+});
+
+Deno.test("wildcard name intersections expose patterns, not semantic witnesses as choices", () => {
+  for (
+    const [scopeNames, templateNames, expectedCandidate, rejectedCandidate] of [
+      ["*", "*", "ordinary-repository", "reserved-repository"],
+      ["team-*", "team-?", "team-a", "team-api"],
+    ] as const
+  ) {
+    const intersection = effectiveRepositorySelectorIntersection(
+      {
+        include: { names: [scopeNames] },
+        exclude: scopeNames === "*" ? { names: ["reserved-*"] } : undefined,
+      },
+      {
+        version: 1,
+        kind: "repository",
+        match: { include: { names: [templateNames] } },
+        repository: {},
+      },
+      "repository:wildcard",
+    );
+
+    assertEquals(intersection.reachable, true);
+    assertEquals(intersection.effective?.names.choices, undefined);
+    assertEquals(intersection.effective?.names.includePatterns.length, 2);
+    assertEquals(
+      intersection.effective?.names.excludeConstraints.length,
+      scopeNames === "*" ? 1 : 0,
+    );
+    assertEquals(
+      matchesEffectiveRepositorySelectorIntersection(intersection, {
+        name: expectedCandidate,
+        teams: [],
+        visibility: "private",
+        properties: {},
+      }),
+      true,
+    );
+    assertEquals(
+      matchesEffectiveRepositorySelectorIntersection(intersection, {
+        name: rejectedCandidate,
+        teams: [],
+        visibility: "private",
+        properties: {},
+      }),
+      false,
+    );
+  }
+});
+
+Deno.test("template reachability checks include selectors without deriving choices", () => {
+  const template = {
+    version: 1,
+    kind: "repository",
+    match: {
+      include: {
+        names: ["team-api"],
+        visibility: "private",
+        teams: ["platform"],
+        properties: { tier: "backend" },
+      },
+    },
+    repository: {},
+  } as const;
+
+  assertEquals(
+    templateCanMatchScope(
+      {
+        include: { names: ["team-*"], visibility: ["private", "internal"] },
+        exclude: { names: ["team-secret-*"] },
+      },
+      template,
+    ),
+    true,
+  );
+  assertEquals(
+    templateCanMatchScope(
+      {
+        include: { names: ["team-*"] },
+        exclude: { names: ["team-api"] },
+      },
+      template,
+    ),
+    false,
+  );
+  assertEquals(
+    templateCanMatchScope(
+      {
+        include: { properties: { tier: "frontend" } },
+      },
+      template,
+    ),
+    false,
+  );
+});
 
 Deno.test("configuration rejects misspelled scope selectors", async () => {
   await withConfiguration(

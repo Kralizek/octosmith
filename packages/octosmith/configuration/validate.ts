@@ -31,16 +31,32 @@ export async function validateConfigurationDirectory(
   );
 }
 
+/** Stable identifiers for semantic configuration validation problems. */
+export type ConfigurationValidationIssueCode =
+  | "configuration_load_error"
+  | "template_load_error"
+  | "unknown_template"
+  | "template_unreachable"
+  | "template_overlap"
+  | "scope_repository_unmatched"
+  | "scope_without_reachable_templates"
+  | "planner_invariant";
+
 /** Describes one independently detected semantic validation problem. */
 export interface ConfigurationValidationIssue {
+  readonly code: ConfigurationValidationIssueCode;
   readonly message: string;
   readonly template?: string;
+  readonly templates?: readonly string[];
+  readonly path?: string;
+  readonly constraints?: EffectiveRepositorySelectorConstraints;
 }
 
 /** Describes the complete semantic validation result for a loaded configuration. */
 export interface ConfigurationValidationResult {
   readonly diagnostics: readonly RuntimeReferenceDiagnostic[];
   readonly issues: readonly ConfigurationValidationIssue[];
+  readonly intersections: readonly EffectiveRepositorySelectorIntersection[];
 }
 
 /** Validate a configuration directory and return all independently detectable issues. */
@@ -48,17 +64,109 @@ export async function validateConfigurationDirectoryDetailed(
   root: string,
   isSecretAvailable?: (name: string) => boolean,
 ): Promise<ConfigurationValidationResult> {
-  const loading = await loadConfigurationDirectoryCollectingIssues(root);
+  return await validateDirectoryDetailed(root, undefined, isSecretAvailable);
+}
+
+/** Validate one selected template and its containing configuration. */
+export async function validateTemplateDirectoryDetailed(
+  root: string,
+  template: string,
+  isSecretAvailable?: (name: string) => boolean,
+): Promise<ConfigurationValidationResult> {
+  return await validateDirectoryDetailed(root, template, isSecretAvailable);
+}
+
+async function validateDirectoryDetailed(
+  root: string,
+  selectedTemplate: string | undefined,
+  isSecretAvailable: ((name: string) => boolean) | undefined,
+): Promise<ConfigurationValidationResult> {
+  let loading;
+  try {
+    loading = await loadConfigurationDirectoryCollectingIssues(
+      root,
+    );
+  } catch (error) {
+    return {
+      diagnostics: [],
+      issues: [{
+        code: "configuration_load_error",
+        message: error instanceof Error ? error.message : String(error),
+        path: "configuration",
+      }],
+      intersections: [],
+    };
+  }
   const validation = await collectLoadedConfigurationValidation(
     loading.loaded,
-    undefined,
+    selectedTemplate,
     loading.issues.length === 0,
     isSecretAvailable,
+    true,
+    true,
+    true,
+  );
+  const selectedIdentity = selectedTemplate === undefined
+    ? undefined
+    : selectedTemplate.startsWith("repository:")
+    ? selectedTemplate
+    : "repository:" + selectedTemplate;
+  const loadIssues = loading.issues
+    .filter((issue) =>
+      selectedIdentity === undefined || issue.template === selectedIdentity
+    )
+    .map((issue) => ({
+      code: issue.code,
+      message: issue.message,
+      template: issue.template,
+      path: issue.path,
+    }));
+  const issues = validation.issues.filter((issue) =>
+    issue.code !== "unknown_template" ||
+    !loadIssues.some((loadIssue) => loadIssue.template === issue.template)
   );
   return {
     diagnostics: validation.diagnostics,
-    issues: [...loading.issues, ...validation.issues],
+    issues: [...loadIssues, ...issues],
+    intersections: validation.intersections,
   };
+}
+
+/** Identifies one effective selector constraint and its configuration path. */
+export interface EffectiveRepositorySelectorConstraint {
+  readonly path: string;
+  readonly selector: RepositorySelector;
+}
+
+/** Exact positive and negative constraints for a scope/template intersection. */
+export interface EffectiveRepositorySelectorConstraints {
+  readonly include: readonly EffectiveRepositorySelectorConstraint[];
+  readonly exclude: readonly EffectiveRepositorySelectorConstraint[];
+}
+
+/** Normalized dimensions a consumer can use to construct or prompt for a repository. */
+export interface EffectiveRepositorySelectorChoices {
+  readonly names: {
+    readonly choices?: readonly string[];
+    readonly includePatterns: readonly {
+      readonly path: string;
+      readonly patterns: readonly string[];
+    }[];
+    readonly excludeConstraints:
+      readonly EffectiveRepositorySelectorConstraint[];
+  };
+  readonly visibility: readonly ("public" | "private" | "internal")[];
+  readonly requiredTeams: readonly string[];
+  readonly requiredProperties: Readonly<Record<string, PropertyValue>>;
+}
+
+/** The constructible repository constraints shared by scope and template. */
+export interface EffectiveRepositorySelectorIntersection {
+  readonly template: string;
+  readonly reachable: boolean;
+  readonly constraints: EffectiveRepositorySelectorConstraints;
+  readonly effective?: EffectiveRepositorySelectorChoices;
+  readonly semanticWitness?: RepositoryMetadata;
 }
 
 async function collectLoadedConfigurationValidation(
@@ -66,16 +174,20 @@ async function collectLoadedConfigurationValidation(
   selectedTemplate?: string,
   templateSetComplete = true,
   isSecretAvailable?: (name: string) => boolean,
+  reportUnreachableTemplates = false,
+  validateRootScopeCoverage = false,
+  validateRootTemplateOverlap = false,
 ): Promise<ConfigurationValidationResult> {
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
   const issues: ConfigurationValidationIssue[] = [];
+  const intersections: EffectiveRepositorySelectorIntersection[] = [];
 
   const scope = loaded.configuration.repositories.scope;
-  if (selectedTemplate === undefined) {
+  if (selectedTemplate === undefined || validateRootTemplateOverlap) {
     issues.push(...findTemplateOverlapIssues(scope, loaded.templates));
   }
   if (
-    selectedTemplate === undefined &&
+    (selectedTemplate === undefined || validateRootScopeCoverage) &&
     templateSetComplete &&
     loaded.configuration.repositories.settings?.unmatchedRepositories !==
       "ignore"
@@ -92,8 +204,13 @@ async function collectLoadedConfigurationValidation(
     selectedIdentity !== undefined &&
     loaded.templates[selectedIdentity] === undefined
   ) {
-    issues.push({ message: "Unknown template: " + selectedTemplate });
-    return { diagnostics, issues };
+    issues.push({
+      code: "unknown_template",
+      message: "Unknown template: " + selectedTemplate,
+      template: selectedIdentity,
+      path: "templates." + selectedIdentity,
+    });
+    return { diagnostics, issues, intersections };
   }
 
   for (const [name, template] of Object.entries(loaded.templates)) {
@@ -105,14 +222,23 @@ async function collectLoadedConfigurationValidation(
         isSecretAvailable,
       ),
     );
-    const repository = templateScopeWitness(scope, template, name);
+    const intersection = effectiveRepositorySelectorIntersection(
+      scope,
+      template,
+      name,
+    );
+    intersections.push(intersection);
+    const repository = intersection.semanticWitness;
 
     if (repository === undefined) {
-      if (selectedIdentity !== undefined) {
+      if (selectedIdentity !== undefined || reportUnreachableTemplates) {
         issues.push({
-          message: "Template " + selectedTemplate +
+          code: "template_unreachable",
+          message: "Template " + (selectedTemplate ?? name) +
             " cannot match any repository within configured scope",
           template: name,
+          path: "repositories.scope.intersection." + name + ".match",
+          constraints: intersection.constraints,
         });
       }
       continue;
@@ -132,13 +258,31 @@ async function collectLoadedConfigurationValidation(
       buildPlan(emptyCurrentState(repository.name), desired);
     } catch (error) {
       issues.push({
+        code: "planner_invariant",
         message: error instanceof Error ? error.message : String(error),
         template: name,
+        path: "templates." + name,
       });
     }
   }
 
-  return { diagnostics, issues };
+  return { diagnostics, issues, intersections };
+}
+
+/** Validate a loaded configuration and retain all structured semantic results. */
+export async function validateLoadedConfigurationDetailed(
+  loaded: LoadedConfiguration,
+  selectedTemplate?: string,
+): Promise<ConfigurationValidationResult> {
+  return await collectLoadedConfigurationValidation(
+    loaded,
+    selectedTemplate,
+    true,
+    undefined,
+    true,
+    true,
+    true,
+  );
 }
 
 /** Validate a loaded configuration using the same semantic checks as directory validation. */
@@ -161,24 +305,123 @@ export function templateCanMatchScope(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
 ): boolean {
-  return templateScopeWitness(scope, template, "template") !== undefined;
+  const positiveSelectors = [
+    scope.include === "all" ? {} : scope.include,
+    template.match.include === "all" ? {} : template.match.include,
+  ];
+  const negativeSelectors = [
+    scope.exclude,
+    template.match.exclude,
+  ].filter(
+    (selector): selector is RepositorySelector => selector !== undefined,
+  );
+
+  return scopeIntersectionWitness(
+    positiveSelectors,
+    negativeSelectors,
+    "repository:template",
+  ) !== undefined;
 }
 
-function templateScopeWitness(
+/** Expose exact include/exclude constraints and a witness for a template in scope. */
+export function effectiveRepositorySelectorIntersection(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
-  name: string,
-): RepositoryMetadata | undefined {
-  return scopeIntersectionWitness(
-    [
-      scope.include === "all" ? {} : scope.include,
-      template.match.include === "all" ? {} : template.match.include,
-    ],
-    [scope.exclude, template.match.exclude].filter(
-      (selector): selector is RepositorySelector => selector !== undefined,
-    ),
-    name,
+  templateIdentity: string,
+): EffectiveRepositorySelectorIntersection {
+  const include = [
+    {
+      path: "repositories.scope.include",
+      selector: scope.include === "all" ? {} : scope.include,
+    },
+    {
+      path: "templates." + templateIdentity + ".match.include",
+      selector: template.match.include === "all" ? {} : template.match.include,
+    },
+  ];
+  const exclude = [
+    scope.exclude === undefined
+      ? undefined
+      : { path: "repositories.scope.exclude", selector: scope.exclude },
+    template.match.exclude === undefined ? undefined : {
+      path: "templates." + templateIdentity + ".match.exclude",
+      selector: template.match.exclude,
+    },
+  ].filter((constraint) => constraint !== undefined);
+  const witness = scopeIntersectionWitness(
+    include.map((constraint) => constraint.selector),
+    exclude.map((constraint) => constraint.selector),
+    templateIdentity,
   );
+  const positiveSelectors = include.map((constraint) => constraint.selector);
+  const negativeSelectors = exclude.map((constraint) => constraint.selector);
+  const finiteNameGroup = positiveSelectors
+    .map((selector) => selector.names)
+    .filter((names): names is readonly string[] =>
+      names !== undefined &&
+      names.every((name) => !name.includes("*") && !name.includes("?"))
+    )
+    .sort((left, right) => left.length - right.length)[0];
+  const nameChoices = finiteNameGroup === undefined
+    ? undefined
+    : [...new Set(finiteNameGroup)].filter((name) =>
+      scopeIntersectionWitness(
+        [...positiveSelectors, { names: [name] }],
+        negativeSelectors,
+        templateIdentity,
+      ) !== undefined
+    ).sort();
+  const visibilityChoices = ([
+    "public",
+    "private",
+    "internal",
+  ] as const).filter((visibility) =>
+    scopeIntersectionWitness(
+      [...positiveSelectors, { visibility }],
+      negativeSelectors,
+      templateIdentity,
+    ) !== undefined
+  );
+  const requiredTeams = [
+    ...new Set(positiveSelectors.flatMap((selector) => selector.teams ?? [])),
+  ].sort();
+  const requiredProperties = mergeProperties(
+    positiveSelectors.map((selector) => selector.properties),
+  );
+  const effective = witness === undefined ? undefined : {
+    names: {
+      ...(nameChoices === undefined ? {} : { choices: nameChoices }),
+      includePatterns: include.flatMap(({ path, selector }) =>
+        selector.names === undefined ? [] : [{ path, patterns: selector.names }]
+      ),
+      excludeConstraints: exclude,
+    },
+    visibility: visibilityChoices,
+    requiredTeams,
+    requiredProperties,
+  };
+
+  return {
+    template: templateIdentity,
+    reachable: witness !== undefined,
+    constraints: { include, exclude },
+    ...(effective === undefined ? {} : { effective }),
+    semanticWitness: witness,
+  };
+}
+
+/** Test candidate repository metadata against every constraint in an intersection. */
+export function matchesEffectiveRepositorySelectorIntersection(
+  intersection: EffectiveRepositorySelectorIntersection,
+  repository: RepositoryMetadata,
+): boolean {
+  return intersection.reachable &&
+    intersection.constraints.include.every(({ selector }) =>
+      matchesSelector(selector, repository)
+    ) &&
+    intersection.constraints.exclude.every(({ selector }) =>
+      !matchesSelector(selector, repository)
+    );
 }
 
 function findTemplateOverlapIssues(
@@ -220,9 +463,39 @@ function findTemplateOverlapIssues(
         ) !== undefined
       ) {
         issues.push({
+          code: "template_overlap",
           message:
             "Repository templates can overlap within configured scope: " +
             leftName + ", " + rightName,
+          templates: [leftName, rightName],
+          path: "repositories.scope",
+          constraints: {
+            include: [
+              { path: "repositories.scope.include", selector: scopeInclude },
+              {
+                path: "templates." + leftName + ".match.include",
+                selector: leftInclude,
+              },
+              {
+                path: "templates." + rightName + ".match.include",
+                selector: rightInclude,
+              },
+            ],
+            exclude: [
+              scope.exclude === undefined ? undefined : {
+                path: "repositories.scope.exclude",
+                selector: scope.exclude,
+              },
+              left.match.exclude === undefined ? undefined : {
+                path: "templates." + leftName + ".match.exclude",
+                selector: left.match.exclude,
+              },
+              right.match.exclude === undefined ? undefined : {
+                path: "templates." + rightName + ".match.exclude",
+                selector: right.match.exclude,
+              },
+            ].filter((constraint) => constraint !== undefined),
+          },
         });
       }
     }
@@ -264,8 +537,19 @@ function findScopeCoverageIssues(
 
     if (!possible) {
       issues.push({
+        code: "scope_repository_unmatched",
         message: "Repository " + name +
           " cannot match any template within configured scope",
+        path: "repositories.scope.include.names",
+        constraints: {
+          include: [
+            { path: "repositories.scope.include", selector: scopeInclude },
+            { path: "repositories.scope.include.names", selector: literalName },
+          ],
+          exclude: scope.exclude === undefined
+            ? []
+            : [{ path: "repositories.scope.exclude", selector: scope.exclude }],
+        },
       });
     }
   }
@@ -289,7 +573,18 @@ function findScopeCoverageIssues(
 
   if (!anyTemplateReachable) {
     issues.push({
+      code: "scope_without_reachable_templates",
       message: "Configured repository scope cannot match any template",
+      path: "repositories.scope",
+      constraints: {
+        include: [{
+          path: "repositories.scope.include",
+          selector: scopeInclude,
+        }],
+        exclude: scope.exclude === undefined
+          ? []
+          : [{ path: "repositories.scope.exclude", selector: scope.exclude }],
+      },
     });
   }
 
