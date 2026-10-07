@@ -55,8 +55,10 @@ export interface LoadedConfiguration {
 
 /** Describes an independently detected template loading problem. */
 export interface ConfigurationLoadIssue {
+  readonly code: "template_load_error" | "unknown_template";
   readonly message: string;
   readonly template: string;
+  readonly path: string;
 }
 
 /** Describes a partially loaded configuration and its template loading issues. */
@@ -159,8 +161,10 @@ async function loadConfigurationDirectoryInternal(
     } catch (error) {
       if (!collectTemplateIssues) throw error;
       issues.push({
+        code: "template_load_error",
         template: identity,
         message: error instanceof Error ? error.message : String(error),
+        path: "templates/" + relativePath,
       });
     }
   }
@@ -170,7 +174,17 @@ async function loadConfigurationDirectoryInternal(
     templates[selectedIdentity] === undefined &&
     !issues.some((issue) => issue.template === selectedIdentity)
   ) {
-    throw new Error("Unknown template: " + selectedTemplate);
+    const message = "Unknown template: " + selectedTemplate;
+    if (collectTemplateIssues) {
+      issues.push({
+        code: "unknown_template",
+        message,
+        template: selectedIdentity,
+        path: "templates." + selectedIdentity,
+      });
+    } else {
+      throw new Error(message);
+    }
   }
 
   return {

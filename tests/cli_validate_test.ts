@@ -139,10 +139,14 @@ Deno.test("validate emits machine-readable success", async () => {
       0,
     );
 
-    assertEquals(JSON.parse(output[0]), {
-      valid: true,
-      diagnostics: [],
-    });
+    const result = JSON.parse(output[0]);
+    assertEquals(result.valid, true);
+    assertEquals(result.diagnostics, []);
+    assertEquals(result.issues, []);
+    assertEquals(result.intersections.length, 1);
+    assertEquals(result.intersections[0].template, "repository:default");
+    assertEquals(result.intersections[0].reachable, true);
+    assertEquals(result.intersections[0].constraints.include.length, 2);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -404,7 +408,13 @@ Deno.test("validate emits all semantic issues as json", async () => {
 
     const result = JSON.parse(output[0]);
     assertEquals(result.valid, false);
-    assertEquals(result.issues.length, 3);
+    assertEquals(result.issues.length, 4);
+    assertEquals(
+      result.issues.some((issue: { code: string }) =>
+        issue.code === "template_unreachable"
+      ),
+      true,
+    );
     assertEquals(result.diagnostics, []);
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -577,21 +587,22 @@ Deno.test("validate skips coverage for incomplete template sets", async () => {
 
 Deno.test("validate treats root configuration failures as blockers", async () => {
   const root = await validConfiguration();
-  const errors: string[] = [];
+  const output: string[] = [];
 
   try {
     await Deno.writeTextFile(root + "/octosmith.yml", "version: 2\n");
     assertEquals(
-      await main(["template", "validate", "--path", root], {
-        writeError: (value) => errors.push(value),
-      }),
+      await main(
+        ["template", "validate", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
       1,
     );
-    assertStringIncludes(errors.join("\n"), "octosmith.yml");
-    assertEquals(
-      errors.some((value) => value.includes("Configuration is invalid.")),
-      false,
-    );
+    const result = JSON.parse(output[0]);
+    assertEquals(result.valid, false);
+    assertEquals(result.issues[0].code, "configuration_load_error");
+    assertEquals(result.issues[0].path, "configuration");
+    assertStringIncludes(result.issues[0].message, "octosmith.yml");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -1185,7 +1196,7 @@ Deno.test("validate allows incompatible metadata selectors", async () => {
   }
 });
 
-Deno.test("validate allows template overlap outside configured scope", async () => {
+Deno.test("validate reports every template unreachable outside configured scope", async () => {
   const root = await Deno.makeTempDir();
 
   try {
@@ -1243,7 +1254,166 @@ Deno.test("validate allows template overlap outside configured scope", async () 
       ].join("\n"),
     );
 
-    assertEquals(await main(["template", "validate", "--path", root]), 0);
+    const output: string[] = [];
+    assertEquals(
+      await main(
+        ["template", "validate", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      1,
+    );
+    const result = JSON.parse(output[0]);
+    assertEquals(
+      result.issues.filter((issue: { code: string }) =>
+        issue.code === "template_unreachable"
+      ).length,
+      2,
+    );
+    assertEquals(
+      result.issues
+        .filter((issue: { code: string }) =>
+          issue.code === "template_unreachable"
+        )
+        .map((issue: { template: string }) => issue.template),
+      ["repository:all-web", "repository:web"],
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate accepts short and canonical selected template identities", async () => {
+  const root = await validConfiguration();
+
+  try {
+    for (const template of ["default", "repository:default"]) {
+      const output: string[] = [];
+      assertEquals(
+        await main(
+          [
+            "template",
+            "validate",
+            template,
+            "--format",
+            "json",
+            "--path",
+            root,
+          ],
+          { write: (value) => output.push(value) },
+        ),
+        0,
+      );
+      const result = JSON.parse(output[0]);
+      assertEquals(result.valid, true);
+      assertEquals(result.intersections.length, 1);
+      assertEquals(result.intersections[0].template, "repository:default");
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate selected template ignores unrelated template load errors", async () => {
+  const root = await validConfiguration();
+
+  try {
+    await Deno.writeTextFile(root + "/templates/broken.yml", "invalid: [\n");
+    assertEquals(
+      await main(["template", "validate", "default", "--path", root]),
+      0,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate exposes exact include and exclude intersection constraints", async () => {
+  const root = await Deno.makeTempDir();
+  const output: string[] = [];
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      "version: 1\norganization: acme\nrepositories:\n  scope:\n    include: all\n    exclude:\n      names: [private-*]\n",
+    );
+    await Deno.writeTextFile(
+      root + "/templates/default.yml",
+      "version: 1\nkind: repository\nmatch:\n  include: all\n  exclude:\n    names: [archived-*]\nrepository: {}\n",
+    );
+
+    assertEquals(
+      await main(
+        ["template", "validate", "default", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      0,
+    );
+    const intersection = JSON.parse(output[0]).intersections[0];
+    assertEquals(intersection.reachable, true);
+    assertEquals(intersection.constraints.include.length, 2);
+    assertEquals(intersection.constraints.exclude.length, 2);
+    assertEquals(
+      intersection.constraints.exclude.map((constraint: { path: string }) =>
+        constraint.path
+      ),
+      [
+        "repositories.scope.exclude",
+        "templates.repository:default.match.exclude",
+      ],
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate reports a missing selected template as structured output", async () => {
+  const root = await validConfiguration();
+  const output: string[] = [];
+
+  try {
+    assertEquals(
+      await main(
+        ["template", "validate", "missing", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      1,
+    );
+    const result = JSON.parse(output[0]);
+    assertEquals(result.valid, false);
+    assertEquals(result.issues[0].code, "unknown_template");
+    assertEquals(result.issues[0].template, "repository:missing");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("validate selected template reports unreachable scope intersection", async () => {
+  const root = await Deno.makeTempDir();
+  const output: string[] = [];
+
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      "version: 1\norganization: acme\nrepositories:\n  scope:\n    include:\n      visibility: public\n",
+    );
+    await Deno.writeTextFile(
+      root + "/templates/private.yml",
+      "version: 1\nkind: repository\nmatch:\n  include:\n    visibility: private\nrepository: {}\n",
+    );
+
+    assertEquals(
+      await main(
+        ["template", "validate", "private", "--format", "json", "--path", root],
+        { write: (value) => output.push(value) },
+      ),
+      1,
+    );
+    const result = JSON.parse(output[0]);
+    assertEquals(result.issues[0].code, "template_unreachable");
+    assertEquals(result.intersections[0].reachable, false);
+    assertEquals(result.issues[0].constraints.include.length, 2);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
