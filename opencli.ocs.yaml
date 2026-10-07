@@ -45,6 +45,12 @@ commands:
           - value: text
           - value: json
         summary: Output format.
+      - name: quiet
+        type: boolean
+        summary: Suppress normal output.
+      - name: quiet
+        type: boolean
+        summary: Suppress normal output.
       - name: verbose
         aliases: [v]
         type: boolean
@@ -228,6 +234,9 @@ commands:
           - value: text
           - value: json
         summary: Output format.
+      - name: quiet
+        type: boolean
+        summary: Suppress normal output.
     examples:
       - title: Validate one template
         content: |
