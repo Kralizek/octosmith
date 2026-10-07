@@ -181,9 +181,11 @@ export function preflightRuntimeReferences(
 }
 
 function isMissingRuntimeValueError(error: unknown, name: string): boolean {
-  return error instanceof MissingRuntimeValueError ||
-    error instanceof Error &&
-      error.message === "Missing environment value: " + name;
+  if (error instanceof MissingRuntimeValueError) {
+    return error.valueName === name;
+  }
+  return error instanceof Error &&
+    error.message === "Missing environment value: " + name;
 }
 
 /** Build static warnings for runtime-backed references without resolving them. */

@@ -6,6 +6,7 @@ import {
   loadConfigurationDirectory,
   type LoadedConfiguration,
   matchesSelector,
+  MissingRuntimeValueError,
   preflightRuntimeReferences,
   resolveDesiredState,
   validateConfigurationDirectory,
@@ -1198,6 +1199,30 @@ Deno.test("runtime preflight snapshots each source name once", () => {
   );
   assertEquals(values("SHARED"), "runtime:SHARED");
   assertEquals(calls.get("SHARED"), 1);
+});
+
+Deno.test("runtime preflight does not skip a different missing value", () => {
+  const template = {
+    version: 1,
+    kind: "repository",
+    match: { include: { names: ["sample"] } },
+    repository: { actions: { variables: ["EXPECTED"] } },
+  } as const;
+
+  assertThrows(
+    () =>
+      preflightRuntimeReferences(
+        "repository:sample",
+        template,
+        { name: "sample", teams: [], properties: {} },
+        () => {
+          throw new MissingRuntimeValueError("OTHER");
+        },
+        { skipMissingValues: true },
+      ),
+    MissingRuntimeValueError,
+    "Missing environment value: OTHER",
+  );
 });
 
 Deno.test("resolves variable and secret binding forms", async () => {

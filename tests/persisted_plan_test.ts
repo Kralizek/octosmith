@@ -13,6 +13,7 @@ import {
   hashCanonical,
   hashEffectiveTemplate,
   type LoadedConfiguration,
+  MissingRuntimeValueError,
   parsePersistedPlanArtifact,
   persistedOperationContract,
   projectOwnedCurrentState,
@@ -1203,6 +1204,76 @@ Deno.test("persisted apply rechecks state immediately before mutation", async ()
   await applyPersistedPlan(runtime, loaded, artifact, () => {});
   assertEquals(reads, 1);
   assertEquals(applies, 0);
+});
+
+Deno.test("persisted apply skips runtime values missing at apply time", async () => {
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "repository:sample",
+    actions: { variables: [{ name: "TARGET", value: "runtime:SOURCE" }] },
+  };
+  const plannedCurrent = currentState();
+  const plan = buildPlan(plannedCurrent, desired);
+  const evaluations = buildApplyEvaluations(desired, plan.operations);
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: { names: ["sample"] } } },
+    },
+    templates: {
+      "repository:sample": {
+        version: 1,
+        kind: "repository",
+        match: { include: { names: ["sample"] } },
+        repository: {
+          actions: { variables: [{ from: "SOURCE", to: "TARGET" }] },
+        },
+      },
+    },
+  };
+  const artifact = await createPersistedPlanArtifact(
+    loaded,
+    [{ desired, current: plannedCurrent, plan, evaluations }],
+    new Date("2026-09-24T12:00:00Z"),
+  );
+  let prepared: ExecutableResourcePlan | undefined;
+  const runtime = {
+    value: () => {
+      throw new MissingRuntimeValueError("SOURCE");
+    },
+    discover: () =>
+      Promise.resolve({
+        repositories: [{
+          name: "sample",
+          teams: [],
+          visibility: "private" as const,
+          properties: {},
+        }],
+        failures: [],
+      }),
+    read: () => Promise.resolve(plannedCurrent),
+    prepare: (resource: ExecutableResourcePlan) => {
+      prepared = resource;
+    },
+    recheck: () => {},
+    apply: (resource: ExecutableResourcePlan) =>
+      Promise.resolve({
+        repository: resource.plan.repository,
+        operations: [],
+      }),
+  };
+
+  await applyPersistedPlan(runtime, loaded, artifact, () => {}, {
+    skipMissingValues: true,
+  });
+
+  assertEquals(prepared?.plan.operations, []);
+  assertEquals(prepared?.desired.actions?.variables, []);
+  assertEquals(prepared?.skippedRuntimeReferences?.map(({ name }) => name), [
+    "SOURCE",
+  ]);
 });
 
 Deno.test("configuration precondition normalizes execution defaults", async () => {
