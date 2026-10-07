@@ -671,6 +671,7 @@ export async function main(
   try {
     validateRawEventsOutputArgument(args);
     validateRawResourceArgument(args);
+    validateRawQuietArgument(args);
     await createCli(options, args).parse(args);
     return 0;
   } catch (error) {
@@ -708,6 +709,20 @@ function validateRawResourceArgument(args: readonly string[]): void {
 
   if (rest.includes("")) {
     throw new Error("Resource target must not be empty");
+  }
+}
+
+function validateRawQuietArgument(args: readonly string[]): void {
+  if (!args.includes("--quiet")) {
+    return;
+  }
+
+  const supportsQuiet = args[0] === "plan" ||
+    args[0] === "apply" ||
+    (args[0] === "template" && args[1] === "validate");
+
+  if (!supportsQuiet) {
+    throw new Error("Unknown option --quiet");
   }
 }
 
