@@ -215,6 +215,7 @@ export interface ApplyOptions {
   readonly mode: ApplyMode;
   readonly resource?: string;
   readonly template?: string;
+  /** Override runtime values for variables; secrets use the runtime provider. */
   readonly values?: RuntimeValueProvider;
   readonly skipMissingValues?: boolean;
   readonly onResourceInspected?: (resource: ResourceInspection) => void;
@@ -253,6 +254,7 @@ export async function apply(
         classification.template === template;
     });
   const values = options.values ?? runtime.value ?? environmentValue;
+  const secretValues = runtime.value ?? environmentValue;
   const failures: import("@octosmith/octosmith").RepositoryReport[] = [];
   const prepared: ExecutableResourcePlan[] = [];
 
@@ -288,6 +290,7 @@ export async function apply(
           repository,
           values,
           {
+            secretValues,
             skipMissingValues: options.skipMissingValues,
             onSkipped: (reference, diagnostic) => {
               skippedRuntimeReferences.push(reference);

@@ -112,6 +112,7 @@ export function preflightRuntimeReferences(
   repository: RepositoryMetadata,
   values: (name: string) => string,
   options: {
+    readonly secretValues?: (name: string) => string;
     readonly skipMissingValues?: boolean;
     readonly onSkipped?: (
       reference: RuntimeReference,
@@ -122,14 +123,20 @@ export function preflightRuntimeReferences(
   const resolved = new Map<string, string>();
   const missing = new Set<string>();
   const references = collectRuntimeReferences(template);
+  const key = (kind: RuntimeReference["kind"], name: string) =>
+    kind + ":" + name;
 
   for (const reference of references) {
-    if (resolved.has(reference.name) || missing.has(reference.name)) {
+    const referenceKey = key(reference.kind, reference.name);
+    if (resolved.has(referenceKey) || missing.has(referenceKey)) {
       continue;
     }
 
     try {
-      resolved.set(reference.name, values(reference.name));
+      const provider = reference.kind === "secret"
+        ? options.secretValues ?? values
+        : values;
+      resolved.set(referenceKey, provider(reference.name));
     } catch (error) {
       if (!isMissingRuntimeValueError(error, reference.name)) {
         throw error;
@@ -155,9 +162,12 @@ export function preflightRuntimeReferences(
       };
 
       if (skipped) {
-        missing.add(reference.name);
+        missing.add(referenceKey);
         for (const skippedReference of references) {
-          if (skippedReference.name === reference.name) {
+          if (
+            skippedReference.kind === reference.kind &&
+            skippedReference.name === reference.name
+          ) {
             options.onSkipped?.(skippedReference, {
               ...diagnostic,
               code: skippedReference.kind === "variable"
@@ -177,10 +187,11 @@ export function preflightRuntimeReferences(
   }
 
   return (name) => {
-    if (missing.has(name)) {
+    const referenceKey = key("variable", name);
+    if (missing.has(referenceKey)) {
       throw new MissingRuntimeValueError(name);
     }
-    const value = resolved.get(name);
+    const value = resolved.get(referenceKey);
     return value === undefined ? values(name) : value;
   };
 }

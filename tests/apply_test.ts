@@ -17,6 +17,7 @@ import { apply, type ApplyRuntime } from "../packages/cli/apply.ts";
 import { currentRepositorySettings } from "./plan/fixtures.ts";
 
 class FakeRuntime implements ApplyRuntime {
+  value?: (name: string) => string;
   readonly applied: Plan[] = [];
   readonly discoveredTargets: (string | undefined)[] = [];
   readonly readRepositories: string[] = [];
@@ -254,6 +255,53 @@ Deno.test(
     }
   },
 );
+
+Deno.test("apply keeps variable overrides separate from the secret provider", async () => {
+  const root = await runtimeValuesConfigurationDirectory();
+  try {
+    const runtime = new FakeRuntime([metadata("sample")]);
+    const variableLookups: string[] = [];
+    const secretLookups: string[] = [];
+    runtime.value = (name) => {
+      secretLookups.push(name);
+      return "mutation-provider:" + name;
+    };
+    const loaded = await loadConfigurationDirectory(root);
+    const planned: ExecutableResourcePlan[] = [];
+
+    await apply(runtime, loaded, {
+      mode: "plan",
+      values: (name) => {
+        variableLookups.push(name);
+        return "variable-override:" + name;
+      },
+      onPlanBuilt: (resource) => {
+        planned.push(resource);
+      },
+      onRepositoryApplied: () => {},
+    });
+
+    assertEquals(variableLookups, [
+      "AVAILABLE",
+      "MISSING_VARIABLE",
+      "MISSING_ENVIRONMENT_VARIABLE",
+    ]);
+    assertEquals(secretLookups, [
+      "MISSING_ACTIONS_SECRET",
+      "MISSING_DEPENDABOT_SECRET",
+      "MISSING_ENVIRONMENT_SECRET",
+    ]);
+    assertEquals(planned[0].desired.actions?.variables, [
+      { name: "AVAILABLE", value: "variable-override:AVAILABLE" },
+      {
+        name: "MISSING_VARIABLE",
+        value: "variable-override:MISSING_VARIABLE",
+      },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 Deno.test(
   "failed apply reports skipped runtime value diagnostics",

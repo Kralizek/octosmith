@@ -1201,6 +1201,38 @@ Deno.test("runtime preflight snapshots each source name once", () => {
   assertEquals(calls.get("SHARED"), 1);
 });
 
+Deno.test("runtime preflight uses the mutation provider for secrets", () => {
+  const calls: string[] = [];
+  const values = preflightRuntimeReferences(
+    "repository:sample",
+    {
+      version: 1,
+      kind: "repository",
+      match: { include: { names: ["sample"] } },
+      repository: {
+        actions: {
+          variables: ["SHARED"],
+          secrets: ["SHARED"],
+        },
+      },
+    },
+    { name: "sample", teams: [], properties: {} },
+    (name) => {
+      calls.push("variable:" + name);
+      return "variable-provider";
+    },
+    {
+      secretValues: (name) => {
+        calls.push("secret:" + name);
+        return "mutation-provider";
+      },
+    },
+  );
+
+  assertEquals(values("SHARED"), "variable-provider");
+  assertEquals(calls, ["variable:SHARED", "secret:SHARED"]);
+});
+
 Deno.test("runtime preflight never substitutes a value for a missing source", () => {
   const skipped: string[] = [];
   let calls = 0;
@@ -1230,10 +1262,10 @@ Deno.test("runtime preflight never substitutes a value for a missing source", ()
     },
   );
 
-  assertEquals(calls, 1);
+  assertEquals(calls, 2);
   assertEquals(skipped, ["SOURCE", "RENAMED", "SOURCE"]);
   assertThrows(() => values("SOURCE"), MissingRuntimeValueError);
-  assertEquals(calls, 1);
+  assertEquals(calls, 2);
 });
 
 Deno.test("skipping runtime variables does not hide duplicate destinations", async () => {
