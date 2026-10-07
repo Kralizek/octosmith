@@ -59,6 +59,17 @@ export class RuntimeReferenceError extends Error {
   }
 }
 
+/** Error raised when a provider fails after missing references were found. */
+export class RuntimeReferenceProviderError extends Error {
+  constructor(
+    readonly cause: unknown,
+    readonly diagnostics: readonly RuntimeReferenceDiagnostic[],
+  ) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "RuntimeReferenceProviderError";
+  }
+}
+
 /** Error raised when a runtime provider confirms that a value is unavailable. */
 export class MissingRuntimeValueError extends Error {
   constructor(readonly valueName: string) {
@@ -156,6 +167,9 @@ export function preflightRuntimeReferences(
       resolved.set(referenceKey, provider(reference.name));
     } catch (error) {
       if (!isMissingRuntimeValueError(error, reference.name)) {
+        if (diagnostics.length > 0) {
+          throw new RuntimeReferenceProviderError(error, diagnostics);
+        }
         throw error;
       }
 
