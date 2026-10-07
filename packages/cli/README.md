@@ -195,8 +195,8 @@ GITHUB_TOKEN=... octosmith apply --path ./configuration --quiet
 `apply` reads fresh GitHub state, builds a new plan, and applies that plan by
 default.
 
-Use `--quiet` to suppress the normal report. Errors remain on stderr and the exit
-code is unchanged.
+Use `--quiet` to suppress the normal report. Errors remain on stderr and the
+exit code is unchanged.
 
 Use `--template <template>` to apply only repositories classified with that
 template:
