@@ -151,7 +151,7 @@ An existing template with no matching repositories produces an empty successful
 report. A template filter cannot be combined with a positional repository
 target.
 
-Use `--quiet` for an exit-code-only planning check. It can be combined with
+Use `--quiet` to suppress the normal planning report. It can be combined with
 `--out` to write a persisted plan without printing the report:
 
 ```sh
