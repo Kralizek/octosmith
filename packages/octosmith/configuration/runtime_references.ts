@@ -62,7 +62,7 @@ export class RuntimeReferenceError extends Error {
 /** Error raised when a provider fails after missing references were found. */
 export class RuntimeReferenceProviderError extends Error {
   constructor(
-    readonly cause: unknown,
+    override readonly cause: unknown,
     readonly diagnostics: readonly RuntimeReferenceDiagnostic[],
   ) {
     super(cause instanceof Error ? cause.message : String(cause));
