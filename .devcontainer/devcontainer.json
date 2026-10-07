@@ -2,9 +2,7 @@
   "name": "Octosmith",
   "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
   "features": {
-    "ghcr.io/devcontainers/features/deno:1": {
-      "version": "2"
-    },
+    "ghcr.io/devcontainers-community/features/deno:1": {},
     "ghcr.io/devcontainers/features/github-cli:1": {},
     "ghcr.io/devcontainers/features/go:1": {}
   },
@@ -18,5 +16,7 @@
       }
     }
   },
+  "initializeCommand": "powershell -NoProfile -ExecutionPolicy Bypass -File .devcontainer/init.ps1",
+  "runArgs": ["--env-file", ".devcontainer/.env.local"],
   "postCreateCommand": "go install github.com/bcdxn/opencli/cmd/ocli@v1.3.0"
 }
