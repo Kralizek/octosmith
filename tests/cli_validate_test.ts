@@ -1274,7 +1274,8 @@ Deno.test("validate reports every template unreachable outside configured scope"
         .filter((issue: { code: string }) =>
           issue.code === "template_unreachable"
         )
-        .map((issue: { template: string }) => issue.template),
+        .map((issue: { template: string }) => issue.template)
+        .sort(),
       ["repository:all-web", "repository:web"],
     );
   } finally {
