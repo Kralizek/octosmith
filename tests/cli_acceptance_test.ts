@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { stringify } from "@std/yaml";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
 
@@ -1077,6 +1077,132 @@ Deno.test("CLI isolates exact-name discovery failures", async () => {
       Deno.env.set("DESIRED", previous);
     }
 
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("quiet plan suppresses output and still writes the persisted artifact", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const planPath = root + "/quiet-plan.json";
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const requests: CapturedRequest[] = [];
+    const output: string[] = [];
+    const errors: string[] = [];
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(["plan", "--quiet", "--out", planPath, "--path", root], {
+        runtime,
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      0,
+      errors.join("\n"),
+    );
+    assertEquals(output, []);
+    assertEquals(errors, []);
+    const artifact = JSON.parse(await Deno.readTextFile(planPath));
+    assertEquals(artifact.resources.length, 1);
+
+    assertEquals(
+      await main(["plan", "--quiet", "--path", root], {
+        runtime,
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      0,
+      errors.join("\n"),
+    );
+    assertEquals(output, []);
+    assertEquals(errors, []);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("quiet plan failures report on stderr without writing the artifact", async () => {
+  const root = await configurationDirectory(true);
+  const previous = Deno.env.get("DESIRED");
+  const planPath = root + "/failed-plan.json";
+  const output: string[] = [];
+  const errors: string[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub([]),
+    });
+
+    assertEquals(
+      await main(["plan", "--quiet", "--out", planPath, "--path", root], {
+        runtime,
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      1,
+    );
+    assertEquals(output, []);
+    assertEquals(errors, [
+      "Error: Plan contains failed resources; no plan file was written.",
+    ]);
+    await assertRejects(() => Deno.stat(planPath), Deno.errors.NotFound);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("quiet apply suppresses its successful report", async () => {
+  const root = await configurationDirectory();
+  const previous = Deno.env.get("DESIRED");
+  const output: string[] = [];
+  const errors: string[] = [];
+  const requests: CapturedRequest[] = [];
+
+  try {
+    Deno.env.set("DESIRED", "same");
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeGitHub(requests),
+    });
+
+    assertEquals(
+      await main(["apply", "--quiet", "--path", root], {
+        runtime,
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      0,
+      errors.join("\n"),
+    );
+    assertEquals(output, []);
+    assertEquals(errors, []);
+    assertEquals(mutations(requests).length > 0, true);
+  } finally {
+    if (previous === undefined) {
+      Deno.env.delete("DESIRED");
+    } else {
+      Deno.env.set("DESIRED", previous);
+    }
     await Deno.remove(root, { recursive: true });
   }
 });
