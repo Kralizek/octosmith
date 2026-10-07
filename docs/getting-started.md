@@ -59,10 +59,13 @@ GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 plan --path ./github-config
 Review the plan before applying, especially when strict collection management is
 enabled.
 
-When planning or applying locally without orchestration-provided values, pass
-`--skip-missing-values` to preserve those remote values and receive a warning
-instead of failing. Available values, including explicitly empty values, are
-still reconciled normally.
+When planning or applying configuration directly without orchestration-provided
+values, pass `--skip-missing-values` to exclude unavailable values and receive a
+warning instead of failing. This covers Actions variables and secrets,
+Dependabot secrets, and environment variables and secrets. Skipped values are
+never written or deleted, even with strict collection management. Available
+values, including explicitly empty values, are still reconciled normally.
+Configuration errors and unrelated runtime-provider failures still fail.
 
 To persist the exact reviewed operations:
 
@@ -99,6 +102,16 @@ summary reports `valid`, `template`, or `state`.
 Each resource state precondition is checked again immediately before that
 resource is mutated. Persisted operations are never rebuilt or silently
 replanned.
+
+Exclusions made with `plan --skip-missing-values --out plan.json` are saved in
+the artifact and honored automatically by `apply --plan plan.json`, with the
+same warnings. Those values remain excluded even if their runtime sources later
+become available. Changes to skipped remote values do not make the plan stale;
+changes to other managed values still do.
+
+`--skip-missing-values` cannot be combined with `--plan`: applying an artifact
+must not drop approved operations. Secrets required by saved operations must
+still be available. Create a new plan with the flag to change its exclusions.
 
 Apply is not transactional. Earlier operations for a repository may already be
 applied when a later operation fails.

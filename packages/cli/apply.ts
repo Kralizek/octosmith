@@ -19,6 +19,7 @@ import {
   type RuntimeReference,
   type RuntimeReferenceDiagnostic,
   type RuntimeValueProvider,
+  withoutSkippedRuntimeValues,
 } from "@octosmith/octosmith";
 import { executeExecutableResources } from "./execution.ts";
 import {
@@ -300,6 +301,7 @@ export async function apply(
         loaded,
         repository,
         runtimeValues,
+        { skippedRuntimeReferences },
       );
       template = resolvedDesired.template;
       templateName = resolvedDesired.templateName;
@@ -461,94 +463,4 @@ function environmentValue(name: string): string {
   }
 
   return value;
-}
-
-/** Remove runtime-backed values skipped for the current reconciliation. */
-export function withoutSkippedRuntimeValues(
-  desired: DesiredState,
-  skipped: readonly RuntimeReference[],
-): DesiredState {
-  if (skipped.length === 0) {
-    return desired;
-  }
-
-  const actions = desired.actions === undefined ? undefined : {
-    ...desired.actions,
-    secrets: filterSkippedItems(
-      desired.actions.secrets,
-      skipped,
-      "actions",
-      "secret",
-      (secret) => secret.name,
-    ),
-    variables: filterSkippedItems(
-      desired.actions.variables,
-      skipped,
-      "actions",
-      "variable",
-      (variable) => variable.name,
-    ),
-  };
-  const dependabot = desired.dependabot === undefined ? undefined : {
-    ...desired.dependabot,
-    secrets: filterSkippedItems(
-      desired.dependabot.secrets,
-      skipped,
-      "dependabot",
-      "secret",
-      (secret) => secret.name,
-    ),
-  };
-  const environments = desired.environments?.map((environment) => ({
-    ...environment,
-    secrets: filterSkippedItems(
-      environment.secrets,
-      skipped,
-      "environment",
-      "secret",
-      (secret) => secret.name,
-      environment.name,
-    ),
-    variables: filterSkippedItems(
-      environment.variables,
-      skipped,
-      "environment",
-      "variable",
-      (variable) => variable.name,
-      environment.name,
-    ),
-  }));
-
-  return {
-    ...desired,
-    ...(actions !== undefined && { actions }),
-    ...(dependabot !== undefined && { dependabot }),
-    ...(environments !== undefined && { environments }),
-  };
-}
-
-function filterSkippedItems<T>(
-  items: readonly T[] | undefined,
-  skipped: readonly RuntimeReference[],
-  scope: RuntimeReference["scope"],
-  kind: RuntimeReference["kind"],
-  name: (item: T) => string,
-  environment?: string,
-): readonly T[] | undefined {
-  if (items === undefined) {
-    return undefined;
-  }
-
-  const skippedNames = new Set(
-    skipped.filter((reference) =>
-      reference.scope === scope && reference.kind === kind &&
-      (environment === undefined || reference.environment === environment)
-    ).map((reference) => reference.target),
-  );
-  const filtered = items.filter((item) => !skippedNames.has(name(item)));
-
-  return scope === "environment" && skippedNames.size > 0 &&
-      filtered.length === 0
-    ? undefined
-    : filtered;
 }

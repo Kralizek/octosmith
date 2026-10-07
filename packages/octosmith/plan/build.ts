@@ -533,7 +533,16 @@ function planEnvironments(
       continue;
     }
 
-    if (environmentNeedsUpdate(actual, filteredEnvironment, collections)) {
+    const managedActual = {
+      ...actual,
+      secrets: actual.secrets.filter((name) => !skippedSecrets.has(name)),
+      variables: actual.variables.filter((variable) =>
+        !skippedVariables.has(variable.name)
+      ),
+    };
+    if (
+      environmentNeedsUpdate(managedActual, filteredEnvironment, collections)
+    ) {
       operations.push({
         type: "update-environment",
         environment: filteredEnvironment,

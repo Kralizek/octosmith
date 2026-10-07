@@ -139,7 +139,7 @@ function createCli(
       .option("--trace", "Emit GitHub API request traces to stderr.")
       .option(
         "--skip-missing-values",
-        "Skip runtime-backed values that are unavailable locally.",
+        "Skip unavailable runtime values when creating a fresh plan (not with --plan).",
       )
       .option(
         "--events-output <path:string>",
@@ -192,6 +192,12 @@ function createCli(
         }
         if (mode === "apply" && modeOptions.plan === "") {
           throw new Error("Persisted plan path must not be empty");
+        }
+        if (modeOptions.plan !== undefined && modeOptions.skipMissingValues) {
+          throw new Error(
+            "Cannot combine --skip-missing-values with --plan. " +
+              "Create a new plan with --skip-missing-values instead.",
+          );
         }
 
         const format = parseOutputFormat(commandOptions.format);

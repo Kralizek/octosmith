@@ -226,6 +226,48 @@ Deno.test("skipped runtime values are preserved across strict value scopes", () 
   );
 });
 
+Deno.test("skipped environment values alone do not cause an update", () => {
+  for (const collections of ["explicit", "strict"] as const) {
+    const plan = buildPlan(
+      currentState({
+        environments: [{
+          name: "production",
+          secrets: ["TOKEN"],
+          variables: [{ name: "SETTING", value: "remote" }],
+        }],
+      }),
+      {
+        repository: "sample",
+        template: "code",
+        collections,
+        environments: [{
+          name: "production",
+          secrets: [{ name: "TOKEN", source: "TOKEN" }],
+          variables: [{ name: "SETTING", value: "unused" }],
+        }],
+      },
+      {
+        skippedRuntimeReferences: [{
+          kind: "secret",
+          name: "TOKEN",
+          target: "TOKEN",
+          scope: "environment",
+          environment: "production",
+          path: "repository.environments[0].secrets[0]",
+        }, {
+          kind: "variable",
+          name: "SETTING",
+          target: "SETTING",
+          scope: "environment",
+          environment: "production",
+          path: "repository.environments[0].variables[0]",
+        }],
+      },
+    );
+    assertEquals(plan.operations, []);
+  }
+});
+
 Deno.test("Actions and Dependabot values reject duplicate desired names", () => {
   assertThrows(
     () =>

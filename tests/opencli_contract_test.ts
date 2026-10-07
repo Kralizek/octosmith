@@ -94,6 +94,18 @@ Deno.test("OpenCLI contract reserves -v for verbose and omits a short version al
   }
 });
 
+Deno.test("OpenCLI contract exposes runtime exclusions for plan and direct apply", async () => {
+  const document = await loadContract();
+  for (const commandName of ["octosmith plan", "octosmith apply"]) {
+    assertEquals(
+      document.commands[commandName].flags?.some((flag) =>
+        flag.name === "skip-missing-values"
+      ),
+      true,
+    );
+  }
+});
+
 Deno.test("OpenCLI contract gives resource list configuration and output flags", async () => {
   const document = await loadContract();
   const command = document.commands["octosmith resource list"];

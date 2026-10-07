@@ -1,4 +1,5 @@
 import type { RepositoryMetadata } from "./resolve.ts";
+import type { DesiredState } from "../state/types.ts";
 import type {
   RepositoryTemplate,
   SecretConfiguration,
@@ -102,8 +103,8 @@ export function collectRuntimeReferences(
 /**
  * Check runtime references required by a selected template.
  *
- * Variable values are snapshotted for desired-state resolution. Secret values
- * are checked for availability but deliberately discarded.
+ * Values are snapshotted for this invocation. Missing sources are reported
+ * separately and never represented by placeholder values.
  */
 export function preflightRuntimeReferences(
   templateName: string,
@@ -119,10 +120,11 @@ export function preflightRuntimeReferences(
   } = {},
 ): (name: string) => string {
   const resolved = new Map<string, string>();
+  const missing = new Set<string>();
   const references = collectRuntimeReferences(template);
 
   for (const reference of references) {
-    if (resolved.has(reference.name)) {
+    if (resolved.has(reference.name) || missing.has(reference.name)) {
       continue;
     }
 
@@ -153,7 +155,7 @@ export function preflightRuntimeReferences(
       };
 
       if (skipped) {
-        resolved.set(reference.name, "");
+        missing.add(reference.name);
         for (const skippedReference of references) {
           if (skippedReference.name === reference.name) {
             options.onSkipped?.(skippedReference, {
@@ -175,9 +177,104 @@ export function preflightRuntimeReferences(
   }
 
   return (name) => {
+    if (missing.has(name)) {
+      throw new MissingRuntimeValueError(name);
+    }
     const value = resolved.get(name);
     return value === undefined ? values(name) : value;
   };
+}
+
+/** Remove skipped values while retaining ownership of strict collections. */
+export function withoutSkippedRuntimeValues(
+  desired: DesiredState,
+  skipped: readonly RuntimeReference[],
+): DesiredState {
+  if (skipped.length === 0) {
+    return desired;
+  }
+
+  const actions = desired.actions === undefined ? undefined : {
+    ...desired.actions,
+    secrets: filterSkippedItems(
+      desired.actions.secrets,
+      skipped,
+      "actions",
+      "secret",
+      (secret) => secret.name,
+    ),
+    variables: filterSkippedItems(
+      desired.actions.variables,
+      skipped,
+      "actions",
+      "variable",
+      (variable) => variable.name,
+    ),
+  };
+  const dependabot = desired.dependabot === undefined ? undefined : {
+    ...desired.dependabot,
+    secrets: filterSkippedItems(
+      desired.dependabot.secrets,
+      skipped,
+      "dependabot",
+      "secret",
+      (secret) => secret.name,
+    ),
+  };
+  const environments = desired.environments?.map((environment) => ({
+    ...environment,
+    secrets: filterSkippedItems(
+      environment.secrets,
+      skipped,
+      "environment",
+      "secret",
+      (secret) => secret.name,
+      environment.name,
+      desired.collections !== "strict",
+    ),
+    variables: filterSkippedItems(
+      environment.variables,
+      skipped,
+      "environment",
+      "variable",
+      (variable) => variable.name,
+      environment.name,
+      desired.collections !== "strict",
+    ),
+  }));
+
+  return {
+    ...desired,
+    ...(actions !== undefined && { actions }),
+    ...(dependabot !== undefined && { dependabot }),
+    ...(environments !== undefined && { environments }),
+  };
+}
+
+function filterSkippedItems<T>(
+  items: readonly T[] | undefined,
+  skipped: readonly RuntimeReference[],
+  scope: RuntimeReference["scope"],
+  kind: RuntimeReference["kind"],
+  name: (item: T) => string,
+  environment?: string,
+  omitEmpty = false,
+): readonly T[] | undefined {
+  if (items === undefined) {
+    return undefined;
+  }
+
+  const skippedNames = new Set(
+    skipped.filter((reference) =>
+      reference.scope === scope && reference.kind === kind &&
+      (environment === undefined || reference.environment === environment)
+    ).map((reference) => reference.target),
+  );
+  const filtered = items.filter((item) => !skippedNames.has(name(item)));
+
+  return omitEmpty && skippedNames.size > 0 && filtered.length === 0
+    ? undefined
+    : filtered;
 }
 
 function isMissingRuntimeValueError(error: unknown, name: string): boolean {

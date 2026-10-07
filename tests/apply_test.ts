@@ -236,11 +236,11 @@ Deno.test(
         assertEquals(executableResources[0].desired.dependabot?.secrets, []);
         assertEquals(
           executableResources[0].desired.environments?.[0].secrets,
-          undefined,
+          [],
         );
         assertEquals(
           executableResources[0].desired.environments?.[0].variables,
-          undefined,
+          [],
         );
         if (mode === "apply") {
           assertEquals(runtime.applied[0].operations, [{

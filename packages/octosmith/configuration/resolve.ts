@@ -12,7 +12,9 @@ import type {
   RulesetConfiguration,
   RulesetRuleConfiguration,
   Scope,
+  VariableConfiguration,
 } from "./types.ts";
+import type { RuntimeReference } from "./runtime_references.ts";
 import type {
   DesiredMergeSettings,
   DesiredRepositorySettings,
@@ -84,6 +86,8 @@ export async function resolveDesiredState(
   loaded: LoadedConfiguration,
   repository: RepositoryMetadata,
   values: RuntimeValueProvider,
+  options: { readonly skippedRuntimeReferences?: readonly RuntimeReference[] } =
+    {},
 ): Promise<DesiredState> {
   const classification = classifyResource(loaded, repository);
 
@@ -99,6 +103,11 @@ export async function resolveDesiredState(
   const templateName = classification.template;
   const template = loaded.templates[templateName];
   const readSource = createConfigurationSourceReader(loaded.root);
+  const skippedVariables = new Set(
+    (options.skippedRuntimeReferences ?? [])
+      .filter((reference) => reference.kind === "variable")
+      .map((reference) => reference.name),
+  );
 
   return {
     repository: repository.name,
@@ -117,7 +126,11 @@ export async function resolveDesiredState(
       customProperties: template.repository.customProperties,
     }),
     ...(template.repository.actions && {
-      actions: normalizeActions(template.repository.actions, values),
+      actions: normalizeActions(
+        template.repository.actions,
+        values,
+        skippedVariables,
+      ),
     }),
     ...(template.repository.dependabot && {
       dependabot: {
@@ -131,7 +144,7 @@ export async function resolveDesiredState(
     }),
     ...(template.repository.environments && {
       environments: template.repository.environments.map((environment) =>
-        normalizeEnvironment(environment, values)
+        normalizeEnvironment(environment, values, skippedVariables)
       ),
     }),
     ...(template.repository.files && {
@@ -396,14 +409,18 @@ function normalizeActions(
     : never
     : never,
   values: RuntimeValueProvider,
+  skippedVariables: ReadonlySet<string>,
 ): DesiredActions {
   return {
     ...(actions.secrets !== undefined && {
       secrets: actions.secrets.map(normalizeSecret),
     }),
     ...(actions.variables !== undefined && {
-      variables: actions.variables.map((variable) =>
-        normalizeVariable(variable, values)
+      variables: normalizeVariables(
+        actions.variables,
+        values,
+        skippedVariables,
+        "Actions variable",
       ),
     }),
     ...(actions.enabled !== undefined && { enabled: actions.enabled }),
@@ -503,6 +520,7 @@ function normalizeEnvironment(
     RepositoryTemplate["repository"]["environments"]
   >[number],
   values: RuntimeValueProvider,
+  skippedVariables: ReadonlySet<string>,
 ): DesiredEnvironment {
   return {
     name: environment.name,
@@ -510,8 +528,11 @@ function normalizeEnvironment(
       secrets: environment.secrets.map(normalizeSecret),
     }),
     ...(environment.variables !== undefined && {
-      variables: environment.variables.map((variable) =>
-        normalizeVariable(variable, values)
+      variables: normalizeVariables(
+        environment.variables,
+        values,
+        skippedVariables,
+        "environment variable",
       ),
     }),
   };
@@ -523,6 +544,36 @@ function normalizeSecret(
   return typeof secret === "string"
     ? { name: secret, source: secret }
     : { name: secret.to, source: secret.from };
+}
+
+function normalizeVariables(
+  variables: readonly VariableConfiguration[],
+  values: RuntimeValueProvider,
+  skipped: ReadonlySet<string>,
+  resource: string,
+) {
+  const names = new Set<string>();
+  for (const variable of variables) {
+    const name = typeof variable === "string"
+      ? variable
+      : "from" in variable
+      ? variable.to
+      : variable.name;
+    if (names.has(name)) {
+      throw new Error("Duplicate " + resource + ": " + name);
+    }
+    names.add(name);
+  }
+  return variables.flatMap((variable) => {
+    const source = typeof variable === "string"
+      ? variable
+      : "from" in variable
+      ? variable.from
+      : undefined;
+    return source !== undefined && skipped.has(source)
+      ? []
+      : [normalizeVariable(variable, values)];
+  });
 }
 
 function normalizeVariable(

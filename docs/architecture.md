@@ -68,6 +68,13 @@ typed operations.
 
 This keeps GitHub REST shapes out of planning logic.
 
+Runtime preflight distinguishes confirmed missing sources from provider errors.
+With `--skip-missing-values`, missing references become explicit reconciliation
+exclusions, not empty or placeholder values. Variable normalization validates
+destination names before omitting skipped bindings. The engine uses the same
+exclusions for planning ownership and reports; environment update operations
+also record preserved names so strict cleanup cannot remove skipped values.
+
 ## Collection semantics
 
 Collection management belongs to desired-state interpretation, not GitHub API
@@ -93,6 +100,14 @@ all resources before mutation and rechecks selection and state before each
 resource executes. A saved plan adds configuration, template, and state hash
 preconditions: after preflight, Octosmith must replay the stored operations
 rather than reinterpret them from live state.
+
+Runtime exclusions are fixed when the plan is created and persisted with each
+resource. Replay restores those exclusions and warnings without resolving their
+sources, and requires only the secret sources used by stored operations. It
+never filters operations based on the applying machine's runtime availability.
+Artifact creation and replay use the same excluded desired-state projection;
+empty strict collections remain managed so unrelated membership drift is still
+detected even when every declared value was skipped.
 
 Resource state preconditions therefore combine two independent projections:
 

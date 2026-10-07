@@ -1,28 +1,21 @@
 import {
   classifyResource,
-  collectRuntimeReferences,
   equalContentHash,
   type ExecutableResourcePlan,
   hashCanonical,
   hashEffectiveConfiguration,
   hashEffectiveTemplate,
   type LoadedConfiguration,
-  type Operation,
-  MissingRuntimeValueError,
   persistedOperationSecretSources,
   type PersistedPlanArtifact,
-  type PersistedApplyEvaluation,
   type PersistedResourcePlan,
-  preflightRuntimeReferences,
   projectOwnedCurrentState,
   resolveDesiredState,
   restoreEvaluations,
-  type RuntimeReference,
   type RuntimeReferenceDiagnostic,
-  RuntimeReferenceError,
+  withoutSkippedRuntimeValues,
 } from "@octosmith/octosmith";
 import type { ApplyRuntime } from "./apply.ts";
-import { withoutSkippedRuntimeValues } from "./apply.ts";
 import { executeExecutableResources } from "./execution.ts";
 
 /** Persisted-plan preflight state for one resource. */
@@ -62,6 +55,13 @@ export async function applyPersistedPlan(
   ) => void | Promise<void>,
   options: { readonly skipMissingValues?: boolean } = {},
 ): Promise<PersistedPlanPreflight> {
+  if (options.skipMissingValues) {
+    throw new Error(
+      "Cannot use --skip-missing-values when applying a saved plan. " +
+        "Create a new plan with --skip-missing-values instead; saved plans replay exactly as reviewed.",
+    );
+  }
+
   const configuration = equalContentHash(
       await hashEffectiveConfiguration(loaded.configuration),
       artifact.configuration,
@@ -78,7 +78,6 @@ export async function applyPersistedPlan(
       runtime,
       loaded,
       resource,
-      options.skipMissingValues ?? false,
     );
     resources.push({
       type: resource.type,
@@ -91,28 +90,22 @@ export async function applyPersistedPlan(
       inspected.desired !== undefined &&
       inspected.current !== undefined
     ) {
-      const skippedRuntimeReferences = [
-        ...(resource.skippedRuntimeReferences ?? []),
-        ...(inspected.skippedRuntimeReferences ?? []),
-      ];
-      const { operations, evaluations } = withoutSkippedRuntimeOperations(
-        resource.operations,
-        resource.evaluations,
-        skippedRuntimeReferences,
-      );
       prepared.push({
         desired: inspected.desired,
         current: inspected.current,
         plan: {
           repository: resource.name,
-          operations,
+          operations: resource.operations,
         },
-        evaluations: restoreEvaluations(evaluations, operations),
+        evaluations: restoreEvaluations(
+          resource.evaluations,
+          resource.operations,
+        ),
         ...(inspected.diagnostics !== undefined && {
           diagnostics: inspected.diagnostics,
         }),
-        ...(skippedRuntimeReferences.length > 0 && {
-          skippedRuntimeReferences,
+        ...(resource.skippedRuntimeReferences !== undefined && {
+          skippedRuntimeReferences: resource.skippedRuntimeReferences,
         }),
       });
     }
@@ -197,13 +190,11 @@ async function inspectResource(
   runtime: ApplyRuntime,
   loaded: LoadedConfiguration,
   resource: PersistedResourcePlan,
-  skipMissingValues: boolean,
 ): Promise<{
   readonly state: PersistedResourcePreflightState;
   readonly desired?: import("@octosmith/octosmith").DesiredState;
   readonly current?: import("@octosmith/octosmith").CurrentState;
   readonly diagnostics?: readonly RuntimeReferenceDiagnostic[];
-  readonly skippedRuntimeReferences?: readonly RuntimeReference[];
 }> {
   let metadata: import("@octosmith/octosmith").RepositoryMetadata;
 
@@ -221,9 +212,17 @@ async function inspectResource(
 
   let desired: import("@octosmith/octosmith").DesiredState;
   let stateDesired: import("@octosmith/octosmith").DesiredState;
-  let runtimePreflightError: unknown;
-  const skipped: RuntimeReference[] = [];
-  const diagnostics: RuntimeReferenceDiagnostic[] = [];
+  const skipped = resource.skippedRuntimeReferences ?? [];
+  const diagnostics: RuntimeReferenceDiagnostic[] = skipped.map((
+    reference,
+  ) => ({
+    severity: "warning",
+    code: reference.kind === "variable" ? "skipped_variable" : "skipped_secret",
+    name: reference.name,
+    template: resource.template.id,
+    path: reference.path,
+    resource: { type: "repository", name: resource.name },
+  }));
 
   try {
     const classification = classifyResource(loaded, metadata);
@@ -236,79 +235,22 @@ async function inspectResource(
     }
 
     const template = loaded.templates[classification.template];
-    const values = runtime.value;
-    let runtimeValues: (name: string) => string = (name) =>
-      "persisted-plan:" + name;
-    if (skipMissingValues) {
-      runtimeValues = preflightRuntimeReferences(
-        classification.template,
-        template,
-        metadata,
-        (name) => {
-          if (values === undefined) {
-            throw new MissingRuntimeValueError(name);
-          }
-          try {
-            return values(name);
-          } catch (error) {
-            runtimePreflightError = error;
-            throw error;
-          }
-        },
-        {
-          skipMissingValues: true,
-          onSkipped: (reference, diagnostic) => {
-            skipped.push(reference);
-            diagnostics.push(diagnostic);
-          },
-        },
-      );
-    } else {
-      for (
-        const reference of collectRuntimeReferences(template).filter((item) =>
-          item.kind === "secret"
-        )
-      ) {
-        if (values === undefined) {
-          throw new Error(
-            'Required secret "' + reference.name +
-              '" is not available in the current context',
-          );
-        }
-        try {
-          values(reference.name);
-        } catch (error) {
-          runtimePreflightError = error;
-          throw error;
-        }
-      }
-    }
-
     stateDesired = await resolveDesiredState(
       loaded,
       metadata,
-      runtimeValues,
+      (name) => "persisted-plan:" + name,
+      { skippedRuntimeReferences: skipped },
     );
-    const skippedRuntimeReferences = [
-      ...(resource.skippedRuntimeReferences ?? []),
-      ...skipped,
-    ];
     desired = withoutSkippedRuntimeValues(
       stateDesired,
-      skippedRuntimeReferences,
+      skipped,
     );
     const templateHash = await hashEffectiveTemplate(template, stateDesired);
 
     if (!equalContentHash(templateHash, resource.template)) {
       return { state: "template" };
     }
-  } catch (error) {
-    if (
-      runtimePreflightError !== undefined ||
-      error instanceof RuntimeReferenceError
-    ) {
-      throw error;
-    }
+  } catch {
     return { state: "template" };
   }
 
@@ -317,7 +259,7 @@ async function inspectResource(
     const stateHash = await hashCanonical(
       projectOwnedCurrentState(
         current,
-        stateDesired,
+        desired,
         resource.operations,
         resource.skippedRuntimeReferences,
       ),
@@ -328,163 +270,8 @@ async function inspectResource(
       desired,
       current,
       ...(diagnostics.length > 0 && { diagnostics }),
-      ...(skipped.length > 0 && { skippedRuntimeReferences: skipped }),
     };
   } catch {
     return { state: "state" };
   }
-}
-
-function withoutSkippedRuntimeOperations(
-  operations: readonly Operation[],
-  evaluations: readonly PersistedApplyEvaluation[],
-  skipped: readonly RuntimeReference[],
-): {
-  readonly operations: readonly Operation[];
-  readonly evaluations: readonly PersistedApplyEvaluation[];
-} {
-  const indices = new Map<number, number>();
-  const filtered: Operation[] = [];
-  operations.forEach((operation, index) => {
-    const prepared = withoutSkippedRuntimeOperation(operation, skipped);
-    if (prepared !== undefined) {
-      indices.set(index, filtered.length);
-      filtered.push(prepared);
-    }
-  });
-
-  return {
-    operations: filtered,
-    evaluations: evaluations.flatMap((evaluation) => {
-      if (evaluation.operationIndex === undefined) {
-        return [evaluation];
-      }
-      const operationIndex = indices.get(evaluation.operationIndex);
-      return operationIndex === undefined
-        ? []
-        : [{ ...evaluation, operationIndex }];
-    }),
-  };
-}
-
-function withoutSkippedRuntimeOperation(
-  operation: Operation,
-  skipped: readonly RuntimeReference[],
-): Operation | undefined {
-  const matches = (
-    scope: RuntimeReference["scope"],
-    kind: RuntimeReference["kind"],
-    target: string,
-    environment?: string,
-  ) =>
-    skipped.some((reference) =>
-      reference.scope === scope && reference.kind === kind &&
-      reference.target === target &&
-      (environment === undefined || reference.environment === environment)
-    );
-
-  switch (operation.type) {
-    case "set-actions-variable":
-      return matches("actions", "variable", operation.variable.name)
-        ? undefined
-        : operation;
-    case "remove-actions-variable":
-      return matches("actions", "variable", operation.name)
-        ? undefined
-        : operation;
-    case "set-actions-secret":
-      return matches("actions", "secret", operation.secret.name)
-        ? undefined
-        : operation;
-    case "remove-actions-secret":
-      return matches("actions", "secret", operation.secret)
-        ? undefined
-        : operation;
-    case "set-dependabot-secret":
-      return matches("dependabot", "secret", operation.secret.name)
-        ? undefined
-        : operation;
-    case "remove-dependabot-secret":
-      return matches("dependabot", "secret", operation.secret)
-        ? undefined
-        : operation;
-    case "create-environment":
-      return {
-        ...operation,
-        environment: withoutSkippedEnvironmentValues(
-          operation.environment,
-          skipped,
-        ),
-      };
-    case "update-environment": {
-      const skippedSecrets = skipped.filter((reference) =>
-        reference.scope === "environment" && reference.kind === "secret" &&
-        reference.environment === operation.environment.name
-      ).map((reference) => reference.target);
-      const skippedVariables = skipped.filter((reference) =>
-        reference.scope === "environment" &&
-        reference.kind === "variable" &&
-        reference.environment === operation.environment.name
-      ).map((reference) => reference.target);
-      return {
-        ...operation,
-        environment: withoutSkippedEnvironmentValues(
-          operation.environment,
-          skipped,
-        ),
-        ...(skippedSecrets.length > 0 && {
-          preserveSecrets: [
-            ...new Set([
-              ...(operation.preserveSecrets ?? []),
-              ...skippedSecrets,
-            ]),
-          ].sort(),
-        }),
-        ...(skippedVariables.length > 0 && {
-          preserveVariables: [
-            ...new Set([
-              ...(operation.preserveVariables ?? []),
-              ...skippedVariables,
-            ]),
-          ].sort(),
-        }),
-      };
-    }
-    default:
-      return operation;
-  }
-}
-
-function withoutSkippedEnvironmentValues<
-  Environment extends {
-    readonly name: string;
-    readonly secrets?: readonly { readonly name: string }[];
-    readonly variables?: readonly { readonly name: string }[];
-  },
->(
-  environment: Environment,
-  skipped: readonly RuntimeReference[],
-): Environment {
-  return {
-    ...environment,
-    ...(environment.secrets !== undefined && {
-      secrets: environment.secrets.filter((secret) =>
-        !skipped.some((reference) =>
-          reference.scope === "environment" && reference.kind === "secret" &&
-          reference.environment === environment.name &&
-          reference.target === secret.name
-        )
-      ),
-    }),
-    ...(environment.variables !== undefined && {
-      variables: environment.variables.filter((variable) =>
-        !skipped.some((reference) =>
-          reference.scope === "environment" &&
-          reference.kind === "variable" &&
-          reference.environment === environment.name &&
-          reference.target === variable.name
-        )
-      ),
-    }),
-  } as Environment;
 }

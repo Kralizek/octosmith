@@ -264,6 +264,25 @@ Deno.test("plan and apply reject combining a template filter with a repository t
   }
 });
 
+Deno.test("apply rejects new exclusions with a saved plan before loading runtime", async () => {
+  const errors: string[] = [];
+  assertEquals(
+    await main(["apply", "--plan", "missing.json", "--skip-missing-values"], {
+      credentials: {
+        getEnv: () => {
+          throw new Error("must not authenticate");
+        },
+      },
+      writeError: (value) => errors.push(value),
+    }),
+    1,
+  );
+  assertStringIncludes(
+    errors.join("\n"),
+    "Cannot combine --skip-missing-values with --plan",
+  );
+});
+
 Deno.test("plan and apply accept skip-missing-values", async () => {
   const root = await authenticationConfiguration();
   try {

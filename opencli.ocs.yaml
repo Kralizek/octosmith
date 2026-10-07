@@ -58,6 +58,9 @@ commands:
       - name: out
         type: string
         summary: Write the persisted plan artifact.
+      - name: skip-missing-values
+        type: boolean
+        summary: Exclude unavailable runtime values from the new plan and preserve their remote state.
     examples:
       - title: Target one resource
         content: |
@@ -100,6 +103,9 @@ commands:
       - name: plan
         type: string
         summary: Apply a persisted plan artifact.
+      - name: skip-missing-values
+        type: boolean
+        summary: Exclude unavailable runtime values during direct apply; cannot be combined with --plan.
     examples:
       - title: Apply one resource
         content: |
