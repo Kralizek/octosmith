@@ -701,6 +701,7 @@ export function buildApplyEvaluations(
         details: {
           team: permission.team,
           permission: permission.permission.name,
+          permissionKind: permission.permission.kind,
         },
       });
     }
@@ -859,17 +860,19 @@ function operationEvaluation(
     case "set-team-permission": {
       const currentPermission = current?.teams.find((permission) =>
         permission.team === operation.permission.team
-      )?.permission.name;
+      )?.permission;
       return {
         type: "team-permission",
         details: {
           team: operation.permission.team,
           permission: operation.permission.permission.name,
+          permissionKind: operation.permission.permission.kind,
           ...(currentPermission === undefined
             ? { action: current === undefined ? "set" : "grant" }
             : {
               action: "change",
-              beforePermission: currentPermission,
+              beforePermission: currentPermission.name,
+              beforePermissionKind: currentPermission.kind,
             }),
         },
         operation,

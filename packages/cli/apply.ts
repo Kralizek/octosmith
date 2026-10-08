@@ -385,6 +385,7 @@ export async function apply(
           resource.desired.template,
           resource.desired.templateName,
           resource.diagnostics,
+          resource.evaluations,
         ),
       );
     }

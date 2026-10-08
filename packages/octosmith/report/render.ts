@@ -324,14 +324,20 @@ function describeItem(item: ApplyItemReport): string {
     case "team-permission": {
       const action = details.action;
       const permission = action === "grant"
-        ? " — grant " + formatValue(details.permission)
+        ? " — grant " +
+          formatPermission(details.permission, details.permissionKind)
         : action === "change"
-        ? " — " + formatValue(details.beforePermission) + " → " +
-          formatValue(details.permission)
+        ? " — " +
+          formatPermission(
+            details.beforePermission,
+            details.beforePermissionKind,
+          ) + " → " +
+          formatPermission(details.permission, details.permissionKind)
         : action === "remove"
         ? " — remove"
         : details.permission !== undefined
-        ? " — permission: " + formatValue(details.permission)
+        ? " — permission: " +
+          formatPermission(details.permission, details.permissionKind)
         : actionSuffix(details);
       return "Team " + String(details.team) + permission;
     }
@@ -458,6 +464,11 @@ function formatValue(value: unknown): string {
   }
 
   return String(value);
+}
+
+function formatPermission(value: unknown, kind: unknown): string {
+  const permission = formatValue(value);
+  return kind === "custom" ? "custom: " + permission : permission;
 }
 
 function statusSymbol(
