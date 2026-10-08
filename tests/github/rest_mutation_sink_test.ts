@@ -833,7 +833,10 @@ class PullRequestFileClient implements GitHubClient {
         );
       }
       this.pullExists = true;
-      return Promise.resolve({ number: this.pullNumber } as T);
+      return Promise.resolve({
+        number: this.pullNumber,
+        html_url: "https://github.example.com/acme/sample/pull/" + this.pullNumber,
+      } as T);
     }
     if (
       method === "POST" && path.endsWith("/issues/42/labels") &&
@@ -932,7 +935,7 @@ Deno.test("pull-request file delivery creates a stable branch and labeled PR", a
   assertEquals(sink.pullRequestsOpened, [{
     repository: "sample",
     number: 42,
-    url: "https://github.com/acme/sample/pull/42",
+    url: "https://github.example.com/acme/sample/pull/42",
   }]);
 });
 
@@ -984,7 +987,7 @@ Deno.test("apply retains a newly opened PR when a later file-delivery step fails
   assertEquals(result.pullRequestsOpened, [{
     repository: "sample",
     number: 42,
-    url: "https://github.com/acme/sample/pull/42",
+    url: "https://github.example.com/acme/sample/pull/42",
   }]);
 });
 
