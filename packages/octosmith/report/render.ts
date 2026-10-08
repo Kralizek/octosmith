@@ -150,7 +150,11 @@ export function renderReport(
       summary.failed + " failed" +
       (report.inspection === undefined
         ? ""
-        : ", " + report.inspection.summary.unmatched + " unmatched"),
+        : ", " +
+          report.inspection.resources.filter((resource) =>
+            resource.type === "repository" && resource.status === "unmatched"
+          ).length +
+          " unmatched"),
     "  Operations:   " +
       summary.operations.planned + " planned, " +
       summary.operations.applied + " applied, " +
@@ -446,7 +450,7 @@ function formatValue(value: unknown): string {
   }
 
   if (value === null) {
-    return "blank";
+    return "null";
   }
 
   if (typeof value === "string") {

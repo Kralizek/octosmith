@@ -260,6 +260,106 @@ Deno.test("text renderer groups skipped runtime warnings without changing severi
   assertStringIncludes(verbose, "        repo-a");
 });
 
+Deno.test("summary separates skipped runtime bindings from skipped operations", () => {
+  const skippedDiagnostic = (repository: string) => ({
+    severity: "warning" as const,
+    code: "skipped_variable" as const,
+    name: "MISSING_VARIABLE",
+    template: "repository:services",
+    path: "repository.actions.variables[0]",
+    resource: { type: "repository" as const, name: "acme/" + repository },
+  });
+  const skippedOperation: Operation = {
+    type: "set-custom-property",
+    name: "skipped",
+    value: "value",
+  };
+  const failedOperation: Operation = {
+    type: "set-custom-property",
+    name: "failed",
+    value: "value",
+  };
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [
+      reportAppliedRepository(
+        "code",
+        "repo-a",
+        [
+          evaluation,
+          {
+            type: "custom-property",
+            details: { name: "skipped", action: "set", value: "value" },
+            operation: skippedOperation,
+          },
+          {
+            type: "custom-property",
+            details: { name: "failed", action: "set", value: "value" },
+            operation: failedOperation,
+          },
+        ],
+        [
+          { operation, status: "applied" },
+          { operation: skippedOperation, status: "skipped" },
+          { operation: failedOperation, status: "failed", error: "failed" },
+        ],
+        undefined,
+        [skippedDiagnostic("repo-a"), skippedDiagnostic("repo-a")],
+      ),
+      ...["repo-b", "repo-c"].map((repository) => ({
+        repository,
+        status: "planned" as const,
+        items: [],
+        diagnostics: [
+          skippedDiagnostic(repository),
+          skippedDiagnostic(repository),
+        ],
+      })),
+    ],
+  };
+  const rendered = renderReport(report);
+
+  assertStringIncludes(
+    rendered,
+    "MISSING_VARIABLE (variable) — 3 repositories",
+  );
+  assertStringIncludes(
+    rendered,
+    "Operations:   0 planned, 1 applied, 1 failed, 1 skipped",
+  );
+  assertStringIncludes(rendered, "Exclusions:   3 skipped runtime bindings");
+  assertStringIncludes(rendered, "3 bindings excluded from reconciliation.");
+});
+
+Deno.test("generic report values distinguish null from an empty string", () => {
+  const rendered = renderReport({
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [{
+      repository: "sample",
+      status: "planned",
+      items: [
+        {
+          type: "custom-property",
+          status: "planned",
+          details: { name: "NULL_VALUE", action: "set", value: null },
+        },
+        {
+          type: "custom-property",
+          status: "planned",
+          details: { name: "EMPTY_VALUE", action: "set", value: "" },
+        },
+      ],
+    }],
+  });
+
+  assertStringIncludes(rendered, "Custom property NULL_VALUE — set: null");
+  assertStringIncludes(rendered, "Custom property EMPTY_VALUE — set: \n");
+});
+
 Deno.test("verbose text includes unchanged apply items", () => {
   const report: Report = {
     organization: "acme",
@@ -359,7 +459,7 @@ Deno.test("unmatched resources are grouped by type with redundant organization o
   assertStringIncludes(rendered, "Unmatched environments (1):");
   assertStringIncludes(
     rendered,
-    "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 3 unmatched",
+    "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 2 unmatched",
   );
   assertEquals(rendered.includes("acme/repo-a"), false);
   assertEquals(rendered.includes("acme/repo-b"), false);

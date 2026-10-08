@@ -168,7 +168,10 @@ written.
 
 Unmatched repositories include the effective policy and its consequence. The
 summary reports repository statuses, operation outcomes, and skipped runtime
-bindings separately:
+bindings separately. Operation counts come from apply-item outcomes (including
+operations that were skipped), while skipped runtime bindings count distinct
+template bindings excluded by `--skip-missing-values`; these values are not
+interchangeable:
 
 ```text
 Warnings:
