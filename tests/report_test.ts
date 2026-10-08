@@ -581,3 +581,26 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
     [pullRequest],
   );
 });
+
+Deno.test("repository-level failures retain planned operations as skipped", () => {
+  const failed = reportFailedRepository(
+    "sample",
+    new Error("recheck failed"),
+    "code",
+    undefined,
+    [],
+    [unchangedEvaluation, evaluation],
+  );
+  assertEquals(failed.items.map((item) => item.status), [
+    "unchanged",
+    "skipped",
+  ]);
+  const output = renderReport({
+    organization: "example-org",
+    startedAt: new Date(0),
+    completedAt: new Date(0),
+    repositories: [failed],
+  });
+  assertStringIncludes(output, "1 skipped");
+  assertStringIncludes(output, "0 applied");
+});
