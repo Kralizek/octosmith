@@ -420,46 +420,46 @@ Deno.test("configuration rejects invalid setting types without echoing values", 
     );
     assertEquals(error.message.includes("private-runtime-value"), false);
   });
+});
 
-  Deno.test("configuration validation rejects explicitly invalid squash pairs", async () => {
-    for (const message of ["blank", "pull-request-body"]) {
-      await withConfiguration(configuration, {
-        ...template,
-        repository: {
-          settings: {
-            merge: {
-              squash_commit_title: "commit-or-pull-request-title",
-              squash_commit_message: message,
-            },
+Deno.test("configuration validation rejects explicitly invalid squash pairs", async () => {
+  for (const message of ["blank", "pull-request-body"]) {
+    await withConfiguration(configuration, {
+      ...template,
+      repository: {
+        settings: {
+          merge: {
+            squash_commit_title: "commit-or-pull-request-title",
+            squash_commit_message: message,
           },
         },
-      }, (root) =>
-        assertRejects(
-          () => validateConfigurationDirectory(root),
-          Error,
-          "effective: commit-or-pull-request-title / " + message,
-        ));
-    }
-  });
+      },
+    }, (root) =>
+      assertRejects(
+        () => validateConfigurationDirectory(root),
+        Error,
+        "effective: commit-or-pull-request-title / " + message,
+      ));
+  }
+});
 
-  Deno.test("offline configuration validation accepts partial squash settings", async () => {
-    for (
-      const merge of [
-        { squash_commit_title: "commit-or-pull-request-title" },
-        { squash_commit_title: "pull-request-title" },
-        { squash_commit_message: "blank" },
-        { squash_commit_message: "pull-request-body" },
-        { squash_commit_message: "commit-messages" },
-      ]
-    ) {
-      await withConfiguration(configuration, {
-        ...template,
-        repository: { settings: { merge } },
-      }, async (root) => {
-        await validateConfigurationDirectory(root);
-      });
-    }
-  });
+Deno.test("offline configuration validation accepts partial squash settings", async () => {
+  for (
+    const merge of [
+      { squash_commit_title: "commit-or-pull-request-title" },
+      { squash_commit_title: "pull-request-title" },
+      { squash_commit_message: "blank" },
+      { squash_commit_message: "pull-request-body" },
+      { squash_commit_message: "commit-messages" },
+    ]
+  ) {
+    await withConfiguration(configuration, {
+      ...template,
+      repository: { settings: { merge } },
+    }, async (root) => {
+      await validateConfigurationDirectory(root);
+    });
+  }
 });
 
 Deno.test("configuration rejects unknown file ensure values", async () => {
