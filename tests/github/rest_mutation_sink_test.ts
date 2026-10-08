@@ -10,6 +10,46 @@ import {
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
+Deno.test("squash title and message changes are sent in the same repository PATCH", async () => {
+  const current = currentState();
+  const plan = buildPlan({
+    ...current,
+    settings: {
+      ...current.settings,
+      merge: {
+        ...current.settings.merge,
+        squashMergeCommitTitle: "commit-or-pull-request-title",
+        squashMergeCommitMessage: "commit-messages",
+      },
+    },
+  }, {
+    repository: current.repository,
+    template: "repository:code",
+    settings: {
+      merge: {
+        squashMergeCommitTitle: "pull-request-title",
+        squashMergeCommitMessage: "blank",
+      },
+    },
+  });
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+  assertEquals(plan.operations.length, 1);
+  await sink.apply(plan.repository, plan.operations[0]);
+  assertEquals(client.requests, [{
+    method: "PATCH",
+    path: "/repos/acme/" + current.repository,
+    body: {
+      squash_merge_commit_title: "PR_TITLE",
+      squash_merge_commit_message: "BLANK",
+    },
+  }]);
+});
+
 interface Call {
   readonly method: string;
   readonly path: string;

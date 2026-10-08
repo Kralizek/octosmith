@@ -255,7 +255,9 @@ async function collectLoadedConfigurationValidation(
         (value) => "validation:" + value,
       );
 
-      buildPlan(emptyCurrentState(repository.name), desired);
+      buildPlan(emptyCurrentState(repository.name), desired, {
+        offlineValidation: true,
+      });
     } catch (error) {
       issues.push({
         code: "planner_invariant",
@@ -1044,7 +1046,7 @@ function emptyCurrentState(repository: string): CurrentState {
         allowUpdateBranch: false,
         deleteBranchOnMerge: false,
         squashMergeCommitTitle: "pull-request-title",
-        squashMergeCommitMessage: "pull-request-body",
+        squashMergeCommitMessage: "commit-messages",
         mergeCommitTitle: "pull-request-title",
         mergeCommitMessage: "pull-request-title",
       },

@@ -1,4 +1,4 @@
-import { assertEquals, assertRejects } from "@std/assert";
+import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import {
   type CurrentState,
   type ExecutableResourcePlan,
@@ -115,6 +115,56 @@ Deno.test("apply rejects an empty resource target before discovery", async () =>
 
   assertEquals(runtime.discoveredTargets, []);
   assertEquals(runtime.applied, []);
+});
+
+Deno.test("apply aborts all repositories when a later effective squash pair is invalid", async () => {
+  const root = await configurationDirectory();
+  try {
+    const templatePath = root + "/templates/code.yml";
+    await Deno.writeTextFile(
+      templatePath,
+      await Deno.readTextFile(templatePath) +
+        "    merge:\n      squash_commit_message: blank\n",
+    );
+    class SquashRuntime extends FakeRuntime {
+      override async read(
+        desired: import("@octosmith/octosmith").DesiredState,
+      ): Promise<CurrentState> {
+        const current = await super.read(desired);
+        return desired.repository === "broken"
+          ? {
+            ...current,
+            settings: {
+              ...current.settings,
+              name: desired.repository,
+              merge: {
+                ...current.settings.merge,
+                squashMergeCommitTitle: "commit-or-pull-request-title",
+                squashMergeCommitMessage: "commit-messages",
+              },
+            },
+          }
+          : current;
+      }
+    }
+    const runtime = new SquashRuntime([metadata("sample"), metadata("broken")]);
+    const results = await applyResults(runtime, root, "apply");
+
+    assertEquals(runtime.readRepositories, ["sample", "broken"]);
+    assertEquals(runtime.applied, []);
+    assertEquals(
+      results.map((report) => [report.repository, report.status]),
+      [["broken", "failed"], ["sample", "failed"]],
+    );
+    assertStringIncludes(results[0].error!, "Repository broken");
+    assertStringIncludes(
+      results[0].error!,
+      "effective: commit-or-pull-request-title / blank",
+    );
+    assertStringIncludes(results[1].error!, "Apply aborted before mutation");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("apply rejects resource and template targets before discovery", async () => {
