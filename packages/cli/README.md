@@ -174,6 +174,13 @@ template bindings excluded by `--skip-missing-values`; these values are not
 interchangeable:
 
 ```text
+Unmatched repositories (3):
+  Policy: ignore
+  These repositories are excluded from reconciliation.
+  legacy-service
+  archived-service
+  docs-site
+
 Warnings:
   Skipped runtime values:
     SLACK_BOT_OPERATION_TOKEN (secret) — 21 repositories
@@ -181,13 +188,6 @@ Warnings:
 
   42 bindings excluded from reconciliation.
   Existing destination values will not be modified or deleted.
-
-Unmatched repositories (3):
-  Policy: ignore
-  These repositories are excluded from reconciliation.
-  legacy-service
-  archived-service
-  docs-site
 
 Summary:
   Repositories: 21 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 3 unmatched
