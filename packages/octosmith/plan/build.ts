@@ -953,7 +953,7 @@ export function diffRepositorySettings(
   );
 
   if (desired.merge) {
-    const merge = diffMergeSettings(current.merge, desired.merge);
+    const merge = diffMergeSettings(current.merge, desired.merge, current.name);
 
     if (merge) {
       changes.merge = merge;
@@ -979,7 +979,35 @@ export function diffRepositorySettings(
 function diffMergeSettings(
   current: CurrentRepositorySettings["merge"],
   desired: DesiredMergeSettings,
+  repository: string,
 ): DesiredMergeSettings | undefined {
+  if (
+    desired.squashMergeCommitTitle !== undefined ||
+    desired.squashMergeCommitMessage !== undefined
+  ) {
+    const title = desired.squashMergeCommitTitle ??
+      current.squashMergeCommitTitle;
+    const message = desired.squashMergeCommitMessage ??
+      current.squashMergeCommitMessage;
+    if (
+      title === "commit-or-pull-request-title" &&
+      message !== "commit-messages"
+    ) {
+      throw new Error(
+        "Repository " + repository +
+          ": invalid squash merge title/message combination. " +
+          "Current: " + current.squashMergeCommitTitle + " / " +
+          current.squashMergeCommitMessage + "; effective: " + title + " / " +
+          message + ". Supported combinations: " +
+          "pull-request-title / pull-request-body, pull-request-title / blank, " +
+          "pull-request-title / commit-messages, " +
+          "commit-or-pull-request-title / commit-messages. " +
+          "Explicitly configure both settings, for example: " +
+          "merge: { squash_commit_title: pull-request-title, squash_commit_message: blank }.",
+      );
+    }
+  }
+
   const changes: Record<string, unknown> = {};
 
   copyChangedScalar(current, desired, changes, "allowSquashMerge");

@@ -1044,7 +1044,7 @@ function emptyCurrentState(repository: string): CurrentState {
         allowUpdateBranch: false,
         deleteBranchOnMerge: false,
         squashMergeCommitTitle: "pull-request-title",
-        squashMergeCommitMessage: "pull-request-body",
+        squashMergeCommitMessage: "commit-messages",
         mergeCommitTitle: "pull-request-title",
         mergeCommitMessage: "pull-request-title",
       },

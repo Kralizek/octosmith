@@ -117,6 +117,31 @@ repository:
 Templates can manage repository settings, teams, custom properties, Actions
 settings and values, Dependabot secrets, rulesets, environments, and files.
 
+### Squash merge commit settings
+
+GitHub supports these squash commit title/message pairs:
+
+| `squash_commit_title`          | `squash_commit_message` |
+| ------------------------------ | ----------------------- |
+| `pull-request-title`           | `pull-request-body`     |
+| `pull-request-title`           | `blank`                 |
+| `pull-request-title`           | `commit-messages`       |
+| `commit-or-pull-request-title` | `commit-messages`       |
+
+Offline validation rejects explicitly invalid pairs. If only one setting is
+configured, planning validates it together with the repository's current value
+for the other setting. An invalid effective pair aborts apply before any
+selected repository is mutated; Octosmith does not change an unspecified setting
+to repair the pair. Configure both settings explicitly to resolve a conflict:
+
+```yaml
+repository:
+  settings:
+    merge:
+      squash_commit_title: pull-request-title
+      squash_commit_message: blank
+```
+
 ### Fragment composition
 
 Repository templates may compose reusable desired-state fragments with

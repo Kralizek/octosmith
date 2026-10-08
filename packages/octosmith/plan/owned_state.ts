@@ -51,6 +51,18 @@ export function projectOwnedCurrentState(
       settings.topics = [...current.settings.topics].sort();
     }
 
+    if (
+      desired.settings.merge?.squashMergeCommitTitle !== undefined ||
+      desired.settings.merge?.squashMergeCommitMessage !== undefined
+    ) {
+      settings.merge = {
+        ...settings.merge as Record<string, unknown>,
+        squashMergeCommitTitle: current.settings.merge.squashMergeCommitTitle,
+        squashMergeCommitMessage:
+          current.settings.merge.squashMergeCommitMessage,
+      };
+    }
+
     projected.settings = settings;
   }
 
