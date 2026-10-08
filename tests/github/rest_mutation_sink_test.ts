@@ -835,7 +835,8 @@ class PullRequestFileClient implements GitHubClient {
       this.pullExists = true;
       return Promise.resolve({
         number: this.pullNumber,
-        html_url: "https://github.example.com/acme/sample/pull/" + this.pullNumber,
+        html_url: "https://github.example.com/acme/sample/pull/" +
+          this.pullNumber,
       } as T);
     }
     if (
