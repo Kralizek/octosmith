@@ -41,11 +41,12 @@ Deno.test(
           if (desired.repository === "read-failure") {
             throw new Error("state read failed");
           }
-          return Promise.resolve({
-            repository: desired.repository,
-            customProperties: { unchanged: "same", changed: "before" },
-            teams: [],
-          } as CurrentState);
+          return Promise.resolve(
+            currentState(desired.repository, {
+              unchanged: "same",
+              changed: "before",
+            }),
+          );
         },
         prepare: () => {},
         recheck: () => {},
@@ -56,7 +57,9 @@ Deno.test(
 
       await apply(runtime, loaded, {
         mode: "apply",
-        onRepositoryApplied: (report) => reports.push(report),
+        onRepositoryApplied: (report) => {
+          reports.push(report);
+        },
       });
 
       const preparedReport = reports.find((report) =>
@@ -92,13 +95,10 @@ Deno.test(
 );
 
 Deno.test("team permission transitions retain permission kind", () => {
-  const current = {
-    repository: "example-repo",
-    teams: [{
-      team: "developers",
-      permission: { kind: "built-in", name: "push" },
-    }],
-  } as CurrentState;
+  const current = currentState("example-repo", {}, [{
+    team: "developers",
+    permission: { kind: "built-in", name: "push" },
+  }]);
   const desired: DesiredState = {
     repository: "example-repo",
     template: "sample",
@@ -129,3 +129,61 @@ Deno.test("team permission transitions retain permission kind", () => {
   assertEquals(evaluations[0].details.beforePermissionKind, "built-in");
   assertEquals(evaluations[0].details.permissionKind, "custom");
 });
+
+function currentState(
+  repository: string,
+  customProperties: CurrentState["customProperties"] = {},
+  teams: CurrentState["teams"] = [],
+): CurrentState {
+  return {
+    repository,
+    settings: {
+      name: repository,
+      description: null,
+      website: null,
+      topics: [],
+      visibility: "private",
+      hasIssues: true,
+      hasProjects: false,
+      hasWiki: false,
+      hasDiscussions: false,
+      hasPullRequests: true,
+      pullRequestCreationPolicy: "all",
+      isTemplate: false,
+      defaultBranch: "main",
+      merge: {
+        allowSquashMerge: true,
+        allowMergeCommit: true,
+        allowRebaseMerge: true,
+        allowAutoMerge: false,
+        allowUpdateBranch: false,
+        deleteBranchOnMerge: false,
+        squashMergeCommitTitle: "pull-request-title",
+        squashMergeCommitMessage: "pull-request-body",
+        mergeCommitTitle: "pull-request-title",
+        mergeCommitMessage: "pull-request-title",
+      },
+      archived: false,
+      allowForking: true,
+      webCommitSignoffRequired: false,
+      securityAndAnalysis: {},
+    },
+    customProperties,
+    actions: {
+      enabled: true,
+      allowedActions: "all",
+      shaPinningRequired: false,
+      oidc: {
+        subjectClaimTemplate: { source: "default" },
+        immutableSubject: false,
+      },
+      secrets: [],
+      variables: [],
+    },
+    dependabot: { secrets: [] },
+    teams,
+    rulesets: [],
+    environments: [],
+    files: [],
+  };
+}
