@@ -200,6 +200,10 @@ Deno.test("text renderer groups shared runtime failures and preserves unique err
   };
   const rendered = renderReport(report, { verbose: true });
   const serialized = JSON.stringify(report);
+  const compact = renderReport(report);
+  assertStringIncludes(compact, "Affected resources: 3");
+  assertStringIncludes(compact, "Affected resources: 2");
+  assertEquals(compact.includes("Affected resources (3):"), false);
 
   assertStringIncludes(rendered, "✗ repo-a [repository:services] — failed");
   assertStringIncludes(rendered, "✗ repo-b [repository:services] — failed");
