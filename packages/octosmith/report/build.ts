@@ -115,6 +115,7 @@ export function reportFailedRepository(
   template?: string,
   templateName?: string,
   diagnostics: readonly RuntimeReferenceDiagnostic[] = [],
+  evaluations: readonly ApplyEvaluation[] = [],
 ): RepositoryReport {
   const allDiagnostics = [
     ...diagnostics,
@@ -131,7 +132,11 @@ export function reportFailedRepository(
     ...(template !== undefined && { template }),
     ...(templateName !== undefined && { templateName }),
     status: "failed",
-    items: [],
+    items: evaluations.map((evaluation) => ({
+      type: evaluation.type,
+      status: evaluation.operation === undefined ? "unchanged" : "skipped",
+      details: evaluation.details,
+    })),
     error: error instanceof Error ? error.message : String(error),
     ...(allDiagnostics.length > 0 && { diagnostics: allDiagnostics }),
   };
