@@ -337,7 +337,7 @@ function createCli(
           repositories: reportedRepositories,
           mode,
           unmatchedPolicy: loaded.configuration.repositories.settings
-              ?.unmatchedRepositories ?? "error",
+            ?.unmatchedRepositories ?? "error",
           ...(pullRequestsOpened.length > 0 && { pullRequestsOpened }),
           ...(persistedArtifact === undefined && {
             inspection: summarizeResourceInspection(inspectedResources),

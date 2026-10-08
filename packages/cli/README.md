@@ -318,9 +318,9 @@ JSON contains the full structured report, including pull requests opened by an
 apply. Text hides unchanged items and affected-resource lists unless `--verbose`
 is supplied.
 
-When file operations open pull requests, the apply report lists each newly opened
-PR once with its repository, number, and canonical GitHub URL. Reused or updated
-pull requests and direct file writes are not reported as newly opened.
+When file operations open pull requests, the apply report lists each newly
+opened PR once with its repository, number, and canonical GitHub URL. Reused or
+updated pull requests and direct file writes are not reported as newly opened.
 
 `--quiet` suppresses normal stdout for `template validate`, `plan`, and `apply`.
 It cannot be combined with `--format json`.

@@ -95,7 +95,11 @@ Deno.test("reports transitions and resource operations without exposing values",
       permission: { kind: "built-in", name: "maintain" },
     }],
     files: [
-      { path: ".github/workflows/update.yml", content: "private-old", sha: "a" },
+      {
+        path: ".github/workflows/update.yml",
+        content: "private-old",
+        sha: "a",
+      },
       {
         path: ".github/workflows/obsolete.yml",
         content: "private-old",
@@ -143,7 +147,10 @@ Deno.test("reports transitions and resource operations without exposing values",
     ],
   };
   const plan = buildPlan(current, desired);
-  const explicitPlan = buildPlan(current, { ...desired, collections: "explicit" });
+  const explicitPlan = buildPlan(current, {
+    ...desired,
+    collections: "explicit",
+  });
   const operations: readonly Operation[] = plan.operations;
   const evaluations = buildApplyEvaluations(desired, operations, current);
   const rendered = renderReport({
@@ -184,13 +191,15 @@ Deno.test("reports transitions and resource operations without exposing values",
     rendered,
     "File .github/workflows/obsolete.yml — remove",
   );
-  for (const privateValue of [
-    "private-old",
-    "private-new",
-    "private-create",
-    "private-remove",
-    "private-update",
-  ]) {
+  for (
+    const privateValue of [
+      "private-old",
+      "private-new",
+      "private-create",
+      "private-remove",
+      "private-update",
+    ]
+  ) {
     assertEquals(serialized.includes(privateValue), false);
   }
   assertEquals(

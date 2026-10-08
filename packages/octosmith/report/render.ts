@@ -206,16 +206,18 @@ function diagnosticResources(
   report: Report,
   group: ReturnType<typeof groupRuntimeDiagnostics>[number],
 ): string[] {
-  return [...new Set(
-    group.diagnostics.flatMap((diagnostic) =>
-      diagnostic.resource === undefined ? [] : [
-        diagnostic.resource.type === "repository" &&
-            diagnostic.resource.name.startsWith(report.organization + "/")
-          ? diagnostic.resource.name.slice(report.organization.length + 1)
-          : diagnostic.resource.name,
-      ]
+  return [
+    ...new Set(
+      group.diagnostics.flatMap((diagnostic) =>
+        diagnostic.resource === undefined ? [] : [
+          diagnostic.resource.type === "repository" &&
+              diagnostic.resource.name.startsWith(report.organization + "/")
+            ? diagnostic.resource.name.slice(report.organization.length + 1)
+            : diagnostic.resource.name,
+        ]
+      ),
     ),
-  )];
+  ];
 }
 
 function diagnosticBindingCount(
@@ -223,7 +225,11 @@ function diagnosticBindingCount(
 ): number {
   return new Set(
     group.diagnostics.map((diagnostic) =>
-      JSON.stringify([diagnostic.resource?.name, diagnostic.template, diagnostic.path])
+      JSON.stringify([
+        diagnostic.resource?.name,
+        diagnostic.template,
+        diagnostic.path,
+      ])
     ),
   ).size;
 }

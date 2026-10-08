@@ -76,7 +76,7 @@ export async function applyPlan(
     repository: plan.repository,
     operations: results,
     ...(preparedSink.pullRequestsOpened !== undefined &&
-        preparedSink.pullRequestsOpened.length > 0 && {
+      preparedSink.pullRequestsOpened.length > 0 && {
       pullRequestsOpened: preparedSink.pullRequestsOpened,
     }),
   };

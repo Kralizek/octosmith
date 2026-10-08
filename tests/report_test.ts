@@ -472,7 +472,10 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
     rendered,
     "sample — acme/sample#42 https://github.com/acme/sample/pull/42",
   );
-  assertEquals(rendered.split("https://github.com/acme/sample/pull/42").length - 1, 1);
+  assertEquals(
+    rendered.split("https://github.com/acme/sample/pull/42").length - 1,
+    1,
+  );
   assertEquals(
     (JSON.parse(JSON.stringify(report)) as Report).pullRequestsOpened,
     [pullRequest],

@@ -177,8 +177,8 @@ visibility.
 Apply evaluations retain changed setting before/after values from the planning
 snapshot, while runtime variable values and managed file contents remain
 excluded. Skipped runtime bindings are grouped in compact text output, with full
-resource lists available in verbose mode. Apply reports include only pull requests
-created by the current execution.
+resource lists available in verbose mode. Apply reports include only pull
+requests created by the current execution.
 
 ## Events
 
