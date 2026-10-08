@@ -7,6 +7,7 @@ import type { ApplyEvaluation, Plan } from "../plan/types.ts";
 import type {
   AppliedOperationLike,
   ApplyItemReport,
+  PullRequestReference,
   RepositoryReport,
 } from "./types.ts";
 
@@ -40,6 +41,7 @@ export function reportAppliedRepository(
   operations: readonly AppliedOperationLike[],
   templateName?: string,
   diagnostics?: readonly RuntimeReferenceDiagnostic[],
+  pullRequestsOpened?: readonly PullRequestReference[],
 ): RepositoryReport {
   const applied = operations.filter((item) => item.status === "applied").length;
   const failed = operations.some((item) => item.status === "failed");
@@ -89,7 +91,21 @@ export function reportAppliedRepository(
       : "applied",
     items,
     ...(diagnostics !== undefined && diagnostics.length > 0 && { diagnostics }),
+    ...(pullRequestsOpened !== undefined && pullRequestsOpened.length > 0 && {
+      pullRequestsOpened: uniquePullRequests(pullRequestsOpened),
+    }),
   };
+}
+
+function uniquePullRequests(
+  pullRequests: readonly PullRequestReference[],
+): readonly PullRequestReference[] {
+  return [...new Map(
+    pullRequests.map((pullRequest) => [
+      pullRequest.repository + "#" + pullRequest.number,
+      pullRequest,
+    ]),
+  ).values()];
 }
 
 /** Build a repository report for a failed repository operation. */
@@ -99,6 +115,7 @@ export function reportFailedRepository(
   template?: string,
   templateName?: string,
   diagnostics: readonly RuntimeReferenceDiagnostic[] = [],
+  evaluations: readonly ApplyEvaluation[] = [],
 ): RepositoryReport {
   const allDiagnostics = [
     ...diagnostics,
@@ -115,7 +132,11 @@ export function reportFailedRepository(
     ...(template !== undefined && { template }),
     ...(templateName !== undefined && { templateName }),
     status: "failed",
-    items: [],
+    items: evaluations.map((evaluation) => ({
+      type: evaluation.type,
+      status: evaluation.operation === undefined ? "unchanged" : "skipped",
+      details: evaluation.details,
+    })),
     error: error instanceof Error ? error.message : String(error),
     ...(allDiagnostics.length > 0 && { diagnostics: allDiagnostics }),
   };

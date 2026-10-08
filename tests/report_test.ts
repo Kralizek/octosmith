@@ -198,8 +198,12 @@ Deno.test("text renderer groups shared runtime failures and preserves unique err
       },
     ],
   };
-  const rendered = renderReport(report);
+  const rendered = renderReport(report, { verbose: true });
   const serialized = JSON.stringify(report);
+  const compact = renderReport(report);
+  assertStringIncludes(compact, "Affected resources: 3");
+  assertStringIncludes(compact, "Affected resources: 2");
+  assertEquals(compact.includes("Affected resources (3):"), false);
 
   assertStringIncludes(rendered, "✗ repo-a [repository:services] — failed");
   assertStringIncludes(rendered, "✗ repo-b [repository:services] — failed");
@@ -219,7 +223,7 @@ Deno.test("text renderer groups shared runtime failures and preserves unique err
   assertStringIncludes(rendered, "✗ resource-specific read failure");
   assertStringIncludes(
     rendered,
-    "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 3 failed",
+    "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 3 failed",
   );
   assertEquals(serialized.includes("Failures:"), false);
   assertEquals(
@@ -250,16 +254,114 @@ Deno.test("text renderer groups skipped runtime warnings without changing severi
   const rendered = renderReport(report);
 
   assertStringIncludes(rendered, "Warnings:");
+  assertStringIncludes(rendered, "MISSING_TOKEN (secret) — 2 repositories");
+  assertStringIncludes(rendered, "2 bindings excluded from reconciliation.");
+  assertEquals(rendered.includes("Failures:"), false);
+  assertEquals(rendered.includes("Affected resources:"), false);
+
+  const verbose = renderReport(report, { verbose: true });
+  assertStringIncludes(verbose, "Affected resources:");
+  assertStringIncludes(verbose, "        repo-a");
+});
+
+Deno.test("summary separates skipped runtime bindings from skipped operations", () => {
+  const skippedDiagnostic = (repository: string) => ({
+    severity: "warning" as const,
+    code: "skipped_variable" as const,
+    name: "MISSING_VARIABLE",
+    template: "repository:services",
+    path: "repository.actions.variables[0]",
+    resource: { type: "repository" as const, name: "acme/" + repository },
+  });
+  const skippedOperation: Operation = {
+    type: "set-custom-property",
+    name: "skipped",
+    value: "value",
+  };
+  const failedOperation: Operation = {
+    type: "set-custom-property",
+    name: "failed",
+    value: "value",
+  };
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [
+      reportAppliedRepository(
+        "code",
+        "repo-a",
+        [
+          evaluation,
+          {
+            type: "custom-property",
+            details: { name: "skipped", action: "set", value: "value" },
+            operation: skippedOperation,
+          },
+          {
+            type: "custom-property",
+            details: { name: "failed", action: "set", value: "value" },
+            operation: failedOperation,
+          },
+        ],
+        [
+          { operation, status: "applied" },
+          { operation: skippedOperation, status: "skipped" },
+          { operation: failedOperation, status: "failed", error: "failed" },
+        ],
+        undefined,
+        [skippedDiagnostic("repo-a"), skippedDiagnostic("repo-a")],
+      ),
+      ...["repo-b", "repo-c"].map((repository) => ({
+        repository,
+        status: "planned" as const,
+        items: [],
+        diagnostics: [
+          skippedDiagnostic(repository),
+          skippedDiagnostic(repository),
+        ],
+      })),
+    ],
+  };
+  const rendered = renderReport(report);
+
   assertStringIncludes(
     rendered,
-    'Skipped secret "MISSING_TOKEN": runtime value unavailable.',
+    "MISSING_VARIABLE (variable) — 3 repositories",
   );
-  assertStringIncludes(rendered, "Affected resources (2):");
-  assertEquals(rendered.includes("Failures:"), false);
-  assertEquals(
-    rendered.split('Skipped secret "MISSING_TOKEN"').length - 1,
-    1,
+  assertStringIncludes(
+    rendered,
+    "Operations:   0 planned, 1 applied, 1 failed, 1 skipped",
   );
+  assertStringIncludes(rendered, "Exclusions:   3 skipped runtime bindings");
+  assertStringIncludes(rendered, "3 bindings excluded from reconciliation.");
+});
+
+Deno.test("generic report values distinguish null from an empty string", () => {
+  const rendered = renderReport({
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    repositories: [{
+      repository: "sample",
+      status: "planned",
+      items: [
+        {
+          type: "custom-property",
+          status: "planned",
+          details: { name: "NULL_VALUE", action: "set", value: null },
+        },
+        {
+          type: "custom-property",
+          status: "planned",
+          details: { name: "EMPTY_VALUE", action: "set", value: "" },
+        },
+      ],
+    }],
+  });
+
+  assertStringIncludes(rendered, "Custom property NULL_VALUE — set: null");
+  assertStringIncludes(rendered, "Custom property EMPTY_VALUE — set: \n");
 });
 
 Deno.test("verbose text includes unchanged apply items", () => {
@@ -291,6 +393,8 @@ for (const unmatched of [undefined, 0, 2]) {
       startedAt: new Date(0),
       completedAt: new Date(1),
       repositories: [],
+      mode: "plan",
+      unmatchedPolicy: "ignore",
       ...(unmatched !== undefined && {
         inspection: {
           resources: Array.from({ length: unmatched }, (_, index) => ({
@@ -304,9 +408,12 @@ for (const unmatched of [undefined, 0, 2]) {
       }),
     };
 
+    const repositorySummary = renderReport(report).split("\n").find((line) =>
+      line.startsWith("  Repositories:")
+    );
     assertEquals(
-      renderReport(report).split("\n").at(-1),
-      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 0 failed" +
+      repositorySummary,
+      "  Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed" +
         (unmatched === undefined ? "" : ", " + unmatched + " unmatched"),
     );
   });
@@ -318,6 +425,8 @@ Deno.test("unmatched resources are grouped by type with redundant organization o
     startedAt: new Date(0),
     completedAt: new Date(1),
     repositories: [],
+    mode: "plan",
+    unmatchedPolicy: "ignore",
     inspection: {
       resources: [
         {
@@ -345,11 +454,16 @@ Deno.test("unmatched resources are grouped by type with redundant organization o
   const rendered = renderReport(report);
 
   assertStringIncludes(rendered, "Unmatched repositories (2):");
+  assertStringIncludes(rendered, "  Policy: ignore");
+  assertStringIncludes(
+    rendered,
+    "  These repositories are excluded from reconciliation.",
+  );
   assertStringIncludes(rendered, "  repo-a\n  repo-b");
   assertStringIncludes(rendered, "Unmatched environments (1):");
   assertStringIncludes(
     rendered,
-    "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 0 failed, 3 unmatched",
+    "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 2 unmatched",
   );
   assertEquals(rendered.includes("acme/repo-a"), false);
   assertEquals(rendered.includes("acme/repo-b"), false);
@@ -389,6 +503,108 @@ Deno.test("summary counts every repository outcome exactly", () => {
 
   assertStringIncludes(
     renderReport(report),
-    "Summary: 1 unchanged, 1 planned, 1 applied, 0 partially-applied, 1 failed",
+    "Repositories: 1 planned, 1 unchanged, 1 applied, 0 partially-applied, 1 failed",
   );
+});
+
+Deno.test("reports unmatched error policy and actual pull requests once", () => {
+  const pullRequest = {
+    repository: "sample",
+    number: 42,
+    url: "https://github.com/acme/sample/pull/42",
+  };
+  const failedOperation: Operation = {
+    type: "set-custom-property",
+    name: "component",
+    value: null,
+  };
+  const applied = reportAppliedRepository(
+    "code",
+    "sample",
+    [
+      evaluation,
+      {
+        type: "custom-property",
+        details: { name: "component", action: "remove" },
+        operation: failedOperation,
+      },
+    ],
+    [
+      { operation, status: "applied" },
+      {
+        operation: failedOperation,
+        status: "failed",
+        error: "later operation failed",
+      },
+    ],
+    undefined,
+    undefined,
+    [pullRequest, pullRequest],
+  );
+  assertEquals(applied.status, "partially-applied");
+  assertEquals(applied.pullRequestsOpened, [pullRequest]);
+
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    mode: "apply",
+    unmatchedPolicy: "error",
+    repositories: [{
+      repository: "sample",
+      status: "partially-applied",
+      items: [],
+      pullRequestsOpened: [pullRequest, pullRequest],
+    }],
+    pullRequestsOpened: [pullRequest],
+    inspection: {
+      resources: [{
+        type: "repository",
+        name: "acme/legacy",
+        template: null,
+        status: "unmatched",
+      }],
+      summary: { matched: 1, unmatched: 1 },
+    },
+  };
+  const rendered = renderReport(report);
+
+  assertStringIncludes(rendered, "Policy: error");
+  assertStringIncludes(rendered, "Apply cannot complete successfully.");
+  assertStringIncludes(rendered, "Pull requests opened (1):");
+  assertStringIncludes(
+    rendered,
+    "sample — acme/sample#42 https://github.com/acme/sample/pull/42",
+  );
+  assertEquals(
+    rendered.split("https://github.com/acme/sample/pull/42").length - 1,
+    1,
+  );
+  assertEquals(
+    (JSON.parse(JSON.stringify(report)) as Report).pullRequestsOpened,
+    [pullRequest],
+  );
+});
+
+Deno.test("repository-level failures retain planned operations as skipped", () => {
+  const failed = reportFailedRepository(
+    "sample",
+    new Error("recheck failed"),
+    "code",
+    undefined,
+    [],
+    [unchangedEvaluation, evaluation],
+  );
+  assertEquals(failed.items.map((item) => item.status), [
+    "unchanged",
+    "skipped",
+  ]);
+  const output = renderReport({
+    organization: "example-org",
+    startedAt: new Date(0),
+    completedAt: new Date(0),
+    repositories: [failed],
+  });
+  assertStringIncludes(output, "1 skipped");
+  assertStringIncludes(output, "0 applied");
 });

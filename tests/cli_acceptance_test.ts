@@ -318,7 +318,6 @@ for (const policy of ["error", "ignore"] as const) {
             },
           ];
           const text = output.join("\n");
-          assertEquals(text.includes("excluded"), false);
           if (format === "json") {
             const result = JSON.parse(text);
             assertEquals(isList ? result : result.inspection, {
@@ -355,7 +354,13 @@ for (const policy of ["error", "ignore"] as const) {
           } else {
             assertStringIncludes(
               text,
-              "Unmatched repositories (1):\n  unmatched",
+              `Unmatched repositories (1):\n  Policy: ${policy}\n` +
+                (policy === "ignore"
+                  ? "  These repositories are excluded from reconciliation.\n"
+                  : command[0] === "apply"
+                  ? "  Apply cannot complete successfully.\n"
+                  : "  Plan cannot complete successfully.\n") +
+                "  unmatched",
             );
             const failed = policy === "ignore"
               ? 0
@@ -368,7 +373,7 @@ for (const policy of ["error", "ignore"] as const) {
               : 0;
             assertStringIncludes(
               text,
-              `Summary: 0 unchanged, ${planned} planned, ${applied} applied, 0 partially-applied, ${failed} failed, 1 unmatched`,
+              `Repositories: ${planned} planned, 0 unchanged, ${applied} applied, 0 partially-applied, ${failed} failed, 1 unmatched`,
             );
           }
           if (isList) {
@@ -816,6 +821,11 @@ Deno.test("CLI defaults managed file delivery to pull requests", async () => {
       ),
       false,
     );
+    assertStringIncludes(output.join("\n"), "Pull requests opened (1):");
+    assertStringIncludes(
+      output.join("\n"),
+      "sample — acme/sample#42 https://github.example.test/acme/sample/pull/42",
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -855,7 +865,7 @@ Deno.test("CLI targets one in-scope repository without enumerating the organizat
     assertStringIncludes(rendered, "sample [repository:code] — planned");
     assertStringIncludes(
       rendered,
-      "Summary: 0 unchanged, 1 planned, 0 applied, 0 partially-applied, 0 failed",
+      "Repositories: 1 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed",
     );
   } finally {
     if (previous === undefined) {
@@ -1039,7 +1049,7 @@ Deno.test("CLI reports an out-of-scope targeted repository without mutation", as
     );
     assertStringIncludes(
       rendered,
-      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 1 failed",
+      "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 1 failed",
     );
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -1369,7 +1379,7 @@ Deno.test("partial apply stops before mutating later repositories", async () => 
     );
     assertStringIncludes(
       rendered,
-      "✓ Repository settings — hasIssues: false",
+      "✓ Repository settings — hasIssues: true → false",
     );
     assertStringIncludes(
       rendered,
@@ -1382,7 +1392,7 @@ Deno.test("partial apply stops before mutating later repositories", async () => 
     );
     assertStringIncludes(
       rendered,
-      "Summary: 0 unchanged, 0 planned, 0 applied, 1 partially-applied, 0 failed",
+      "Repositories: 0 planned, 0 unchanged, 0 applied, 1 partially-applied, 0 failed",
     );
 
     assertEquals(
@@ -1514,7 +1524,7 @@ Deno.test("CLI aborts all fresh apply mutations when repository secret preflight
     );
     assertStringIncludes(
       output.join("\n"),
-      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 2 failed",
+      "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 2 failed",
     );
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -1562,7 +1572,7 @@ Deno.test("CLI preflights environment secrets before any strict mutation", async
     );
     assertStringIncludes(
       output.join("\n"),
-      "Summary: 0 unchanged, 0 planned, 0 applied, 0 partially-applied, 1 failed",
+      "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 1 failed",
     );
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -1609,7 +1619,7 @@ Deno.test("CLI plan preflights secrets and identifies strict deletion targets", 
     const rendered = output.join("\n");
     for (
       const detail of [
-        "Repository settings — hasIssues: false",
+        "Repository settings — hasIssues: true → false",
         "Actions secret OLD — remove",
         "Actions secret NEW — set",
         "Environment production — delete",
@@ -2370,9 +2380,11 @@ Deno.test("CLI JSON apply preserves the structured report shape", async () => {
     assertEquals(Object.keys(report).sort(), [
       "completedAt",
       "inspection",
+      "mode",
       "organization",
       "repositories",
       "startedAt",
+      "unmatchedPolicy",
     ]);
     assertEquals(report.inspection, {
       resources: [{
@@ -2768,7 +2780,10 @@ function fakeFileDeliveryGitHub(
       method === "POST" &&
       url.pathname === "/api/v3/repos/acme/sample/pulls"
     ) {
-      return json({ number: 42 }, 201);
+      return json({
+        number: 42,
+        html_url: "https://github.example.test/acme/sample/pull/42",
+      }, 201);
     }
     if (
       method === "PUT" &&

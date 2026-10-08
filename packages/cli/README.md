@@ -166,11 +166,34 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration --out plan.json --quiet
 Planning failures remain visible on stderr; a failed persisted plan is not
 written.
 
-The text summary includes an unmatched count, even when unmatched resources are
-ignored:
+Unmatched repositories include the effective policy and its consequence. The
+summary reports repository statuses, operation outcomes, and skipped runtime
+bindings separately. Operation counts come from apply-item outcomes. A skipped
+operation is a planned change that was not executed after another resource
+failed during preparation; unchanged items are not counted. Skipped runtime
+bindings count distinct template bindings excluded by `--skip-missing-values`;
+these values are not interchangeable:
 
 ```text
-Summary: 0 unchanged, 21 planned, 0 applied, 0 partially-applied, 0 failed, 3 unmatched
+Unmatched repositories (3):
+  Policy: ignore
+  These repositories are excluded from reconciliation.
+  legacy-service
+  archived-service
+  docs-site
+
+Warnings:
+  Skipped runtime values:
+    SLACK_BOT_OPERATION_TOKEN (secret) — 21 repositories
+    COPILOT_REVIEW_TOKEN (secret) — 21 repositories
+
+  42 bindings excluded from reconciliation.
+  Existing destination values will not be modified or deleted.
+
+Summary:
+  Repositories: 21 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 3 unmatched
+  Operations:   87 planned, 0 applied, 0 failed, 0 skipped
+  Exclusions:   42 skipped runtime bindings
 ```
 
 Fresh plan/apply JSON reports include an `inspection` object with the same
@@ -295,8 +318,13 @@ octosmith plan --format json --path ./configuration
 octosmith apply --format json --path ./configuration
 ```
 
-JSON contains the full structured report. Text hides unchanged items unless
-`--verbose` is supplied.
+JSON contains the full structured report, including pull requests opened by an
+apply. Text hides unchanged items and affected-resource lists unless `--verbose`
+is supplied.
+
+When file operations open pull requests, the apply report lists each newly
+opened PR once with its repository, number, and canonical GitHub URL. Reused or
+updated pull requests and direct file writes are not reported as newly opened.
 
 `--quiet` suppresses normal stdout for `template validate`, `plan`, and `apply`.
 It cannot be combined with `--format json`.
@@ -344,7 +372,7 @@ The CLI returns:
 --path <path>            Configuration directory (default: .)
 --format <text|json>     Output format (default: text)
 --quiet                  Suppress normal output for template validate, plan, and apply
--v, --verbose            Include unchanged text items in reports
+-v, --verbose            Include unchanged items and full diagnostic resource lists
 --trace                  Emit GitHub API traces to stderr
 --events-output <path>   Write resource events as NDJSON
 ```

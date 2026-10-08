@@ -41,6 +41,7 @@ export async function executeExecutableResources(
           applied.operations,
           resource.desired.templateName,
           resource.diagnostics,
+          applied.pullRequestsOpened,
         ),
       );
 
@@ -55,6 +56,7 @@ export async function executeExecutableResources(
           resource.desired.template,
           resource.desired.templateName,
           resource.diagnostics,
+          resource.evaluations,
         ),
       );
       break;

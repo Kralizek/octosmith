@@ -25,6 +25,16 @@ export interface Report {
   readonly completedAt: Date;
   readonly repositories: readonly RepositoryReport[];
   readonly inspection?: ResourceInspectionResult;
+  readonly mode?: "plan" | "apply";
+  readonly unmatchedPolicy?: "error" | "ignore";
+  readonly pullRequestsOpened?: readonly PullRequestReference[];
+}
+
+/** Describes a pull request opened by this apply execution. */
+export interface PullRequestReference {
+  readonly repository: string;
+  readonly number: number;
+  readonly url: string;
 }
 
 /** Describes repository report. */
@@ -36,6 +46,7 @@ export interface RepositoryReport {
   readonly items: readonly ApplyItemReport[];
   readonly error?: string;
   readonly diagnostics?: readonly RuntimeReferenceDiagnostic[];
+  readonly pullRequestsOpened?: readonly PullRequestReference[];
 }
 
 /** Describes apply item report. */

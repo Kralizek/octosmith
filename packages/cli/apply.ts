@@ -203,7 +203,12 @@ export function createGitHubRuntime(
 
       preparedSinks.delete(resource.plan.repository);
       return await applyPlan(
-        { apply: prepared.apply.bind(prepared) },
+        {
+          apply: prepared.apply.bind(prepared),
+          ...(prepared.pullRequestsOpened !== undefined && {
+            pullRequestsOpened: prepared.pullRequestsOpened,
+          }),
+        },
         resource.plan,
       );
     },
@@ -320,6 +325,7 @@ export async function apply(
       const evaluations = buildApplyEvaluations(
         desired,
         plan.operations,
+        current,
       );
       const executable = {
         desired,
@@ -379,6 +385,7 @@ export async function apply(
           resource.desired.template,
           resource.desired.templateName,
           resource.diagnostics,
+          resource.evaluations,
         ),
       );
     }
