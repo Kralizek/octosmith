@@ -23,7 +23,7 @@ Deno.test(
       );
       await Deno.writeTextFile(
         `${root}/templates/sample.yml`,
-        "version: 1\nkind: repository\nmatch:\n  include: all\nrepository:\n  customProperties:\n    unchanged: same\n    changed: after\n",
+        "version: 1\nkind: repository\nmatch:\n  include: all\nrepository:\n  custom_properties:\n    unchanged: same\n    changed: after\n",
       );
       const loaded = await loadConfigurationDirectory(root);
       const reports: RepositoryReport[] = [];
