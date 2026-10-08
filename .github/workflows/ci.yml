@@ -23,8 +23,11 @@ jobs:
 
       - name: Install OpenCLI
         run: |
-          go install github.com/bcdxn/opencli/cmd/ocli@v1.3.0
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+          curl --fail --location --silent --show-error \
+            https://github.com/bcdxn/opencli/releases/download/v1.3.0/ocli_Linux_x86_64.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP" ocli
+          chmod +x "$RUNNER_TEMP/ocli"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
 
       - name: Validate OpenCLI contract
         run: ocli check opencli.ocs.yaml
