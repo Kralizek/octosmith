@@ -725,7 +725,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     let existingPull = pullNumber !== undefined;
     if (pullNumber === undefined) {
       try {
-        const pull = await this.#client.request<{ readonly number: number }>(
+        const pull = await this.#client.request<{
+          readonly number: number;
+          readonly html_url: string;
+        }>(
           "POST",
           repositoryPath + "/pulls",
           {
@@ -740,8 +743,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         this.pullRequestsOpened.push({
           repository,
           number: pull.number,
-          url: "https://github.com/" + this.#owner + "/" + repository +
-            "/pull/" + pull.number,
+          url: pull.html_url,
         });
       } catch (error) {
         if (!isRetryableGitHubConflict(error)) {
