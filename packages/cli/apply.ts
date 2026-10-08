@@ -203,7 +203,12 @@ export function createGitHubRuntime(
 
       preparedSinks.delete(resource.plan.repository);
       return await applyPlan(
-        { apply: prepared.apply.bind(prepared) },
+        {
+          apply: prepared.apply.bind(prepared),
+          ...(prepared.pullRequestsOpened !== undefined && {
+            pullRequestsOpened: prepared.pullRequestsOpened,
+          }),
+        },
         resource.plan,
       );
     },
