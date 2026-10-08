@@ -601,7 +601,11 @@ function planFiles(
       continue;
     }
 
-    if (file.ensure === "exact" && actual.content !== file.content) {
+    if (
+      file.ensure === "exact" &&
+      normalizeLineEndings(actual.content) !==
+        normalizeLineEndings(file.content)
+    ) {
       operations.push({
         type: "update-file",
         sha: actual.sha,
@@ -609,6 +613,10 @@ function planFiles(
       });
     }
   }
+}
+
+function normalizeLineEndings(content: string): string {
+  return content.replace(/\r\n?/g, "\n");
 }
 
 /** Build apply evaluations for the operations in a plan. */

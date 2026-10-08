@@ -60,6 +60,47 @@ Deno.test("exact files update drift and noop on identical content", () => {
   );
 });
 
+Deno.test("exact files ignore line-ending differences when comparing text", () => {
+  const current = currentState({
+    files: [
+      {
+        path: "mixed.txt",
+        content: "first\r\nsecond\nthird\r\n",
+        sha: "mixed",
+      },
+      { path: "crlf.txt", content: "first\nsecond\n", sha: "crlf" },
+      { path: "change.txt", content: "keep\r\nold\r\n", sha: "change" },
+    ],
+  });
+  const desired = {
+    repository: "sample",
+    template: "code",
+    files: [
+      {
+        path: "mixed.txt",
+        ensure: "exact" as const,
+        content: "first\nsecond\nthird\n",
+      },
+      {
+        path: "crlf.txt",
+        ensure: "exact" as const,
+        content: "first\r\nsecond\r\n",
+      },
+      {
+        path: "change.txt",
+        ensure: "exact" as const,
+        content: "keep\r\nnew\r\n",
+      },
+    ],
+  };
+
+  assertEquals(buildPlan(current, desired).operations, [{
+    type: "update-file",
+    sha: "change",
+    file: desired.files[2],
+  }]);
+});
+
 Deno.test("exists never overwrites and absent deletes only when present", () => {
   const current = currentState({
     files: [
