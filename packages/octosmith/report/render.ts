@@ -198,9 +198,11 @@ function renderDiagnosticGroup(
   if (resources.length === 0) {
     return;
   }
-  lines.push("  Affected resources (" + resources.length + "):");
   if (verbose) {
+    lines.push("  Affected resources (" + resources.length + "):");
     lines.push(...resources.map((resource) => "    " + resource));
+  } else {
+    lines.push("  Affected resources: " + resources.length);
   }
 }
 
