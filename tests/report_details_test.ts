@@ -153,15 +153,16 @@ Deno.test("reports transitions and resource operations without exposing values",
   });
   const operations: readonly Operation[] = plan.operations;
   const evaluations = buildApplyEvaluations(desired, operations, current);
-  const rendered = renderReport({
+  const report = {
     organization: "acme",
     startedAt: new Date(0),
     completedAt: new Date(1),
     repositories: [
       reportPlannedRepository("code", plan, evaluations),
     ],
-  });
-  const serialized = JSON.stringify(evaluations);
+  };
+  const rendered = renderReport(report);
+  const serialized = JSON.stringify(report);
 
   assertStringIncludes(
     rendered,

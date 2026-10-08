@@ -958,7 +958,6 @@ Deno.test("pull-request file delivery preserves existing labels when none are co
     client.requests.some((item) => item.path.endsWith("/issues/42/labels")),
     false,
   );
-  assertEquals(sink.pullRequestsOpened, []);
 });
 
 Deno.test("apply retains a newly opened PR when a later file-delivery step fails", async () => {

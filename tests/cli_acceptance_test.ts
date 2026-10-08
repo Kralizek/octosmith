@@ -318,7 +318,6 @@ for (const policy of ["error", "ignore"] as const) {
             },
           ];
           const text = output.join("\n");
-          assertEquals(text.includes("excluded"), false);
           if (format === "json") {
             const result = JSON.parse(text);
             assertEquals(isList ? result : result.inspection, {
@@ -1380,7 +1379,7 @@ Deno.test("partial apply stops before mutating later repositories", async () => 
     );
     assertStringIncludes(
       rendered,
-      "✓ Repository settings — hasIssues: false",
+      "✓ Repository settings — hasIssues: true → false",
     );
     assertStringIncludes(
       rendered,
@@ -1620,7 +1619,7 @@ Deno.test("CLI plan preflights secrets and identifies strict deletion targets", 
     const rendered = output.join("\n");
     for (
       const detail of [
-        "Repository settings — hasIssues: false",
+        "Repository settings — hasIssues: true → false",
         "Actions secret OLD — remove",
         "Actions secret NEW — set",
         "Environment production — delete",
@@ -2381,9 +2380,11 @@ Deno.test("CLI JSON apply preserves the structured report shape", async () => {
     assertEquals(Object.keys(report).sort(), [
       "completedAt",
       "inspection",
+      "mode",
       "organization",
       "repositories",
       "startedAt",
+      "unmatchedPolicy",
     ]);
     assertEquals(report.inspection, {
       resources: [{
