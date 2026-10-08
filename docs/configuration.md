@@ -225,6 +225,10 @@ persisted plan can be applied safely in a different runtime context.
 
 Managed file sources are local to the configuration root.
 
+For `ensure: exact`, CRLF, LF, and lone CR line endings are treated as equivalent
+when comparing text content. This normalization is comparison-only: when a real
+update is needed, Octosmith uploads the desired source content unchanged.
+
 ```yaml
 repository:
   files:
