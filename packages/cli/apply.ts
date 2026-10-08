@@ -320,6 +320,7 @@ export async function apply(
       const evaluations = buildApplyEvaluations(
         desired,
         plan.operations,
+        current,
       );
       const executable = {
         desired,

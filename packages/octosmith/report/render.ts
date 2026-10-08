@@ -70,59 +70,162 @@ export function renderReport(
     for (const group of unmatchedByType.values()) {
       lines.push(
         "Unmatched " + group.label + " (" + group.names.length + "):",
-        ...group.names.map((name) => "  " + name),
       );
+      if (group.label === "repositories") {
+        const policy = report.unmatchedPolicy ?? "error";
+        lines.push(
+          "  Policy: " + policy,
+          policy === "ignore"
+            ? "  These repositories are excluded from reconciliation."
+            : report.mode === "apply"
+            ? "  Apply cannot complete successfully."
+            : "  Plan cannot complete successfully.",
+        );
+      }
+      lines.push(...group.names.map((name) => "  " + name));
     }
   }
 
   const diagnosticGroups = groupRuntimeDiagnostics(report.repositories);
-  for (const severity of ["error", "warning"] as const) {
-    const groups = diagnosticGroups.filter((group) =>
-      group.diagnostic.severity === severity
-    );
-    if (groups.length === 0) {
-      continue;
+  const errors = diagnosticGroups.filter((group) =>
+    group.diagnostic.severity === "error"
+  );
+  if (errors.length > 0) {
+    lines.push("", "Failures:");
+    for (const group of errors) {
+      renderDiagnosticGroup(lines, report, group, options.verbose ?? false);
     }
+  }
 
-    lines.push("", severity === "error" ? "Failures:" : "Warnings:");
-    for (const group of groups) {
-      const resources = [
-        ...new Set(
-          group.diagnostics.flatMap((diagnostic) =>
-            diagnostic.resource === undefined ? [] : [
-              diagnostic.resource.type === "repository" &&
-                diagnostic.resource.name.startsWith(report.organization + "/")
-                ? diagnostic.resource.name.slice(report.organization.length + 1)
-                : diagnostic.resource.name,
-            ]
-          ),
-        ),
-      ];
-      lines.push("  " + describeRuntimeReferenceDiagnostic(group.diagnostic));
-      if (resources.length > 0) {
+  const skipped = diagnosticGroups.filter((group) =>
+    group.diagnostic.code.startsWith("skipped_")
+  );
+  const warnings = diagnosticGroups.filter((group) =>
+    group.diagnostic.severity === "warning" &&
+    !group.diagnostic.code.startsWith("skipped_")
+  );
+  if (skipped.length > 0 || warnings.length > 0) {
+    lines.push("", "Warnings:");
+    if (skipped.length > 0) {
+      lines.push("  Skipped runtime values:");
+      for (const group of skipped) {
+        const resources = diagnosticResources(report, group);
+        const kind = group.diagnostic.code.endsWith("_secret")
+          ? "secret"
+          : "variable";
         lines.push(
-          "  Affected resources (" + resources.length + "):",
-          ...resources.map((resource) => "    " + resource),
+          "    " + group.diagnostic.name + " (" + kind + ") — " +
+            resources.length + " repositories",
         );
+        if (options.verbose && resources.length > 0) {
+          lines.push(
+            "      Affected resources:",
+            ...resources.map((resource) => "        " + resource),
+          );
+        }
       }
+      lines.push(
+        "",
+        "  " + skipped.reduce(
+          (count, group) => count + diagnosticBindingCount(group),
+          0,
+        ) + " bindings excluded from reconciliation.",
+        "  Existing destination values will not be modified or deleted.",
+      );
+    }
+    for (const group of warnings) {
+      renderDiagnosticGroup(lines, report, group, options.verbose ?? false);
     }
   }
 
   const summary = summarize(report);
   lines.push(
     "",
-    "Summary: " +
-      summary.unchanged + " unchanged, " +
+    "Summary:",
+    "  Repositories: " +
       summary.planned + " planned, " +
+      summary.unchanged + " unchanged, " +
       summary.applied + " applied, " +
       summary.partiallyApplied + " partially-applied, " +
       summary.failed + " failed" +
       (report.inspection === undefined
         ? ""
         : ", " + report.inspection.summary.unmatched + " unmatched"),
+    "  Operations:   " +
+      summary.operations.planned + " planned, " +
+      summary.operations.applied + " applied, " +
+      summary.operations.failed + " failed, " +
+      summary.operations.skipped + " skipped",
+    "  Exclusions:   " + summary.skippedBindings +
+      " skipped runtime bindings",
   );
 
+  const pullRequests = [...new Map(
+    [
+      ...(report.pullRequestsOpened ?? []),
+      ...report.repositories.flatMap((repository) =>
+        repository.pullRequestsOpened ?? []
+      ),
+    ].map((pullRequest) => [
+      pullRequest.repository + "#" + pullRequest.number,
+      pullRequest,
+    ]),
+  ).values()];
+  if (pullRequests.length > 0) {
+    lines.push("", "Pull requests opened (" + pullRequests.length + "):");
+    for (const pullRequest of pullRequests) {
+      lines.push(
+        "  " + pullRequest.repository + " — " + report.organization + "/" +
+          pullRequest.repository + "#" + pullRequest.number + " " +
+          pullRequest.url,
+      );
+    }
+  }
+
   return lines.join("\n");
+}
+
+function renderDiagnosticGroup(
+  lines: string[],
+  report: Report,
+  group: ReturnType<typeof groupRuntimeDiagnostics>[number],
+  verbose: boolean,
+): void {
+  const resources = diagnosticResources(report, group);
+  lines.push("  " + describeRuntimeReferenceDiagnostic(group.diagnostic));
+  if (resources.length === 0) {
+    return;
+  }
+  lines.push("  Affected resources (" + resources.length + "):");
+  if (verbose) {
+    lines.push(...resources.map((resource) => "    " + resource));
+  }
+}
+
+function diagnosticResources(
+  report: Report,
+  group: ReturnType<typeof groupRuntimeDiagnostics>[number],
+): string[] {
+  return [...new Set(
+    group.diagnostics.flatMap((diagnostic) =>
+      diagnostic.resource === undefined ? [] : [
+        diagnostic.resource.type === "repository" &&
+            diagnostic.resource.name.startsWith(report.organization + "/")
+          ? diagnostic.resource.name.slice(report.organization.length + 1)
+          : diagnostic.resource.name,
+      ]
+    ),
+  )];
+}
+
+function diagnosticBindingCount(
+  group: ReturnType<typeof groupRuntimeDiagnostics>[number],
+): number {
+  return new Set(
+    group.diagnostics.map((diagnostic) =>
+      JSON.stringify([diagnostic.resource?.name, diagnostic.template, diagnostic.path])
+    ),
+  ).size;
 }
 
 function groupRuntimeDiagnostics(
@@ -187,23 +290,37 @@ function describeItem(item: ApplyItemReport): string {
 
   switch (item.type) {
     case "repository-settings":
-      return "Repository settings" + settingsSuffix(details.settings);
+      return "Repository settings" +
+        settingsSuffix(item, details.settings);
     case "custom-property":
       return "Custom property " + String(details.name) +
         actionSuffix(details, "value");
     case "actions-settings":
-      return "Actions settings" + settingsSuffix(details.settings);
+      return "Actions settings" + settingsSuffix(item, details.settings);
     case "actions-oidc":
-      return "Actions OIDC" + settingsSuffix(details.settings);
+      return "Actions OIDC" + settingsSuffix(item, details.settings);
     case "actions-variable":
-      return "Actions variable " + String(details.name) + actionSuffix(details);
+      return "Actions variable " + String(details.name) +
+        actionSuffix(
+          details.action === "delete"
+            ? { ...details, action: "remove" }
+            : details,
+        );
     case "actions-secret":
       return "Actions secret " + String(details.name) + actionSuffix(details);
     case "dependabot-secret":
       return "Dependabot secret " + String(details.name) +
         actionSuffix(details);
     case "team-permission": {
-      const permission = details.permission !== undefined
+      const action = details.action;
+      const permission = action === "grant"
+        ? " — grant " + formatValue(details.permission)
+        : action === "change"
+        ? " — " + formatValue(details.beforePermission) + " → " +
+          formatValue(details.permission)
+        : action === "remove"
+        ? " — remove"
+        : details.permission !== undefined
         ? " — permission: " + formatValue(details.permission)
         : actionSuffix(details);
       return "Team " + String(details.team) + permission;
@@ -213,7 +330,12 @@ function describeItem(item: ApplyItemReport): string {
     case "environment":
       return "Environment " + String(details.name) + actionSuffix(details);
     case "file":
-      return "File " + String(details.path) + actionSuffix(details);
+      return "File " + String(details.path) +
+        actionSuffix(
+          details.action === "delete"
+            ? { ...details, action: "remove" }
+            : details,
+        );
   }
 }
 
@@ -239,7 +361,7 @@ function actionSuffix(
   return " — " + valueKey + ": " + formatValue(value);
 }
 
-function settingsSuffix(value: unknown): string {
+function formatSettingsSuffix(value: unknown): string {
   if (value === undefined) {
     return "";
   }
@@ -248,6 +370,33 @@ function settingsSuffix(value: unknown): string {
 
   return entries.length === 0 ? "" : " — " +
     entries.map(([key, child]) => key + ": " + formatValue(child)).join(", ");
+}
+
+function settingsSuffix(
+  item: ApplyItemReport,
+  value: unknown,
+): string {
+  if (item.status === "unchanged") {
+    return "";
+  }
+
+  const changes = item.details.changes;
+  if (Array.isArray(changes)) {
+    return changes.length === 0 ? "" : " — " +
+      changes.map((change) => {
+        const entry = change as {
+          readonly path: string;
+          readonly before?: unknown;
+          readonly beforeSet: boolean;
+          readonly after: unknown;
+        };
+        return entry.path + ": " +
+          (entry.beforeSet ? formatValue(entry.before) : "unset") +
+          " → " + formatValue(entry.after);
+      }).join(", ");
+  }
+
+  return formatSettingsSuffix(value);
 }
 
 function flattenObject(
@@ -282,12 +431,16 @@ function flattenObject(
 }
 
 function formatValue(value: unknown): string {
+  if (value === undefined) {
+    return "unset";
+  }
+
   if (Array.isArray(value)) {
     return "[" + value.map(formatValue).join(", ") + "]";
   }
 
   if (value === null) {
-    return "null";
+    return "blank";
   }
 
   if (typeof value === "string") {
@@ -323,12 +476,23 @@ function summarize(report: Report): {
   readonly applied: number;
   readonly partiallyApplied: number;
   readonly failed: number;
+  readonly operations: {
+    readonly planned: number;
+    readonly applied: number;
+    readonly failed: number;
+    readonly skipped: number;
+  };
+  readonly skippedBindings: number;
 } {
   let unchanged = 0;
   let planned = 0;
   let applied = 0;
   let partiallyApplied = 0;
   let failed = 0;
+  let plannedOperations = 0;
+  let appliedOperations = 0;
+  let failedOperations = 0;
+  let skippedOperations = 0;
 
   for (const repository of report.repositories) {
     switch (repository.status) {
@@ -348,7 +512,40 @@ function summarize(report: Report): {
         failed++;
         break;
     }
+    for (const item of repository.items) {
+      switch (item.status) {
+        case "planned":
+          plannedOperations++;
+          break;
+        case "applied":
+          appliedOperations++;
+          break;
+        case "failed":
+          failedOperations++;
+          break;
+        case "skipped":
+          skippedOperations++;
+          break;
+      }
+    }
   }
 
-  return { unchanged, planned, applied, partiallyApplied, failed };
+  const skippedBindings = groupRuntimeDiagnostics(report.repositories)
+    .filter((group) => group.diagnostic.code.startsWith("skipped_"))
+    .reduce((count, group) => count + diagnosticBindingCount(group), 0);
+
+  return {
+    unchanged,
+    planned,
+    applied,
+    partiallyApplied,
+    failed,
+    operations: {
+      planned: plannedOperations,
+      applied: appliedOperations,
+      failed: failedOperations,
+      skipped: skippedOperations,
+    },
+    skippedBindings,
+  };
 }

@@ -1,5 +1,5 @@
 import sodium from "libsodium-wrappers";
-import { buildPlan } from "@octosmith/octosmith";
+import { applyPlan, buildPlan } from "@octosmith/octosmith";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
   type GitHubClient,
@@ -745,6 +745,7 @@ class PullRequestFileClient implements GitHubClient {
   failCreateBranchOnce = false;
   failUpdateBranchOnce = false;
   failCreatePullOnce = false;
+  failAddLabels = false;
   commitNumber = 0;
 
   request<T>(
@@ -834,6 +835,12 @@ class PullRequestFileClient implements GitHubClient {
       this.pullExists = true;
       return Promise.resolve({ number: this.pullNumber } as T);
     }
+    if (
+      method === "POST" && path.endsWith("/issues/42/labels") &&
+      this.failAddLabels
+    ) {
+      return Promise.reject(new Error("label request failed"));
+    }
 
     return Promise.resolve(undefined as T);
   }
@@ -922,6 +929,11 @@ Deno.test("pull-request file delivery creates a stable branch and labeled PR", a
   assertEquals(labels?.body, {
     labels: ["automation", "octosmith"],
   });
+  assertEquals(sink.pullRequestsOpened, [{
+    repository: "sample",
+    number: 42,
+    url: "https://github.com/acme/sample/pull/42",
+  }]);
 });
 
 Deno.test("pull-request file delivery preserves existing labels when none are configured", async () => {
@@ -946,6 +958,35 @@ Deno.test("pull-request file delivery preserves existing labels when none are co
     client.requests.some((item) => item.path.endsWith("/issues/42/labels")),
     false,
   );
+  assertEquals(sink.pullRequestsOpened, []);
+});
+
+Deno.test("apply retains a newly opened PR when a later file-delivery step fails", async () => {
+  const client = new PullRequestFileClient();
+  client.failAddLabels = true;
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: {
+      mode: "pull_request",
+      pullRequest: { labels: ["automation"] },
+    },
+  });
+  const result = await applyPlan(sink, {
+    repository: "sample",
+    operations: [{
+      type: "create-file",
+      file: { path: "README.md", ensure: "exact", content: "managed" },
+    }],
+  });
+
+  assertEquals(result.operations[0].status, "failed");
+  assertEquals(result.pullRequestsOpened, [{
+    repository: "sample",
+    number: 42,
+    url: "https://github.com/acme/sample/pull/42",
+  }]);
 });
 
 Deno.test("pull-request file delivery reuses its stable branch and open PR", async () => {
@@ -999,6 +1040,7 @@ Deno.test("pull-request file delivery reuses its stable branch and open PR", asy
     ),
     false,
   );
+  assertEquals(sink.pullRequestsOpened, []);
   assertEquals(
     client.requests.some((item) => item.path.endsWith("/issues/42/labels")),
     false,

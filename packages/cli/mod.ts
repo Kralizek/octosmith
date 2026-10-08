@@ -318,11 +318,27 @@ function createCli(
           eventOutput?.close();
         }
 
+        const pullRequestsOpened = [...new Map(
+          repositories.flatMap((repository) =>
+            repository.pullRequestsOpened ?? []
+          ).map((pullRequest) => [
+            pullRequest.repository + "#" + pullRequest.number,
+            pullRequest,
+          ]),
+        ).values()];
+        const reportedRepositories = repositories.map(({
+          pullRequestsOpened: _pullRequestsOpened,
+          ...repository
+        }) => repository);
         const report: Report = {
           organization: loaded.configuration.organization,
           startedAt,
           completedAt: new Date(),
-          repositories,
+          repositories: reportedRepositories,
+          mode,
+          unmatchedPolicy: loaded.configuration.repositories.settings
+              ?.unmatchedRepositories ?? "error",
+          ...(pullRequestsOpened.length > 0 && { pullRequestsOpened }),
           ...(persistedArtifact === undefined && {
             inspection: summarizeResourceInspection(inspectedResources),
           }),

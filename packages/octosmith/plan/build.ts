@@ -615,8 +615,11 @@ function planFiles(
 export function buildApplyEvaluations(
   desired: DesiredState,
   operations: readonly Operation[],
+  current?: CurrentState,
 ): readonly ApplyEvaluation[] {
-  const evaluations = operations.map(operationEvaluation);
+  const evaluations = operations.map((operation) =>
+    operationEvaluation(operation, current)
+  );
   const has = (predicate: (operation: Operation) => boolean) =>
     operations.some(predicate);
 
@@ -626,7 +629,7 @@ export function buildApplyEvaluations(
   ) {
     evaluations.push({
       type: "repository-settings",
-      details: { settings: desired.settings },
+      details: {},
     });
   }
 
@@ -657,22 +660,7 @@ export function buildApplyEvaluations(
     ) {
       evaluations.push({
         type: "actions-settings",
-        details: {
-          settings: {
-            ...(desired.actions.enabled !== undefined && {
-              enabled: desired.actions.enabled,
-            }),
-            ...(desired.actions.allowedActions !== undefined && {
-              allowedActions: desired.actions.allowedActions,
-            }),
-            ...(desired.actions.shaPinningRequired !== undefined && {
-              shaPinningRequired: desired.actions.shaPinningRequired,
-            }),
-            ...(desired.actions.selectedActions !== undefined && {
-              selectedActions: desired.actions.selectedActions,
-            }),
-          },
-        },
+        details: {},
       });
     }
 
@@ -682,7 +670,7 @@ export function buildApplyEvaluations(
     ) {
       evaluations.push({
         type: "actions-oidc",
-        details: { settings: desired.actions.oidc },
+        details: {},
       });
     }
 
@@ -773,12 +761,21 @@ export function buildApplyEvaluations(
   return evaluations;
 }
 
-function operationEvaluation(operation: Operation): ApplyEvaluation {
+function operationEvaluation(
+  operation: Operation,
+  current?: CurrentState,
+): ApplyEvaluation {
   switch (operation.type) {
     case "update-repository-settings":
       return {
         type: "repository-settings",
-        details: { settings: operation.settings, action: "update" },
+        details: {
+          settings: operation.settings,
+          action: "update",
+          ...(current !== undefined && {
+            changes: settingChanges(operation.settings, current.settings),
+          }),
+        },
         operation,
       };
     case "set-custom-property":
@@ -794,19 +791,39 @@ function operationEvaluation(operation: Operation): ApplyEvaluation {
     case "update-actions-settings":
       return {
         type: "actions-settings",
-        details: { settings: operation.settings, action: "update" },
+        details: {
+          settings: operation.settings,
+          action: "update",
+          ...(current !== undefined && {
+            changes: settingChanges(operation.settings, current.actions),
+          }),
+        },
         operation,
       };
     case "update-actions-oidc":
       return {
         type: "actions-oidc",
-        details: { settings: operation.settings, action: "update" },
+        details: {
+          settings: operation.settings,
+          action: "update",
+          ...(current !== undefined && {
+            changes: settingChanges(operation.settings, current.actions.oidc),
+          }),
+        },
         operation,
       };
     case "set-actions-variable":
       return {
         type: "actions-variable",
-        details: { name: operation.variable.name, action: "update" },
+        details: {
+          name: operation.variable.name,
+          action: current === undefined ||
+              current.actions.variables.some((variable) =>
+                variable.name === operation.variable.name
+              )
+            ? "update"
+            : "create",
+        },
         operation,
       };
     case "remove-actions-variable":
@@ -839,16 +856,25 @@ function operationEvaluation(operation: Operation): ApplyEvaluation {
         details: { name: operation.secret, action: "remove" },
         operation,
       };
-    case "set-team-permission":
+    case "set-team-permission": {
+      const currentPermission = current?.teams.find((permission) =>
+        permission.team === operation.permission.team
+      )?.permission.name;
       return {
         type: "team-permission",
         details: {
           team: operation.permission.team,
           permission: operation.permission.permission.name,
-          action: "set",
+          ...(currentPermission === undefined
+            ? { action: current === undefined ? "set" : "grant" }
+            : {
+              action: "change",
+              beforePermission: currentPermission,
+            }),
         },
         operation,
       };
+    }
     case "remove-team-permission":
       return {
         type: "team-permission",
@@ -906,10 +932,71 @@ function operationEvaluation(operation: Operation): ApplyEvaluation {
     case "delete-file":
       return {
         type: "file",
-        details: { path: operation.path, action: "delete" },
+        details: { path: operation.path, action: "remove" },
         operation,
       };
   }
+}
+
+function settingChanges(
+  desired: unknown,
+  current: unknown,
+): readonly {
+  readonly path: string;
+  readonly before?: unknown;
+  readonly beforeSet: boolean;
+  readonly after: unknown;
+}[] {
+  return flattenSettings(desired).map(([path, after]) => {
+    const before = readSetting(current, path);
+    const beforeSet = before.set && before.value !== undefined;
+    return {
+      path,
+      ...(beforeSet && { before: before.value }),
+      beforeSet,
+      after,
+    };
+  });
+}
+
+function flattenSettings(
+  value: unknown,
+  prefix = "",
+): readonly [string, unknown][] {
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  ) {
+    return [[prefix, value]];
+  }
+
+  return Object.entries(value as Record<string, unknown>).flatMap((
+    [key, child],
+  ) => {
+    const path = prefix.length === 0 ? key : prefix + "." + key;
+    return child !== null && typeof child === "object" &&
+        !Array.isArray(child)
+      ? flattenSettings(child, path)
+      : [[path, child] as [string, unknown]];
+  });
+}
+
+function readSetting(
+  value: unknown,
+  path: string,
+): { readonly set: boolean; readonly value?: unknown } {
+  let current = value;
+  for (const segment of path.split(".")) {
+    if (
+      current === null || typeof current !== "object" ||
+      !Object.hasOwn(current, segment)
+    ) {
+      return { set: false };
+    }
+    current = Reflect.get(current, segment);
+  }
+  return { set: true, value: current };
 }
 
 /** Build repository-setting operations for current and desired state. */

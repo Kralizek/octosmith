@@ -13,6 +13,7 @@ import type {
 } from "../mod.ts";
 import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
+import type { PullRequestReference } from "../report/types.ts";
 
 /** Describes secret value provider. */
 export type SecretValueProvider = (name: string) => string;
@@ -53,6 +54,7 @@ type EffectiveFileChanges =
 
 /** Describes GitHub repository mutation sink. */
 export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
+  readonly pullRequestsOpened: PullRequestReference[] = [];
   readonly #client: GitHubClient;
   readonly #owner: string;
   readonly #secretValue: SecretValueProvider;
@@ -735,6 +737,12 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           },
         );
         pullNumber = pull.number;
+        this.pullRequestsOpened.push({
+          repository,
+          number: pull.number,
+          url: "https://github.com/" + this.#owner + "/" + repository +
+            "/pull/" + pull.number,
+        });
       } catch (error) {
         if (!isRetryableGitHubConflict(error)) {
           throw error;

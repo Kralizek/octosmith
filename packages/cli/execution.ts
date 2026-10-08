@@ -41,6 +41,7 @@ export async function executeExecutableResources(
           applied.operations,
           resource.desired.templateName,
           resource.diagnostics,
+          applied.pullRequestsOpened,
         ),
       );
 

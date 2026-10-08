@@ -1,4 +1,5 @@
 import type { Operation, Plan } from "../mod.ts";
+import type { PullRequestReference } from "../report/types.ts";
 import { assertPersistedOperationsExecutable } from "../plan/operation_contract.ts";
 
 /** Describes apply operation status. */
@@ -15,6 +16,7 @@ export interface ApplyOperationResult {
 export interface ApplyPlanResult {
   readonly repository: string;
   readonly operations: readonly ApplyOperationResult[];
+  readonly pullRequestsOpened?: readonly PullRequestReference[];
 }
 
 /** Describes apply plan options. */
@@ -24,6 +26,7 @@ export interface ApplyPlanOptions {
 
 /** Describes repository mutation sink. */
 export interface RepositoryMutationSink {
+  readonly pullRequestsOpened?: readonly PullRequestReference[];
   prepare?(
     repository: string,
     operations: readonly Operation[],
@@ -72,5 +75,9 @@ export async function applyPlan(
   return {
     repository: plan.repository,
     operations: results,
+    ...(preparedSink.pullRequestsOpened !== undefined &&
+        preparedSink.pullRequestsOpened.length > 0 && {
+      pullRequestsOpened: preparedSink.pullRequestsOpened,
+    }),
   };
 }
