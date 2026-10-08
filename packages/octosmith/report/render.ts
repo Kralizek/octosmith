@@ -211,7 +211,7 @@ function diagnosticResources(
       group.diagnostics.flatMap((diagnostic) =>
         diagnostic.resource === undefined ? [] : [
           diagnostic.resource.type === "repository" &&
-              diagnostic.resource.name.startsWith(report.organization + "/")
+            diagnostic.resource.name.startsWith(report.organization + "/")
             ? diagnostic.resource.name.slice(report.organization.length + 1)
             : diagnostic.resource.name,
         ]
