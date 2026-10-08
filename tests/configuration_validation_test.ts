@@ -424,6 +424,7 @@ Deno.test("configuration rejects invalid setting types without echoing values", 
 
 Deno.test("configuration validation rejects explicitly invalid squash pairs", async () => {
   for (const message of ["blank", "pull-request-body"]) {
+    let validationError!: Error;
     await withConfiguration(configuration, {
       ...template,
       repository: {
@@ -434,12 +435,20 @@ Deno.test("configuration validation rejects explicitly invalid squash pairs", as
           },
         },
       },
-    }, (root) =>
-      assertRejects(
+    }, async (root) => {
+      validationError = await assertRejects(
         () => validateConfigurationDirectory(root),
         Error,
-        "effective: commit-or-pull-request-title / " + message,
-      ));
+        "invalid squash merge title/message combination",
+      );
+    });
+    assertStringIncludes(
+      validationError.message,
+      "Configured: commit-or-pull-request-title / " + message,
+    );
+    assertStringIncludes(validationError.message, "Supported combinations:");
+    assertEquals(validationError.message.includes("Current:"), false);
+    assertEquals(validationError.message.includes("effective:"), false);
   }
 });
 

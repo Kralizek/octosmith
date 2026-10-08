@@ -255,7 +255,9 @@ async function collectLoadedConfigurationValidation(
         (value) => "validation:" + value,
       );
 
-      buildPlan(emptyCurrentState(repository.name), desired);
+      buildPlan(emptyCurrentState(repository.name), desired, {
+        offlineValidation: true,
+      });
     } catch (error) {
       issues.push({
         code: "planner_invariant",

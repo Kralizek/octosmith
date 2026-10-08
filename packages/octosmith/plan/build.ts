@@ -38,6 +38,7 @@ export function buildPlan(
   desired: DesiredState,
   options: {
     readonly skippedRuntimeReferences?: readonly RuntimeReference[];
+    readonly offlineValidation?: boolean;
   } = {},
 ): Plan {
   if (current.repository !== desired.repository) {
@@ -61,7 +62,12 @@ export function buildPlan(
     );
   }
 
-  planRepositorySettings(current, desired, operations);
+  planRepositorySettings(
+    current,
+    desired,
+    operations,
+    options.offlineValidation ?? false,
+  );
   planCustomProperties(current, desired, operations, collections);
   planActions(
     current,
@@ -102,12 +108,17 @@ function planRepositorySettings(
   current: CurrentState,
   desired: DesiredState,
   operations: Operation[],
+  offlineValidation: boolean,
 ): void {
   if (!desired.settings) {
     return;
   }
 
-  const changes = diffRepositorySettings(current.settings, desired.settings);
+  const changes = diffRepositorySettings(
+    current.settings,
+    desired.settings,
+    { offlineValidation },
+  );
 
   if (changes) {
     operations.push({
@@ -916,6 +927,7 @@ function operationEvaluation(operation: Operation): ApplyEvaluation {
 export function diffRepositorySettings(
   current: CurrentRepositorySettings,
   desired: DesiredRepositorySettings,
+  options: { readonly offlineValidation?: boolean } = {},
 ): DesiredRepositorySettings | undefined {
   const changes: Record<string, unknown> = {};
 
@@ -953,7 +965,12 @@ export function diffRepositorySettings(
   );
 
   if (desired.merge) {
-    const merge = diffMergeSettings(current.merge, desired.merge, current.name);
+    const merge = diffMergeSettings(
+      current.merge,
+      desired.merge,
+      current.name,
+      options.offlineValidation ?? false,
+    );
 
     if (merge) {
       changes.merge = merge;
@@ -980,6 +997,7 @@ function diffMergeSettings(
   current: CurrentRepositorySettings["merge"],
   desired: DesiredMergeSettings,
   repository: string,
+  offlineValidation: boolean,
 ): DesiredMergeSettings | undefined {
   if (
     desired.squashMergeCommitTitle !== undefined ||
@@ -996,9 +1014,12 @@ function diffMergeSettings(
       throw new Error(
         "Repository " + repository +
           ": invalid squash merge title/message combination. " +
-          "Current: " + current.squashMergeCommitTitle + " / " +
-          current.squashMergeCommitMessage + "; effective: " + title + " / " +
-          message + ". Supported combinations: " +
+          (offlineValidation
+            ? "Configured: " + title + " / " + message + ". "
+            : "Current: " + current.squashMergeCommitTitle + " / " +
+              current.squashMergeCommitMessage + "; effective: " + title +
+              " / " + message + ". ") +
+          "Supported combinations: " +
           "pull-request-title / pull-request-body, pull-request-title / blank, " +
           "pull-request-title / commit-messages, " +
           "commit-or-pull-request-title / commit-messages. " +
