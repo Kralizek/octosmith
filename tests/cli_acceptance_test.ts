@@ -824,7 +824,7 @@ Deno.test("CLI defaults managed file delivery to pull requests", async () => {
     assertStringIncludes(output.join("\n"), "Pull requests opened (1):");
     assertStringIncludes(
       output.join("\n"),
-      "sample — acme/sample#42 https://github.com/acme/sample/pull/42",
+      "sample — acme/sample#42 https://github.example.test/acme/sample/pull/42",
     );
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -2780,7 +2780,10 @@ function fakeFileDeliveryGitHub(
       method === "POST" &&
       url.pathname === "/api/v3/repos/acme/sample/pulls"
     ) {
-      return json({ number: 42 }, 201);
+      return json({
+        number: 42,
+        html_url: "https://github.example.test/acme/sample/pull/42",
+      }, 201);
     }
     if (
       method === "PUT" &&
