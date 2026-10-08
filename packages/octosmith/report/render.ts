@@ -148,13 +148,11 @@ export function renderReport(
       summary.applied + " applied, " +
       summary.partiallyApplied + " partially-applied, " +
       summary.failed + " failed" +
-      (report.inspection === undefined
-        ? ""
-        : ", " +
-          report.inspection.resources.filter((resource) =>
-            resource.type === "repository" && resource.status === "unmatched"
-          ).length +
-          " unmatched"),
+      (report.inspection === undefined ? "" : ", " +
+        report.inspection.resources.filter((resource) =>
+          resource.type === "repository" && resource.status === "unmatched"
+        ).length +
+        " unmatched"),
     "  Operations:   " +
       summary.operations.planned + " planned, " +
       summary.operations.applied + " applied, " +
