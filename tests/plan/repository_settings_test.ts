@@ -184,9 +184,21 @@ Deno.test("repository settings reject title-only changes that conflict with the 
 Deno.test("squash pair preconditions track the unmanaged counterpart", () => {
   const current = currentState();
   for (
-    const merge of [
-      { squashMergeCommitMessage: "blank" as const },
-      { squashMergeCommitTitle: "commit-or-pull-request-title" as const },
+    const { merge, changedPair } of [
+      {
+        merge: { squashMergeCommitMessage: "blank" as const },
+        changedPair: {
+          squashMergeCommitTitle: "commit-or-pull-request-title" as const,
+        },
+      },
+      {
+        merge: {
+          squashMergeCommitTitle: "commit-or-pull-request-title" as const,
+        },
+        changedPair: {
+          squashMergeCommitMessage: "commit-messages" as const,
+        },
+      },
     ]
   ) {
     const desired = {
@@ -200,8 +212,7 @@ Deno.test("squash pair preconditions track the unmanaged counterpart", () => {
         ...current.settings,
         merge: {
           ...current.settings.merge,
-          squashMergeCommitTitle: "commit-or-pull-request-title" as const,
-          squashMergeCommitMessage: "commit-messages" as const,
+          ...changedPair,
         },
       },
     };
