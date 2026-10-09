@@ -67,7 +67,8 @@ export function renderReport(
 
   if (unmatchedByType.size > 0) {
     lines.push("");
-    for (const group of unmatchedByType.values()) {
+    for (const [index, group] of [...unmatchedByType.values()].entries()) {
+      if (index > 0) lines.push("");
       lines.push(
         "Unmatched " + group.label + " (" + group.names.length + "):",
       );
