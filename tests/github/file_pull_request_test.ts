@@ -5,6 +5,7 @@ import {
   reconcileFilePullRequest,
 } from "../../packages/octosmith/github/file_pull_request.ts";
 import type {
+  ApplyPlanResult,
   DesiredFile,
   FileChangesPullRequestConfiguration,
   GitHubClient,
@@ -45,9 +46,17 @@ class ReconciliationClient implements GitHubClient {
   beforeAtomic?: () => void;
   afterAtomic?: () => void;
   beforePullRead?: () => void;
+  afterRequest?: (
+    method: string,
+    path: string,
+    options: GitHubRequestOptions,
+  ) => void | Promise<void>;
   failLabels = false;
   failClose = false;
   failCreate = false;
+  failUpdate = false;
+  failCleanup = false;
+  lastResult?: ApplyPlanResult;
   nextId = 1;
 
   constructor(files: Tree = {}) {
@@ -126,6 +135,7 @@ class ReconciliationClient implements GitHubClient {
         },
       },
     );
+    this.lastResult = result;
     const error = result.error ??
       result.operations.find((operation) => operation.status === "failed")
         ?.error;
@@ -144,7 +154,9 @@ class ReconciliationClient implements GitHubClient {
   ): Promise<T> {
     this.requests.push({ method, path, body: options.body });
     const value = await this.respond(method, path, options);
-    return structuredClone(value) as T;
+    const response = structuredClone(value) as T;
+    await this.afterRequest?.(method, path, options);
+    return response;
   }
 
   respond(
@@ -240,6 +252,9 @@ class ReconciliationClient implements GitHubClient {
           }[];
         };
       }).input;
+      if (refUpdates.length === 1 && this.failCleanup) {
+        throw new Error("Lock deletion failed");
+      }
       if (refUpdates.length > 1) {
         this.beforeAtomic?.();
         assertEquals(refUpdates.length, 3);
@@ -289,6 +304,9 @@ class ReconciliationClient implements GitHubClient {
       if (body.state === "closed" && this.failClose) {
         throw new Error("PR closure failed");
       }
+      if (body.state !== "closed" && this.failUpdate) {
+        throw new Error("PR body update failed");
+      }
       const pull = this.pulls.find((pull) =>
         pull.number === Number(path.split("/").at(-1))
       )!;
@@ -312,6 +330,389 @@ class ReconciliationClient implements GitHubClient {
 
 const fileA = { path: "A.md", ensure: "exact", content: "A" } as const;
 const fileB = { path: "B.md", ensure: "exact", content: "B" } as const;
+
+for (const action of ["opened", "updated", "closed"] as const) {
+  for (
+    const boundary of [
+      "branch transaction",
+      "PR response",
+      "lock release",
+    ] as const
+  ) {
+    Deno.test(
+      "target advancement after " + boundary + " fails " + action +
+        " reconciliation",
+      async () => {
+        const client = new ReconciliationClient();
+        if (action !== "opened") await client.reconcile([fileA]);
+        const originalOutcomes = [...client.outcomes];
+        client.afterRequest = (method, path, options) => {
+          const body = options.body as {
+            variables?: { input: { refUpdates: unknown[] } };
+          } | undefined;
+          const moved = boundary === "branch transaction"
+            ? path === "/graphql" &&
+              body?.variables?.input.refUpdates.length === 3
+            : boundary === "lock release"
+            ? path === "/graphql" &&
+              body?.variables?.input.refUpdates.length === 1
+            : action === "opened"
+            ? method === "POST" && path.endsWith("/pulls")
+            : method === "PATCH" && /\/pulls\/\d+$/.test(path);
+          if (moved) {
+            client.advanceTarget({ upstream: "moved during " + boundary });
+          }
+        };
+        await assertRejects(
+          () =>
+            client.reconcile(
+              action === "closed"
+                ? []
+                : action === "updated"
+                ? [fileA, fileB]
+                : [fileA],
+            ),
+          Error,
+          "target changed",
+        );
+        const completed = client.outcomes.slice(originalOutcomes.length);
+        assertEquals(
+          completed.map((outcome) => outcome.action),
+          boundary === "lock release" ? [action] : [],
+        );
+        assertEquals(client.lastResult?.pullRequests ?? [], completed);
+        assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+        assertEquals(client.files("main"), {
+          upstream: "moved during " + boundary,
+        });
+      },
+    );
+  }
+}
+
+for (const action of ["updated", "closed"] as const) {
+  Deno.test(
+    "target advancement while reading latest PR prevents " + action,
+    async () => {
+      const client = new ReconciliationClient();
+      await client.reconcile([fileA]);
+      const before = client.requests.length;
+      client.beforePullRead = () =>
+        client.advanceTarget({ upstream: "advanced" });
+      await assertRejects(
+        () => client.reconcile(action === "closed" ? [] : [fileA, fileB]),
+        Error,
+        "target changed",
+      );
+      assertEquals(client.outcomes.map((outcome) => outcome.action), [
+        "opened",
+      ]);
+      assertEquals(client.pulls[0].state, "open");
+      assertEquals(
+        client.requests.slice(before).filter((request) =>
+          request.method === "PATCH"
+        ),
+        [],
+      );
+    },
+  );
+}
+
+for (const change of ["target", "head", "PR state"] as const) {
+  Deno.test(
+    "correct-PR no-op detects late " + change + " changes",
+    async () => {
+      const client = new ReconciliationClient();
+      await client.reconcile([fileA]);
+      if (change === "PR state") {
+        client.beforePullRead = () => {
+          client.pulls[0].state = "closed";
+        };
+      } else {client.afterRequest = (method, path) => {
+          if (method === "GET" && path.includes("/git/commits/")) {
+            if (change === "target") {
+              client.advanceTarget({ upstream: "advanced" });
+            } else client.refs.set("octosmith/reconcile", "competing-head");
+          }
+        };}
+      await assertRejects(
+        () => client.reconcile([fileA]),
+        Error,
+        "changed",
+      );
+      assertEquals(client.outcomes.map((outcome) => outcome.action), [
+        "opened",
+      ]);
+    },
+  );
+}
+
+Deno.test("branch changes followed by failed PR metadata produce no updated outcome", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  const oldBody = client.pulls[0].body;
+  client.failUpdate = true;
+  await assertRejects(
+    () => client.reconcile([fileA, fileB]),
+    Error,
+    "body update failed",
+  );
+  assertEquals(client.files(), { "A.md": "A", "B.md": "B" });
+  assertEquals(client.pulls[0].body, oldBody);
+  assertEquals(client.lastResult?.pullRequests, undefined);
+  assertEquals(client.outcomes.map((outcome) => outcome.action), ["opened"]);
+  client.failUpdate = false;
+  await client.reconcile([fileA, fileB]);
+  assertEquals(client.outcomes.map((outcome) => outcome.action), [
+    "opened",
+    "updated",
+  ]);
+});
+
+Deno.test("labels-only updates are validated against current PR state", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  client.afterRequest = (method, path) => {
+    if (method === "POST" && path.endsWith("/labels")) {
+      client.pulls[0].state = "closed";
+    }
+  };
+  await assertRejects(
+    () => client.reconcile([fileA], { labels: ["automation"] }),
+    Error,
+    "state changed",
+  );
+  assertEquals(client.outcomes.map((outcome) => outcome.action), ["opened"]);
+  assertEquals(client.lastResult?.pullRequests, undefined);
+});
+
+Deno.test("labels-only success emits updated once and the next apply is unchanged", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  client.failLabels = true;
+  await assertRejects(
+    () => client.reconcile([fileA], { labels: ["automation"] }),
+    Error,
+    "Label update failed",
+  );
+  assertEquals(client.lastResult?.pullRequests, undefined);
+  client.failLabels = false;
+  await client.reconcile([fileA], { labels: ["automation"] });
+  await client.reconcile([fileA], { labels: ["automation"] });
+  assertEquals(client.outcomes.map((outcome) => outcome.action), [
+    "opened",
+    "updated",
+  ]);
+});
+
+for (const action of ["opened", "updated", "closed"] as const) {
+  Deno.test(
+    "completed " + action + " survives failed lock cleanup",
+    async () => {
+      const client = new ReconciliationClient();
+      if (action !== "opened") await client.reconcile([fileA]);
+      client.failCleanup = true;
+      await assertRejects(
+        () =>
+          client.reconcile(
+            action === "closed"
+              ? []
+              : action === "updated"
+              ? [fileA, fileB]
+              : [fileA],
+          ),
+        Error,
+        "lock cleanup failed",
+      );
+      assertEquals(
+        client.lastResult?.pullRequests?.map((outcome) => outcome.action),
+        [action],
+      );
+      assertEquals(
+        client.refs.get("octosmith/reconcile-lock"),
+        client.refs.get("octosmith/reconcile"),
+      );
+      assertEquals(
+        client.pulls[0].state,
+        action === "closed" ? "closed" : "open",
+      );
+    },
+  );
+}
+
+Deno.test("cleanup failure preserves the original PR failure and emits no lifecycle outcome", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  client.failUpdate = true;
+  client.failCleanup = true;
+  await assertRejects(
+    () => client.reconcile([fileA, fileB]),
+    Error,
+    "PR body update failed. Reconciliation lock cleanup failed",
+  );
+  assertEquals(client.lastResult?.pullRequests, undefined);
+  assertEquals(client.pulls[0].state, "open");
+  client.failCleanup = false;
+  const occupied = client.refs.get("octosmith/reconcile-lock");
+  await assertRejects(
+    () => client.reconcile([]),
+    Error,
+    "Atomic reconciliation",
+  );
+  assertEquals(client.refs.get("octosmith/reconcile-lock"), occupied);
+  client.refs.delete("octosmith/reconcile-lock");
+  client.failUpdate = false;
+  await client.reconcile([fileA, fileB]);
+  assertEquals(client.outcomes.map((outcome) => outcome.action), [
+    "opened",
+    "updated",
+  ]);
+  assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+});
+
+Deno.test("lost lock ownership aborts PR mutation and never deletes the replacement lock", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  client.beforePullRead = () =>
+    client.refs.set("octosmith/reconcile-lock", "competing-lock");
+  const before = client.requests.length;
+  await assertRejects(
+    () => client.reconcile([]),
+    Error,
+    "lock changed concurrently",
+  );
+  assertEquals(client.refs.get("octosmith/reconcile-lock"), "competing-lock");
+  assertEquals(client.pulls[0].state, "open");
+  assertEquals(client.lastResult?.pullRequests, undefined);
+  assertEquals(
+    client.requests.slice(before).filter((request) =>
+      request.method === "PATCH"
+    ),
+    [],
+  );
+});
+
+Deno.test("an overlapping execution cannot overwrite the held reconciliation lock", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  client.afterRequest = async (_method, path, options) => {
+    if (
+      path === "/graphql" &&
+      (options.body as { variables: { input: { refUpdates: unknown[] } } })
+          .variables.input.refUpdates.length === 3
+    ) {
+      client.afterRequest = undefined;
+      const head = client.refs.get("octosmith/reconcile");
+      await assertRejects(
+        () => client.reconcile([fileA]),
+        Error,
+        "Atomic reconciliation",
+      );
+      assertEquals(client.refs.get("octosmith/reconcile"), head);
+      assertEquals(client.refs.get("octosmith/reconcile-lock"), head);
+    }
+  };
+  await client.reconcile([fileA, fileB]);
+  assertEquals(client.files(), { "A.md": "A", "B.md": "B" });
+  assertEquals(client.outcomes.map((outcome) => outcome.action), [
+    "opened",
+    "updated",
+  ]);
+});
+
+Deno.test("target movement while reading unchanged files cannot produce an empty-delta success", async () => {
+  const client = new ReconciliationClient({ "A.md": "A" });
+  client.afterRequest = (method, path) => {
+    if (method === "GET" && path.includes("/contents/")) {
+      client.advanceTarget({ "A.md": "A", upstream: "new" });
+    }
+  };
+  await assertRejects(() => client.reconcile([fileA]), Error, "target changed");
+  assertEquals(client.outcomes, []);
+  assertEquals(
+    client.requests.filter((request) => request.method !== "GET"),
+    [],
+  );
+});
+
+Deno.test("a no-op candidate refreshes concurrently edited PR metadata without losing human text", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  client.afterRequest = (method, path) => {
+    if (method === "GET" && path.includes("/git/commits/")) {
+      client.pulls[0].body = "Human text added during reconciliation";
+    }
+  };
+  await client.reconcile([fileA]);
+  assert(
+    client.pulls[0].body?.startsWith(
+      "Human text added during reconciliation\n\n",
+    ),
+  );
+  assertEquals(client.outcomes.map((outcome) => outcome.action), [
+    "opened",
+    "updated",
+  ]);
+});
+
+for (const action of ["opened", "updated", "labels only"] as const) {
+  Deno.test(
+    "target movement during labels retains only previously completed " +
+      action + " actions",
+    async () => {
+      const client = new ReconciliationClient();
+      if (action !== "opened") await client.reconcile([fileA]);
+      client.afterRequest = (method, path) => {
+        if (method === "POST" && path.endsWith("/labels")) {
+          client.advanceTarget({ upstream: "advanced" });
+        }
+      };
+      await assertRejects(
+        () =>
+          client.reconcile(action === "updated" ? [fileA, fileB] : [fileA], {
+            labels: ["automation"],
+          }),
+        Error,
+        "target changed",
+      );
+      assertEquals(
+        client.lastResult?.pullRequests?.map((outcome) => outcome.action) ?? [],
+        action === "labels only" ? [] : [action],
+      );
+    },
+  );
+}
+
+for (const scenario of ["no PR", "skipped closure", "correct PR"] as const) {
+  Deno.test(
+    "target advancement during PR discovery rejects " + scenario,
+    async () => {
+      const client = new ReconciliationClient();
+      if (scenario !== "no PR") await client.reconcile([fileA]);
+      const outcomes = [...client.outcomes];
+      client.afterRequest = (method, path) => {
+        if (method === "GET" && path.endsWith("/pulls")) {
+          client.advanceTarget({ upstream: "advanced" });
+        }
+      };
+      await assertRejects(
+        () =>
+          client.reconcile(
+            scenario === "correct PR" ? [fileA] : [],
+            {},
+            scenario !== "skipped closure",
+          ),
+        Error,
+        "target changed",
+      );
+      assertEquals(client.outcomes, outcomes);
+      assertEquals(
+        client.pulls[0]?.state,
+        scenario === "no PR" ? undefined : "open",
+      );
+    },
+  );
+}
 
 Deno.test("file descriptions escape strikethrough and math delimiters", () => {
   const operations = buildFileOperations([], [{ ...fileA, path: "~$file.md" }]);
@@ -953,6 +1354,66 @@ Deno.test("CLI persisted plans reject moved targets, incomplete snapshots and ch
     );
     assertEquals((await run(["apply", "--plan", plan])).code, 1);
     assertEquals(client.pulls[0].state, "open");
+  });
+});
+
+for (
+  const failure of ["body", "post-branch target", "labels", "cleanup"] as const
+) {
+  Deno.test(
+    "CLI reports only completed PR actions on " + failure + " failure",
+    async () => {
+      const client = new ReconciliationClient();
+      await withCli(client, async ({ configure, run }) => {
+        await configure([fileA]);
+        assertEquals((await run(["apply"])).code, 0);
+        await configure([fileA, fileB], ["automation"]);
+        if (failure === "body") client.failUpdate = true;
+        if (failure === "post-branch target") {
+          client.afterAtomic = () => client.advanceTarget({ upstream: "new" });
+        }
+        if (failure === "labels") client.failLabels = true;
+        if (failure === "cleanup") client.failCleanup = true;
+        const applied = await run(["apply"]);
+        assertEquals(applied.code, 1);
+        const completed = failure === "labels" || failure === "cleanup";
+        assertEquals(
+          applied.events.map((event) => event.type),
+          completed
+            ? ["pull_request.updated", "resource.applied"]
+            : ["resource.applied"],
+        );
+        assertEquals(
+          applied.report.pullRequests,
+          completed ? [applied.events[0].data] : [],
+        );
+        assertEquals(
+          (applied.report.repositories as { status: string }[])[0].status,
+          completed ? "partially-applied" : "failed",
+        );
+      });
+    },
+  );
+}
+
+Deno.test("CLI retains a validated closure when releasing its lock fails", async () => {
+  const client = new ReconciliationClient();
+  await withCli(client, async ({ configure, run }) => {
+    await configure([fileA]);
+    assertEquals((await run(["apply"])).code, 0);
+    await configure([]);
+    client.failCleanup = true;
+    const applied = await run(["apply"]);
+    assertEquals(applied.code, 1);
+    assertEquals(applied.events.map((event) => event.type), [
+      "pull_request.closed",
+      "resource.applied",
+    ]);
+    assertEquals(applied.report.pullRequests, [applied.events[0].data]);
+    const report =
+      (applied.report.repositories as { status: string; error: string }[])[0];
+    assertEquals(report.status, "partially-applied");
+    assert(report.error.includes("lock cleanup failed"));
   });
 });
 

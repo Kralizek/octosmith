@@ -351,10 +351,25 @@ the PR, and have an operator remove only the abandoned lock before replanning.
 Do not configure other automation to write these reserved refs.
 
 GitHub does not provide a transaction spanning refs and PR metadata. Octosmith
-rechecks the target, head, and PR immediately before PR operations and rereads
-the body before refreshing it. External writers do not honor the lock; avoid
-editing the reserved refs during apply. A failed later API call can leave a
-successfully reconciled branch or PR, which is reported and can be retried.
+rechecks the target before every successful no-op return and validates the
+target, head, lock, and PR around lifecycle mutations. An already-correct PR is
+reread before accepting a no-op; human body changes are preserved. Successful
+mutation paths also validate PR state and target/head after releasing the lock,
+so target advancement during cleanup cannot silently succeed.
+
+Cleanup failures identify the reserved lock and retain any original failure.
+Cleanup uses an expected-SHA deletion and never removes a competing lock. A
+cancelled execution or ambiguous response can still leave the lock for operator
+recovery. Failed PR operations do not fall through to automatic closure.
+
+These checks establish correctness at their observations; they cannot prevent an
+external writer from changing refs or PR metadata during an in-flight request or
+after the final check. External writers do not honor the lock; avoid editing the
+reserved refs during apply. Detected drift fails reconciliation, but already
+executed GitHub side effects are not rolled back. A branch-only partial update
+produces no PR lifecycle outcome. Validated PR actions remain reported if an
+ancillary step or final validation later fails; see the
+[event success contract](automation.md#event-streaming).
 
 PR-mode planning snapshots the target commit even without file declarations.
 Applying requires Contents and Pull requests write permissions for cleanup;

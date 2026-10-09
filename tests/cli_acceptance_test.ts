@@ -2699,6 +2699,8 @@ function fakeFileDeliveryGitHub(
     { content: string; sha: string } | undefined
   >();
   let reconciliationHead: string | undefined;
+  let lockHead: string | undefined;
+  let pull: Record<string, unknown> | undefined;
   return async (input, init) => {
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
@@ -2733,6 +2735,14 @@ function fakeFileDeliveryGitHub(
     ) {
       return reconciliationHead
         ? json({ object: { sha: reconciliationHead } })
+        : json({ message: "Not Found" }, 404);
+    }
+    if (
+      method === "GET" &&
+      url.pathname.endsWith("/git/ref/heads/octosmith/reconcile-lock")
+    ) {
+      return lockHead
+        ? json({ object: { sha: lockHead } })
         : json({ message: "Not Found" }, 404);
     }
     if (state && method === "GET" && url.pathname.includes("/git/ref/heads/")) {
@@ -2810,19 +2820,32 @@ function fakeFileDeliveryGitHub(
         ref: { name: string },
       ) => ref.name === "refs/heads/octosmith/reconcile");
       if (update) reconciliationHead = update.afterOid;
+      const lockUpdate = body.variables.input.refUpdates.find((
+        ref: { name: string },
+      ) => ref.name === "refs/heads/octosmith/reconcile-lock");
+      if (lockUpdate) {
+        lockHead = lockUpdate.afterOid === "0".repeat(40)
+          ? undefined
+          : lockUpdate.afterOid;
+      }
       return json({ data: { updateRefs: { clientMutationId: null } } });
     }
     if (
       method === "GET" &&
       url.pathname === "/api/v3/repos/acme/sample/pulls"
     ) {
-      return json([]);
+      return json(pull ? [pull] : []);
+    }
+    if (
+      method === "GET" && url.pathname === "/api/v3/repos/acme/sample/pulls/42"
+    ) {
+      return json(pull);
     }
     if (
       method === "POST" &&
       url.pathname === "/api/v3/repos/acme/sample/pulls"
     ) {
-      return json({
+      pull = {
         number: 42,
         html_url: "https://github.example.test/acme/sample/pull/42",
         state: "open",
@@ -2835,7 +2858,8 @@ function fakeFileDeliveryGitHub(
         },
         base: { ref: body.base, repo: { full_name: "acme/sample" } },
         labels: [],
-      }, 201);
+      };
+      return json(pull, 201);
     }
     if (
       method === "PUT" &&

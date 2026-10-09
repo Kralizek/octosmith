@@ -3,7 +3,7 @@ import { hashCanonical } from "../plan/canonical.ts";
 import type { ManagedFileSnapshot, Operation } from "../plan/types.ts";
 import type { FileChangesPullRequestConfiguration } from "../configuration/types.ts";
 import type { PullRequestResult } from "../report/types.ts";
-import type { GitHubClient } from "./client.ts";
+import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import { GitHubRepositoryStateSource } from "./rest_state_source.ts";
 
 type FileOperation = Extract<Operation, {
@@ -172,9 +172,9 @@ export async function reconcileFilePullRequest(options: {
     throw new Error("Ambiguous managed file pull request ownership");
   }
   let pull = pulls[0];
-  const assertPull = (value: PullRequest, head?: string) => {
+  const assertPull = (value: PullRequest, head?: string, state = "open") => {
     if (
-      value.state !== "open" || value.head.ref !== branch ||
+      value.state !== state || value.head.ref !== branch ||
       value.head.repo?.full_name.toLowerCase() !== fullName.toLowerCase() ||
       value.base.ref !== snapshot.branch ||
       value.base.repo.full_name.toLowerCase() !== fullName.toLowerCase() ||
@@ -188,9 +188,22 @@ export async function reconcileFilePullRequest(options: {
     managedPullRequestBody(pull.body, delta);
   }
   if (delta.length === 0 && (!pull || !options.allowClosure)) {
+    await assertTarget();
     return;
   }
   const branchRef = repo + "/git/ref/heads/" + encodePath(branch);
+  const assertCurrent = async (expectedHead: string, locked = false) => {
+    if (await source.getBranchHead(repository, branch) !== expectedHead) {
+      throw new Error("Reconciliation branch changed concurrently");
+    }
+    if (
+      locked &&
+      await source.getBranchHead(repository, branch + "-lock") !== expectedHead
+    ) {
+      throw new Error("Reconciliation lock changed concurrently");
+    }
+    await assertTarget();
+  };
   const existingRef = await client.request<
     { object: { sha: string } } | undefined
   >(
@@ -226,10 +239,10 @@ export async function reconcileFilePullRequest(options: {
     existing.message.split("\n").includes(
       "Octosmith-Tree: " + existing.tree.sha,
     );
-  let emitted = false;
-  const emit = async (result: PullRequestResult) => {
-    if (!emitted) {
-      emitted = true;
+  let completedAction: PullRequestResult["action"] | undefined;
+  const recordCompletedAction = async (result: PullRequestResult) => {
+    if (completedAction === undefined) {
+      completedAction = result.action;
       await options.onPullRequest(result);
     }
   };
@@ -247,6 +260,18 @@ export async function reconcileFilePullRequest(options: {
     owner,
     repository,
   );
+  const assertMetadata = (value: PullRequest, includeLabels = false) => {
+    if (
+      value.title !== title ||
+      value.body !== managedPullRequestBody(value.body, delta) ||
+      includeLabels &&
+        (settings.labels ?? []).some((label) =>
+          !value.labels.some((current) => current.name === label)
+        )
+    ) {
+      throw new Error("Managed file PR metadata changed concurrently");
+    }
+  };
   if (
     branchCorrect && pull && delta.length > 0 && pull.title === title &&
     pull.body === managedPullRequestBody(pull.body, delta) &&
@@ -254,7 +279,18 @@ export async function reconcileFilePullRequest(options: {
       pull.labels.some((current) => current.name === label)
     )
   ) {
-    return;
+    pull = await client.get<PullRequest>(repo + "/pulls/" + pull.number);
+    assertPull(pull, head);
+    if (
+      pull.title === title &&
+      pull.body === managedPullRequestBody(pull.body, delta) &&
+      (settings.labels ?? []).every((label) =>
+        pull.labels.some((current) => current.name === label)
+      )
+    ) {
+      await assertCurrent(head!);
+      return;
+    }
   }
   const metadata = await client.get<{ node_id: string }>(repo);
   const updateRefs = async (
@@ -342,45 +378,43 @@ export async function reconcileFilePullRequest(options: {
     { name: lock, beforeOid: ZERO_OID, afterOid: nextHead, force: false },
   ]);
   head = nextHead;
+  let reconciliationFailed = false;
+  let reconciliationError: unknown;
   try {
-    if (!branchCorrect && pull && delta.length > 0) {
-      await emit(result(pull, "updated"));
-    }
-    await assertTarget();
-    const finalRef = await client.get<{ object: { sha: string } }>(branchRef);
-    if (finalRef.object.sha !== head) {
-      throw new Error("Reconciliation branch changed concurrently");
-    }
+    await assertCurrent(head, true);
     if (pull) {
       pull = await client.get<PullRequest>(repo + "/pulls/" + pull.number);
       assertPull(pull, head);
       const nextBody = managedPullRequestBody(pull.body, delta);
+      await assertCurrent(head, true);
       if (delta.length === 0) {
         const closed = await client.request<PullRequest>(
           "PATCH",
           repo + "/pulls/" + pull.number,
           { body: { state: "closed" } },
         );
-        if (closed.state !== "closed") {
-          throw new Error("GitHub did not confirm PR closure");
-        }
-        await emit({
+        assertPull(closed, head, "closed");
+        await assertCurrent(head, true);
+        await recordCompletedAction({
           repository,
           number: closed.number,
           url: closed.html_url,
           action: "closed",
           reason: "no_differences",
         });
-        return;
-      }
-      if (pull.body !== nextBody || pull.title !== title) {
+      } else if (pull.body !== nextBody || pull.title !== title) {
         const updated = await client.request<PullRequest>(
           "PATCH",
           repo + "/pulls/" + pull.number,
           { body: { title, body: nextBody } },
         );
         assertPull(updated, head);
-        await emit(result(updated, "updated"));
+        assertMetadata(updated);
+        await assertCurrent(head, true);
+        pull = updated;
+        await recordCompletedAction(result(updated, "updated"));
+      } else if (!branchCorrect) {
+        await recordCompletedAction(result(pull, "updated"));
       }
     } else {
       pull = await client.request<PullRequest>("POST", repo + "/pulls", {
@@ -396,27 +430,61 @@ export async function reconcileFilePullRequest(options: {
         },
       });
       assertPull(pull, head);
-      await emit(result(pull, "opened"));
+      assertMetadata(pull);
+      await assertCurrent(head, true);
+      await recordCompletedAction(result(pull, "opened"));
     }
-    const missingLabels = [...new Set(settings.labels ?? [])].sort().filter((
-      label,
-    ) => !pull.labels.some((current) => current.name === label));
+    const missingLabels = delta.length === 0
+      ? []
+      : [...new Set(settings.labels ?? [])].sort().filter((
+        label,
+      ) => !pull.labels.some((current) => current.name === label));
     if (missingLabels.length > 0) {
+      pull = await client.get<PullRequest>(repo + "/pulls/" + pull.number);
+      assertPull(pull, head);
+      assertMetadata(pull);
+      await assertCurrent(head, true);
       await client.request(
         "POST",
         repo + "/issues/" + pull.number + "/labels",
         { body: { labels: missingLabels } },
       );
-      await emit(result(pull, "updated"));
+      pull = await client.get<PullRequest>(repo + "/pulls/" + pull.number);
+      assertPull(pull, head);
+      assertMetadata(pull, true);
+      await assertCurrent(head, true);
+      await recordCompletedAction(result(pull, "updated"));
     }
-  } finally {
+  } catch (error) {
+    reconciliationFailed = true;
+    reconciliationError = error;
+  }
+  try {
     await updateRefs([{
       name: lock,
       beforeOid: nextHead,
       afterOid: ZERO_OID,
       force: false,
     }]);
+  } catch (cleanupError) {
+    const original = reconciliationError instanceof GitHubRequestError
+      ? "GitHub managed-file reconciliation failed (HTTP " +
+        reconciliationError.status + ")"
+      : reconciliationError instanceof Error
+      ? reconciliationError.message
+      : "Managed-file reconciliation failed";
+    throw new Error(
+      (reconciliationFailed ? original + ". " : "") +
+        "Reconciliation lock cleanup failed; inspect " + branch +
+        "-lock before retrying",
+      { cause: cleanupError },
+    );
   }
+  if (reconciliationFailed) throw reconciliationError;
+  pull = await client.get<PullRequest>(repo + "/pulls/" + pull.number);
+  assertPull(pull, head, completedAction === "closed" ? "closed" : "open");
+  if (delta.length > 0) assertMetadata(pull, true);
+  await assertCurrent(head);
 }
 
 function filePath(operation: FileOperation): string {

@@ -59,6 +59,30 @@ The destination may be a regular file, FIFO, or another writable path.
 PR events precede repository completion and use the same canonical lifecycle
 result as apply JSON. An untouched PR emits no lifecycle event. Successful
 outcomes remain in the final report even if a later step or repository fails.
+
+A lifecycle event confirms a **completed action**, not successful completion of
+the entire repository reconciliation:
+
+- `opened`: GitHub created the PR, its head/base and generated metadata are
+  confirmed, and target/head/lock validation succeeds afterward.
+- `updated`: the desired branch and PR title/generated section are confirmed
+  after the last required core change. An intermediate branch replacement alone
+  never qualifies. For a labels-only change, the label write and current PR
+  state must also be confirmed.
+- `closed`: an authoritative empty delta was validated immediately before the
+  close request, GitHub confirmed closure, and subsequent state validation
+  succeeded.
+
+Labels are ancillary to an already completed creation or core metadata update.
+For example, a body-update failure after branch replacement emits nothing, but a
+label failure after a confirmed body update retains `updated`. A newly opened PR
+retains `opened` if label assignment fails; it does not also emit `updated`. A
+completed closure retains `closed` if lock cleanup fails. The repository report
+and exit status still indicate failure, including any later target drift.
+Consumers must use `resource.applied` and the final report to determine overall
+reconciliation success. Each PR contributes at most one lifecycle event per
+apply.
+
 For example, a closure event is one NDJSON line:
 
 ```json
