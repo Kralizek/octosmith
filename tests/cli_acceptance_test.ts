@@ -360,7 +360,7 @@ for (const policy of ["error", "ignore"] as const) {
                   : command[0] === "apply"
                   ? "  Apply cannot complete successfully.\n"
                   : "  Plan cannot complete successfully.\n") +
-                "  unmatched",
+                "\n  - unmatched",
             );
             const failed = policy === "ignore"
               ? 0
