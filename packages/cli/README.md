@@ -178,9 +178,10 @@ these values are not interchangeable:
 Unmatched repositories (3):
   Policy: ignore
   These repositories are excluded from reconciliation.
-  legacy-service
-  archived-service
-  docs-site
+
+  - legacy-service
+  - archived-service
+  - docs-site
 
 Warnings:
   Skipped runtime values:

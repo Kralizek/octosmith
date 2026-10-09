@@ -81,8 +81,9 @@ export function renderReport(
             ? "  Apply cannot complete successfully."
             : "  Plan cannot complete successfully.",
         );
+        lines.push("");
       }
-      lines.push(...group.names.map((name) => "  " + name));
+      lines.push(...group.names.map((name) => "  - " + name));
     }
   }
 
