@@ -254,6 +254,12 @@ each resource as `valid`, `template`, or `state` and applies nothing. Resource
 state is checked again immediately before mutation. Stored operations are
 executed exactly and are never rebuilt.
 
+PR-mode artifacts also contain the complete desired managed files and target
+commit snapshot, but never PR numbers, URLs, or lifecycle commands. Target
+advancement or missing snapshots require a new plan. An empty operation list
+still runs apply-time PR reconciliation and can close an obsolete PR. Direct
+delivery retains its existing managed-path concurrency semantics.
+
 Apply is not transactional. If one operation fails, earlier operations for that
 repository may already have been applied. Remaining operations for that
 repository are skipped, and Octosmith stops before mutating later repositories.
@@ -319,13 +325,41 @@ octosmith plan --format json --path ./configuration
 octosmith apply --format json --path ./configuration
 ```
 
-JSON contains the full structured report, including pull requests opened by an
-apply. Text hides unchanged items and affected-resource lists unless `--verbose`
-is supplied.
+JSON contains the full structured report. Apply results include a canonical
+`pullRequests` collection, sorted and deduplicated, with successful `opened`,
+`updated`, and `closed` outcomes. Closed entries have
+`reason: "no_differences"`. No-op PRs and direct file writes contribute no
+lifecycle entry. Plan reports never contain actual PR outcomes. Successful
+entries survive later failures.
 
-When file operations open pull requests, the apply report lists each newly
-opened PR once with its repository, number, and canonical GitHub URL. Reused or
-updated pull requests and direct file writes are not reported as newly opened.
+```json
+{
+  "pullRequests": [
+    {
+      "repository": "api-service",
+      "number": 42,
+      "url": "https://github.com/acme/api-service/pull/42",
+      "action": "opened"
+    },
+    {
+      "repository": "worker",
+      "number": 56,
+      "url": "https://github.com/acme/worker/pull/56",
+      "action": "closed",
+      "reason": "no_differences"
+    }
+  ]
+}
+```
+
+Text hides unchanged items and affected-resource lists unless `--verbose` is
+supplied. Apply ends with a consolidated section when there are PR outcomes:
+
+```text
+Pull requests:
+  api-service - acme/api-service#42 https://github.com/acme/api-service/pull/42 - opened
+  worker - acme/worker#56 https://github.com/acme/worker/pull/56 - closed (no_differences)
+```
 
 `--quiet` suppresses normal stdout for `template validate`, `plan`, and `apply`.
 It cannot be combined with `--format json`.
@@ -336,7 +370,7 @@ query parameters, or credentials. The final report remains on stdout.
 
 ## Resource events
 
-`plan` and `apply` can write one NDJSON event per processed repository:
+`plan` and `apply` can write NDJSON repository and PR lifecycle events:
 
 ```sh
 octosmith apply \
@@ -349,9 +383,16 @@ file or FIFO.
 
 - `plan` emits `resource.planned`
 - `apply` emits `resource.applied`
+- apply also emits `pull_request.opened`, `pull_request.updated`, and
+  `pull_request.closed` immediately after successful corresponding GitHub
+  actions
 
-Events are emitted as each repository finishes. The normal report still goes to
-stdout and diagnostics remain on stderr.
+Repository events are emitted as each repository finishes. PR events use
+`source: {kind: "github.organization", id: organization}`,
+`subject: {kind: "github.pull_request", id: "repository#number"}`, producer
+`octosmith`, and the canonical lifecycle result as `data`. They are not emitted
+again when the final report is rendered. The normal report still goes to stdout
+and diagnostics remain on stderr.
 
 Failure to open or write an explicitly requested event output fails the command
 rather than silently dropping events.

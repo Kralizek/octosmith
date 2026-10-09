@@ -5,6 +5,12 @@ version: 1
 organization: example-org
 
 repositories:
+  file_changes:
+    mode: pull_request
+    pull_request:
+      introduction: |
+        Repository configuration is centrally managed.
+        Please review the changes before merging.
   scope:
     include:
       teams:

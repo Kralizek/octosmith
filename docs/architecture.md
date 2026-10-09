@@ -140,8 +140,29 @@ repository default branch. Fresh planning reads the desired default branch;
 persisted preflight derives the branch from the ordered saved operations. Branch
 existence and file expectations are checked before mutation, and delivery is
 pinned to that branch. All batched file operations must use one execution
-branch. Preconditions include managed paths and their replay SHAs, not unrelated
-files or the branch's whole commit history.
+branch. Direct delivery retains managed-path and replay-SHA preconditions.
+
+PR-mode plans additionally carry `managedFiles`: the complete desired file list,
+target branch, and immutable target commit SHA. Files are read at that SHA, not
+at a moving ref. Even an empty desired list has a snapshot, allowing apply to
+close obsolete PRs without introducing lifecycle commands into persisted plans.
+Any target advancement invalidates a saved PR-mode plan, including changes to
+unmanaged files. Old PR-mode artifacts without this snapshot must be recreated.
+
+The GitHub sink shares the planner's file-delta computation and verifies that
+the saved operations equal the complete desired delta. It builds a fresh tree on
+the target and uses atomic GraphQL ref updates with expected-old-SHA guards. A
+reserved lock ref prevents competing Octosmith executions from changing the
+branch while PR metadata or closure is being reconciled. The sink's finish hook
+runs after successful operations, including zero-operation plans. It never runs
+after a failed operation.
+
+PR identity, creation, updates, closure, and outcomes exist only during apply.
+The canonical `PullRequestResult` carries repository, number, canonical URL,
+action, and a closure reason. Successful outcomes are captured before subsequent
+steps can fail; an unchanged PR contributes no outcome. The branch is retained
+after closure, and temporary locks are compare-and-delete released. See
+[recovery and ownership rules](configuration.md#reconciliation-lifecycle).
 
 The persisted apply boundary is:
 
@@ -182,8 +203,12 @@ requests created by the current execution.
 
 ## Events
 
-Event emission is a CLI concern layered on repository reports. The core engine
-does not depend on Hooksmith.
+Event serialization is a CLI concern. The sink records canonical lifecycle
+results and invokes an apply observer immediately after successful GitHub
+actions; the CLI converts these into Hooksmith events. Repository completion
+still emits `resource.applied`. The final report aggregates the same results
+instead of re-emitting events or parsing formatted text. The core engine does
+not depend on Hooksmith. Plan execution never emits PR lifecycle events.
 
 ## Scaffolding
 

@@ -91,6 +91,13 @@ Deno.test("loads example configuration and templates", async () => {
     version: 1,
     organization: "example-org",
     repositories: {
+      fileChanges: {
+        mode: "pull_request",
+        pullRequest: {
+          introduction:
+            "Repository configuration is centrally managed.\nPlease review the changes before merging.\n",
+        },
+      },
       scope: {
         include: {
           teams: ["platform-team"],

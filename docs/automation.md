@@ -53,6 +53,34 @@ The destination may be a regular file, FIFO, or another writable path.
 
 - plan emits `resource.planned`
 - apply emits `resource.applied`
+- successful managed PR operations emit `pull_request.opened`,
+  `pull_request.updated`, or `pull_request.closed` during apply
+
+PR events precede repository completion and use the same canonical lifecycle
+result as apply JSON. An untouched PR emits no lifecycle event. Successful
+outcomes remain in the final report even if a later step or repository fails.
+For example, a closure event is one NDJSON line:
+
+```json
+{
+  "type": "pull_request.closed",
+  "timestamp": "2026-10-09T12:00:00.000Z",
+  "source": { "kind": "github.organization", "id": "example-org" },
+  "subject": { "kind": "github.pull_request", "id": "service-api#123" },
+  "metadata": { "producer": "octosmith" },
+  "data": {
+    "repository": "service-api",
+    "number": 123,
+    "url": "https://github.com/example-org/service-api/pull/123",
+    "action": "closed",
+    "reason": "no_differences"
+  }
+}
+```
+
+Events contain no managed-file contents, patches, or secrets. Plan only emits
+`resource.planned`, including when a zero-operation plan may require apply-time
+PR cleanup.
 
 When scaffolding with `--event-streaming`, Octosmith generates a Hooksmith
 example. Hooksmith runs in a Deno container, receives events through stdin, and
