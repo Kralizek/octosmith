@@ -11,6 +11,7 @@ export async function readCurrentState(
   source: RepositoryStateSource,
   desired: DesiredState,
   operations?: readonly Operation[],
+  options: { readonly authoritativeFiles?: boolean } = {},
 ): Promise<CurrentState> {
   const repository = desired.repository;
   const strict = desired.collections === "strict";
@@ -77,7 +78,16 @@ export async function readCurrentState(
       }),
     ]),
   ];
-  const files = await readOwnedFiles(source, repository, paths, filesBranch);
+  const filesBaseSha = options.authoritativeFiles
+    ? await source.getBranchHead(repository, filesBranch)
+    : undefined;
+  const files = await readOwnedFiles(
+    source,
+    repository,
+    paths,
+    filesBranch,
+    filesBaseSha,
+  );
 
   return {
     repository,
@@ -135,7 +145,8 @@ export async function readCurrentState(
       : strict
       ? environments
       : filterSparseEnvironments(environments, desired.environments),
-    ...(paths.length > 0 && { filesBranch }),
+    ...((paths.length > 0 || filesBaseSha !== undefined) && { filesBranch }),
+    ...(filesBaseSha !== undefined && { filesBaseSha }),
     files,
   };
 }
@@ -180,14 +191,17 @@ async function readOwnedFiles(
   repository: string,
   paths: readonly string[],
   branch: string,
+  baseSha?: string,
 ): Promise<CurrentState["files"]> {
   if (paths.length === 0) {
     return [];
   }
 
-  await source.getBranchHead(repository, branch);
+  if (baseSha === undefined) {
+    await source.getBranchHead(repository, branch);
+  }
   const files = await Promise.all(
-    paths.map((path) => source.getFile(repository, path, branch)),
+    paths.map((path) => source.getFile(repository, path, baseSha ?? branch)),
   );
 
   return files.filter((file): file is NonNullable<typeof file> =>

@@ -2,6 +2,7 @@ import {
   aggregateGitHubPermissionRequirements,
   type GitHubPermissionRequirement,
   type OperationType,
+  requiredPermissionsForFileReconciliation,
   requiredPermissionsForManagedFile,
   requiredPermissionsForOperationType,
 } from "../plan/permissions.ts";
@@ -43,6 +44,9 @@ export function requiredPermissionsForConfiguration(
     }
 
     return [
+      ...(delivery === "pull_request"
+        ? requiredPermissionsForFileReconciliation()
+        : []),
       ...potentialOperationTypes(template.repository, strict).flatMap((type) =>
         requiredPermissionsForOperationType(type, delivery)
       ),

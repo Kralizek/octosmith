@@ -184,8 +184,10 @@ Deno.test("template permissions --format github-output renders permission-* line
       output.join("\n"),
       [
         "permission-administration=write",
+        "permission-contents=write",
         "permission-members=read",
         "permission-metadata=read",
+        "permission-pull-requests=write",
       ].join("\n"),
     );
   } finally {

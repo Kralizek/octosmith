@@ -31,7 +31,15 @@ import {
   validateLoadedConfiguration,
   validateTemplateDirectoryDetailed,
 } from "@octosmith/octosmith";
-import { openEventOutput, toRepositoryEvent } from "./events.ts";
+import {
+  openEventOutput,
+  toPullRequestEvent,
+  toRepositoryEvent,
+} from "./events.ts";
+import {
+  type PullRequestResult,
+  uniquePullRequests,
+} from "@octosmith/octosmith";
 import { type GitHubTokenOptions, resolveGitHubToken } from "./auth.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import {
@@ -270,6 +278,14 @@ function createCli(
           }
         };
 
+        const onPullRequest = async (result: PullRequestResult) => {
+          if (eventOutput) {
+            await eventOutput.write(
+              toPullRequestEvent(loaded.configuration.organization, result),
+            );
+          }
+        };
+
         try {
           if (mode === "apply" && persistedArtifact !== undefined) {
             try {
@@ -284,7 +300,10 @@ function createCli(
                 loaded,
                 artifact,
                 onRepositoryApplied,
-                { skipMissingValues: modeOptions.skipMissingValues },
+                {
+                  skipMissingValues: modeOptions.skipMissingValues,
+                  onPullRequest,
+                },
               );
             } catch (error) {
               if (error instanceof PersistedPlanStaleError) {
@@ -305,6 +324,7 @@ function createCli(
               ...(template !== undefined && { template }),
               skipMissingValues: modeOptions.skipMissingValues,
               onRepositoryApplied,
+              onPullRequest,
               onResourceInspected: (resource) =>
                 inspectedResources.push(resource),
               ...(mode === "plan" && modeOptions.out !== undefined && {
@@ -318,16 +338,11 @@ function createCli(
           eventOutput?.close();
         }
 
-        const pullRequestsOpened = [...new Map(
-          repositories.flatMap((repository) =>
-            repository.pullRequestsOpened ?? []
-          ).map((pullRequest) => [
-            pullRequest.repository + "#" + pullRequest.number,
-            pullRequest,
-          ]),
-        ).values()];
+        const pullRequests = uniquePullRequests(
+          repositories.flatMap((repository) => repository.pullRequests ?? []),
+        );
         const reportedRepositories = repositories.map(({
-          pullRequestsOpened: _pullRequestsOpened,
+          pullRequests: _pullRequests,
           ...repository
         }) => repository);
         const report: Report = {
@@ -338,7 +353,7 @@ function createCli(
           mode,
           unmatchedPolicy: loaded.configuration.repositories.settings
             ?.unmatchedRepositories ?? "error",
-          ...(pullRequestsOpened.length > 0 && { pullRequestsOpened }),
+          ...(mode === "apply" && { pullRequests }),
           ...(persistedArtifact === undefined && {
             inspection: summarizeResourceInspection(inspectedResources),
           }),

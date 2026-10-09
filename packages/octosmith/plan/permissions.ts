@@ -186,6 +186,14 @@ const pullRequestFileOperationPermissions = [
   repository("pull_requests", "write"),
 ] as const satisfies readonly GitHubPermissionRequirement[];
 
+/** Permissions for reconciling an existing PR even when no file operations remain. */
+export function requiredPermissionsForFileReconciliation(): readonly GitHubPermissionRequirement[] {
+  return [
+    repository("contents", "write"),
+    repository("pull_requests", "write"),
+  ];
+}
+
 /** Returns display metadata for a normalized GitHub permission requirement. */
 export function getGitHubPermissionDescriptor(
   requirement: GitHubPermissionRequirement,
@@ -313,9 +321,14 @@ export function requiredPermissionsForPlan(
   fileDelivery?: FileDeliveryMode,
 ): readonly GitHubPermissionRequirement[] {
   return aggregateGitHubPermissionRequirements(
-    plan.operations.flatMap((operation) =>
-      requiredPermissionsForOperation(operation, fileDelivery)
-    ),
+    [
+      ...(plan.managedFiles !== undefined && fileDelivery !== "direct"
+        ? requiredPermissionsForFileReconciliation()
+        : []),
+      ...plan.operations.flatMap((operation) =>
+        requiredPermissionsForOperation(operation, fileDelivery)
+      ),
+    ],
   );
 }
 

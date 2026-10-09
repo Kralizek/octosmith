@@ -202,6 +202,12 @@ export function projectOwnedCurrentState(
     }
   }
 
+  if (current.filesBaseSha !== undefined) {
+    projected.filesBaseSha = current.filesBaseSha;
+    projected.filesBranch = current.filesBranch ??
+      current.settings.defaultBranch;
+  }
+
   const replay = persistedOperationContract(current, operations).state;
   if (Object.keys(replay).length > 0) {
     projected.replay = replay;

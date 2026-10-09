@@ -1,5 +1,9 @@
 import type { EventDocument } from "@hooksmith/core";
-import type { ApplyItemReport, RepositoryReport } from "@octosmith/octosmith";
+import type {
+  ApplyItemReport,
+  PullRequestResult,
+  RepositoryReport,
+} from "@octosmith/octosmith";
 import type { ApplyMode } from "./apply.ts";
 
 /** Describes repository event data. */
@@ -35,6 +39,25 @@ export function toRepositoryEvent(
       items: report.items,
       ...(report.error !== undefined && { error: report.error }),
     },
+  };
+}
+
+/** Convert a successful apply-time PR outcome into a lifecycle event. */
+export function toPullRequestEvent(
+  organization: string,
+  result: PullRequestResult,
+  timestamp: Date = new Date(),
+): EventDocument<PullRequestResult> {
+  return {
+    type: "pull_request." + result.action,
+    timestamp: timestamp.toISOString(),
+    source: { kind: "github.organization", id: organization },
+    subject: {
+      kind: "github.pull_request",
+      id: result.repository + "#" + result.number,
+    },
+    metadata: { producer: "octosmith" },
+    data: result,
   };
 }
 

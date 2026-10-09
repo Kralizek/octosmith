@@ -203,18 +203,23 @@ Deno.test("strict empty collections can remove resources; explicit cannot", asyn
       await loadConfigurationDirectory(explicit),
       "second",
     );
-    assertEquals(sparse, []);
+    assertEquals(sparse, [
+      { scope: "repository", permission: "contents", access: "write" },
+      { scope: "repository", permission: "pull_requests", access: "write" },
+    ]);
     const authoritative = requiredPermissionsForConfiguration(
       await loadConfigurationDirectory(strict),
       "second",
     );
     assertEquals(authoritative, [
       { scope: "repository", permission: "administration", access: "write" },
+      { scope: "repository", permission: "contents", access: "write" },
       {
         scope: "repository",
         permission: "dependabot_secrets",
         access: "write",
       },
+      { scope: "repository", permission: "pull_requests", access: "write" },
       { scope: "repository", permission: "secrets", access: "write" },
     ]);
   } finally {
@@ -231,7 +236,10 @@ Deno.test("empty nested repository settings do not imply administration access",
         await loadConfigurationDirectory(root),
         "fourth",
       ),
-      [],
+      [
+        { scope: "repository", permission: "contents", access: "write" },
+        { scope: "repository", permission: "pull_requests", access: "write" },
+      ],
     );
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -273,6 +281,8 @@ repository:
             permission: "administration",
             access: "write",
           },
+          { scope: "repository", permission: "contents", access: "write" },
+          { scope: "repository", permission: "pull_requests", access: "write" },
         ],
       );
     }
@@ -365,7 +375,10 @@ repositories:
       requiredPermissionsForConfiguration(
         await loadConfigurationDirectory(root),
       ),
-      [],
+      [
+        { scope: "repository", permission: "contents", access: "write" },
+        { scope: "repository", permission: "pull_requests", access: "write" },
+      ],
     );
   } finally {
     await Deno.remove(root, { recursive: true });

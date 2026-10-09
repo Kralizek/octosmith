@@ -95,7 +95,13 @@ export class FetchGitHubClient implements GitHubClient {
       ? this.#baseUrl
       : this.#baseUrl + "/";
     const relativePath = path.startsWith("/") ? path.slice(1) : path;
-    const url = new URL(relativePath, baseUrl);
+    const url = new URL(
+      relativePath === "graphql" &&
+        new URL(baseUrl).pathname.endsWith("/api/v3/")
+        ? "../graphql"
+        : relativePath,
+      baseUrl,
+    );
 
     for (const [name, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) {

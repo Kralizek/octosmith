@@ -32,6 +32,8 @@ export interface CurrentState {
   readonly environments: readonly Environment[];
   /** Branch used for the managed-file snapshot; defaults to settings.defaultBranch. */
   readonly filesBranch?: string;
+  /** Immutable target commit for authoritative managed-file reconciliation. */
+  readonly filesBaseSha?: string;
   readonly files: readonly CurrentFile[];
 }
 

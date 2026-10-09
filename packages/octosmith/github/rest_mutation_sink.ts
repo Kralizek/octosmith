@@ -7,13 +7,15 @@ import type {
   DesiredRepositorySettings,
   DesiredRuleset,
   FileChangesConfiguration,
+  ManagedFileSnapshot,
   Operation,
   RulesetDefinition,
   Variable,
 } from "../mod.ts";
 import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
-import type { PullRequestReference } from "../report/types.ts";
+import type { PullRequestResult } from "../report/types.ts";
+import { reconcileFilePullRequest } from "./file_pull_request.ts";
 
 /** Describes secret value provider. */
 export type SecretValueProvider = (name: string) => string;
@@ -26,6 +28,8 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly fileChanges?: FileChangesConfiguration;
   readonly preparedFileChanges?: PreparedFileChanges;
   readonly fileBranch?: string;
+  readonly managedFiles?: ManagedFileSnapshot;
+  readonly allowClosure?: boolean;
 }
 
 type FileOperation = Extract<
@@ -49,18 +53,23 @@ type EffectiveFileChanges =
     readonly commitMessage: string;
     readonly branchPrefix: string;
     readonly title: string;
+    readonly introduction: string;
     readonly labels: readonly string[];
   };
 
 /** Describes GitHub repository mutation sink. */
 export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
-  readonly pullRequestsOpened: PullRequestReference[] = [];
+  readonly pullRequests: PullRequestResult[] = [];
+  onPullRequest?: (result: PullRequestResult) => void | Promise<void>;
   readonly #client: GitHubClient;
   readonly #owner: string;
   readonly #secretValue: SecretValueProvider;
   readonly #fileChanges: EffectiveFileChanges;
   readonly #preparedFileChanges?: PreparedFileChanges;
   readonly #fileBranch?: string;
+  readonly #managedFiles?: ManagedFileSnapshot;
+  readonly #allowClosure: boolean;
+  #filesReconciled = false;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
     this.#client = options.client;
@@ -71,12 +80,16 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
     this.#preparedFileChanges = options.preparedFileChanges;
     this.#fileBranch = options.fileBranch;
+    this.#managedFiles = options.managedFiles;
+    this.#allowClosure = options.allowClosure ?? true;
   }
 
   prepare(
     _repository: string,
     operations: readonly Operation[],
     fileBranch?: string,
+    managedFiles?: ManagedFileSnapshot,
+    allowClosure: boolean = this.#allowClosure,
   ): RepositoryMutationSink {
     const names = persistedOperationSecretSources(operations);
     const values = new Map<string, string>();
@@ -103,6 +116,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       },
       fileChanges: toConfiguration(this.#fileChanges),
       fileBranch: fileBranch ?? this.#fileBranch,
+      managedFiles: managedFiles ?? this.#managedFiles,
+      allowClosure,
       ...(fileOperations.length > 0 && {
         preparedFileChanges: {
           operations: fileOperations,
@@ -110,6 +125,15 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         },
       }),
     });
+  }
+
+  async finish(repository: string): Promise<void> {
+    if (this.#fileChanges.mode === "pull_request" && !this.#filesReconciled) {
+      await this.applyFileChanges(
+        repository,
+        this.#preparedFileChanges?.operations ?? [],
+      );
+    }
   }
 
   async apply(repository: string, operation: Operation): Promise<void> {
@@ -546,6 +570,37 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     operations: readonly FileOperation[],
   ): Promise<void> {
+    if (this.#fileChanges.mode === "pull_request") {
+      if (this.#managedFiles === undefined) {
+        throw new Error(
+          "Pull-request delivery requires a complete managed-file snapshot",
+        );
+      }
+      await reconcileFilePullRequest({
+        client: this.#client,
+        owner: this.#owner,
+        repository,
+        snapshot: this.#managedFiles,
+        operations,
+        commitMessage: this.#fileChanges.commitMessage,
+        settings: this.#fileChanges,
+        allowClosure: this.#allowClosure,
+        onPullRequest: async (result) => {
+          this.pullRequests.push(result);
+          await this.onPullRequest?.(result);
+        },
+      }).catch((error) => {
+        if (error instanceof GitHubRequestError) {
+          throw new Error(
+            "GitHub managed-file reconciliation failed (HTTP " + error.status +
+              ")",
+          );
+        }
+        throw error;
+      });
+      this.#filesReconciled = true;
+      return;
+    }
     if (operations.length === 0) {
       return;
     }
@@ -621,166 +676,17 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       repository,
     );
 
-    if (this.#fileChanges.mode === "direct") {
-      const nextCommit = await this.createFileChangeCommit(
-        repositoryPath,
-        message,
-        nextTree.sha,
-        baseSha,
-      );
-      await this.#client.request(
-        "PATCH",
-        repositoryPath + "/git/refs/heads/" + encodePath(defaultBranch),
-        { body: { sha: nextCommit.sha, force: false } },
-      );
-      return;
-    }
-
-    const branch = this.#fileChanges.branchPrefix + "reconcile";
-    if (branch === defaultBranch) {
-      throw new Error(
-        "Managed file pull-request branch must not match default branch: " +
-          branch,
-      );
-    }
-    const branchRef = "heads/" + encodePath(branch);
-    const branchReadPath = repositoryPath + "/git/ref/" + branchRef;
-    const branchWritePath = repositoryPath + "/git/refs/" + branchRef;
-    let existingBranch = await this.#client.request<
-      { readonly object: { readonly sha: string } } | undefined
-    >("GET", branchReadPath, { allowNotFound: true });
-    let nextCommit = await this.createFileChangeCommit(
+    const nextCommit = await this.createFileChangeCommit(
       repositoryPath,
       message,
       nextTree.sha,
       baseSha,
-      existingBranch?.object.sha,
     );
-
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-      if (existingBranch === undefined) {
-        try {
-          await this.#client.request("POST", repositoryPath + "/git/refs", {
-            body: {
-              ref: "refs/heads/" + branch,
-              sha: nextCommit.sha,
-            },
-          });
-          break;
-        } catch (error) {
-          if (!isRetryableGitHubConflict(error)) {
-            throw error;
-          }
-          existingBranch = await this.#client.request<
-            { readonly object: { readonly sha: string } }
-          >("GET", branchReadPath);
-          nextCommit = await this.createFileChangeCommit(
-            repositoryPath,
-            message,
-            nextTree.sha,
-            baseSha,
-            existingBranch.object.sha,
-          );
-        }
-      }
-
-      try {
-        await this.#client.request("PATCH", branchWritePath, {
-          body: { sha: nextCommit.sha, force: false },
-        });
-        break;
-      } catch (error) {
-        if (!isRetryableGitHubConflict(error) || attempt === 2) {
-          throw error;
-        }
-        existingBranch = await this.#client.request<
-          { readonly object: { readonly sha: string } }
-        >("GET", branchReadPath);
-        nextCommit = await this.createFileChangeCommit(
-          repositoryPath,
-          message,
-          nextTree.sha,
-          baseSha,
-          existingBranch.object.sha,
-        );
-      }
-    }
-
-    let pulls = await this.#client.get<
-      readonly {
-        readonly number: number;
-      }[]
-    >(repositoryPath + "/pulls", {
-      state: "open",
-      head: this.#owner + ":" + branch,
-      base: defaultBranch,
-    });
-    const title = renderFileChangeText(
-      this.#fileChanges.title,
-      this.#owner,
-      repository,
+    await this.#client.request(
+      "PATCH",
+      repositoryPath + "/git/refs/heads/" + encodePath(defaultBranch),
+      { body: { sha: nextCommit.sha, force: false } },
     );
-
-    let pullNumber = pulls[0]?.number;
-    let existingPull = pullNumber !== undefined;
-    if (pullNumber === undefined) {
-      try {
-        const pull = await this.#client.request<{
-          readonly number: number;
-          readonly html_url: string;
-        }>(
-          "POST",
-          repositoryPath + "/pulls",
-          {
-            body: {
-              title,
-              head: branch,
-              base: defaultBranch,
-            },
-          },
-        );
-        pullNumber = pull.number;
-        this.pullRequestsOpened.push({
-          repository,
-          number: pull.number,
-          url: pull.html_url,
-        });
-      } catch (error) {
-        if (!isRetryableGitHubConflict(error)) {
-          throw error;
-        }
-        pulls = await this.#client.get<
-          readonly {
-            readonly number: number;
-          }[]
-        >(repositoryPath + "/pulls", {
-          state: "open",
-          head: this.#owner + ":" + branch,
-          base: defaultBranch,
-        });
-        pullNumber = pulls[0]?.number;
-        if (pullNumber === undefined) {
-          throw error;
-        }
-        existingPull = true;
-      }
-    }
-
-    if (existingPull) {
-      await this.#client.request(
-        "PATCH",
-        repositoryPath + "/pulls/" + pullNumber,
-        { body: { title } },
-      );
-    }
-
-    if (this.#fileChanges.labels.length > 0) {
-      await this.#client.request(
-        "POST",
-        repositoryPath + "/issues/" + pullNumber + "/labels",
-        { body: { labels: this.#fileChanges.labels } },
-      );
-    }
   }
 
   async validateFileOperation(
@@ -824,7 +730,6 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     message: string,
     tree: string,
     baseSha: string,
-    branchSha?: string,
   ): Promise<{ readonly sha: string }> {
     return await this.#client.request<{ readonly sha: string }>(
       "POST",
@@ -833,9 +738,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         body: {
           message,
           tree,
-          parents: branchSha !== undefined && branchSha !== baseSha
-            ? [baseSha, branchSha]
-            : [baseSha],
+          parents: [baseSha],
         },
       },
     );
@@ -1240,6 +1143,7 @@ function normalizeFileChanges(
     branchPrefix: configuration.pullRequest?.branchPrefix ?? "octosmith/",
     title: configuration.pullRequest?.title ??
       "Octosmith: reconcile managed files",
+    introduction: configuration.pullRequest?.introduction ?? "",
     labels: configuration.pullRequest?.labels ?? [],
   };
 }
@@ -1258,6 +1162,7 @@ function toConfiguration(
       pullRequest: {
         branchPrefix: settings.branchPrefix,
         title: settings.title,
+        introduction: settings.introduction,
         labels: settings.labels,
       },
     };
@@ -1271,23 +1176,6 @@ function renderFileChangeText(
   return template
     .replaceAll("{organization}", organization)
     .replaceAll("{repository}", repository);
-}
-
-function isRetryableGitHubConflict(error: unknown): boolean {
-  return error instanceof GitHubRequestError &&
-    error.status === 422 &&
-    (
-      error.details?.message === "Reference already exists" ||
-      error.details?.message === "Update is not a fast forward" ||
-      error.details?.message === "Validation Failed" &&
-        (error.details.errors ?? []).some((item) =>
-          typeof item === "object" && item !== null &&
-          typeof Reflect.get(item, "message") === "string" &&
-          String(Reflect.get(item, "message")).startsWith(
-            "A pull request already exists",
-          )
-        )
-    );
 }
 
 function encodePath(path: string): string {

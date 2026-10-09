@@ -187,3 +187,16 @@ Deno.test("plan permissions aggregate duplicate operation requirements", () => {
     ],
   );
 });
+
+Deno.test("zero-operation managed-file snapshots retain closure permissions", () => {
+  const plan = {
+    repository: "sample",
+    operations: [],
+    managedFiles: { branch: "main", baseSha: "head", files: [] },
+  };
+  assertEquals(requiredPermissionsForPlan(plan), [
+    { scope: "repository", permission: "contents", access: "write" },
+    { scope: "repository", permission: "pull_requests", access: "write" },
+  ]);
+  assertEquals(requiredPermissionsForPlan(plan, "direct"), []);
+});
