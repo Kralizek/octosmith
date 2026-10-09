@@ -27,15 +27,20 @@ export interface Report {
   readonly inspection?: ResourceInspectionResult;
   readonly mode?: "plan" | "apply";
   readonly unmatchedPolicy?: "error" | "ignore";
-  readonly pullRequestsOpened?: readonly PullRequestReference[];
+  readonly pullRequests?: readonly PullRequestResult[];
 }
 
-/** Describes a pull request opened by this apply execution. */
-export interface PullRequestReference {
-  readonly repository: string;
-  readonly number: number;
-  readonly url: string;
-}
+/** Successful apply-time lifecycle outcome for a managed-file pull request. */
+export type PullRequestResult =
+  & {
+    readonly repository: string;
+    readonly number: number;
+    readonly url: string;
+  }
+  & (
+    | { readonly action: "opened" | "updated" }
+    | { readonly action: "closed"; readonly reason: "no_differences" }
+  );
 
 /** Describes repository report. */
 export interface RepositoryReport {
@@ -46,7 +51,7 @@ export interface RepositoryReport {
   readonly items: readonly ApplyItemReport[];
   readonly error?: string;
   readonly diagnostics?: readonly RuntimeReferenceDiagnostic[];
-  readonly pullRequestsOpened?: readonly PullRequestReference[];
+  readonly pullRequests?: readonly PullRequestResult[];
 }
 
 /** Describes apply item report. */

@@ -18,6 +18,14 @@ import type { DesiredEnvironment, DesiredFile } from "../state/types.ts";
 export interface Plan {
   readonly repository: string;
   readonly operations: readonly Operation[];
+  readonly managedFiles?: ManagedFileSnapshot;
+}
+
+/** Complete desired managed files and the immutable target they were planned against. */
+export interface ManagedFileSnapshot {
+  readonly branch: string;
+  readonly baseSha: string;
+  readonly files: readonly DesiredFile[];
 }
 
 /** Describes apply item type. */

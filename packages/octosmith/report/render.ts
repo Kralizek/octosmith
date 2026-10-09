@@ -1,4 +1,5 @@
 import type { ApplyItemReport, Report, RepositoryReport } from "./types.ts";
+import { uniquePullRequests } from "./build.ts";
 import { describeRuntimeReferenceDiagnostic } from "../configuration/runtime_references.ts";
 
 /** Describes render report options. */
@@ -164,24 +165,24 @@ export function renderReport(
       " skipped runtime bindings",
   );
 
-  const pullRequests = [...new Map(
+  const pullRequests = report.mode === "plan" ? [] : uniquePullRequests(
     [
-      ...(report.pullRequestsOpened ?? []),
+      ...(report.pullRequests ?? []),
       ...report.repositories.flatMap((repository) =>
-        repository.pullRequestsOpened ?? []
+        repository.pullRequests ?? []
       ),
-    ].map((pullRequest) => [
-      pullRequest.repository + "#" + pullRequest.number,
-      pullRequest,
-    ]),
-  ).values()];
+    ],
+  );
   if (pullRequests.length > 0) {
-    lines.push("", "Pull requests opened (" + pullRequests.length + "):");
+    lines.push("", "Pull requests:");
     for (const pullRequest of pullRequests) {
       lines.push(
         "  " + pullRequest.repository + " — " + report.organization + "/" +
           pullRequest.repository + "#" + pullRequest.number + " " +
-          pullRequest.url,
+          pullRequest.url + " - " + pullRequest.action +
+          (pullRequest.action === "closed"
+            ? " (" + pullRequest.reason + ")"
+            : ""),
       );
     }
   }

@@ -1,5 +1,5 @@
-import type { Operation, Plan } from "../mod.ts";
-import type { PullRequestReference } from "../report/types.ts";
+import type { ManagedFileSnapshot, Operation, Plan } from "../mod.ts";
+import type { PullRequestResult } from "../report/types.ts";
 import { assertPersistedOperationsExecutable } from "../plan/operation_contract.ts";
 
 /** Describes apply operation status. */
@@ -16,22 +16,28 @@ export interface ApplyOperationResult {
 export interface ApplyPlanResult {
   readonly repository: string;
   readonly operations: readonly ApplyOperationResult[];
-  readonly pullRequestsOpened?: readonly PullRequestReference[];
+  readonly pullRequests?: readonly PullRequestResult[];
+  readonly error?: string;
 }
 
 /** Describes apply plan options. */
 export interface ApplyPlanOptions {
   readonly continueOnError?: boolean;
+  readonly onPullRequest?: (result: PullRequestResult) => void | Promise<void>;
 }
 
 /** Describes repository mutation sink. */
 export interface RepositoryMutationSink {
-  readonly pullRequestsOpened?: readonly PullRequestReference[];
+  readonly pullRequests?: readonly PullRequestResult[];
+  onPullRequest?: (result: PullRequestResult) => void | Promise<void>;
   prepare?(
     repository: string,
     operations: readonly Operation[],
+    fileBranch?: string,
+    managedFiles?: ManagedFileSnapshot,
   ): RepositoryMutationSink | Promise<RepositoryMutationSink>;
   apply(repository: string, operation: Operation): Promise<void>;
+  finish?(repository: string): Promise<void>;
 }
 
 /** Apply every operation in a plan through the configured mutation sink. */
@@ -42,8 +48,14 @@ export async function applyPlan(
 ): Promise<ApplyPlanResult> {
   assertPersistedOperationsExecutable(plan.operations);
   const preparedSink = sink.prepare
-    ? await sink.prepare(plan.repository, plan.operations)
+    ? await sink.prepare(
+      plan.repository,
+      plan.operations,
+      undefined,
+      plan.managedFiles,
+    )
     : sink;
+  preparedSink.onPullRequest = options.onPullRequest;
   const results: ApplyOperationResult[] = [];
   let failed = false;
 
@@ -72,12 +84,22 @@ export async function applyPlan(
     }
   }
 
+  let finishError: string | undefined;
+  if (!failed && preparedSink.finish) {
+    try {
+      await preparedSink.finish(plan.repository);
+    } catch (error) {
+      finishError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
   return {
     repository: plan.repository,
     operations: results,
-    ...(preparedSink.pullRequestsOpened !== undefined &&
-      preparedSink.pullRequestsOpened.length > 0 && {
-      pullRequestsOpened: preparedSink.pullRequestsOpened,
+    ...(preparedSink.pullRequests !== undefined &&
+      preparedSink.pullRequests.length > 0 && {
+      pullRequests: preparedSink.pullRequests,
     }),
+    ...(finishError !== undefined && { error: finishError }),
   };
 }

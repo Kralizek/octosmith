@@ -10,6 +10,7 @@ import {
   type PersistedPlanArtifact,
   type PersistedResourcePlan,
   projectOwnedCurrentState,
+  type PullRequestResult,
   resolveDesiredState,
   restoreEvaluations,
   type RuntimeReferenceDiagnostic,
@@ -53,7 +54,12 @@ export async function applyPersistedPlan(
   onResourceApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
   ) => void | Promise<void>,
-  options: { readonly skipMissingValues?: boolean } = {},
+  options: {
+    readonly skipMissingValues?: boolean;
+    readonly onPullRequest?: (
+      result: PullRequestResult,
+    ) => void | Promise<void>;
+  } = {},
 ): Promise<PersistedPlanPreflight> {
   if (options.skipMissingValues) {
     throw new Error(
@@ -96,6 +102,9 @@ export async function applyPersistedPlan(
         plan: {
           repository: resource.name,
           operations: resource.operations,
+          ...(resource.managedFiles !== undefined && {
+            managedFiles: resource.managedFiles,
+          }),
         },
         evaluations: restoreEvaluations(
           resource.evaluations,
@@ -124,6 +133,7 @@ export async function applyPersistedPlan(
     runtime,
     prepared,
     onResourceApplied,
+    options.onPullRequest,
   );
   return preflight;
 }
@@ -256,6 +266,24 @@ async function inspectResource(
 
   try {
     const current = await runtime.read(desired, resource.operations);
+    if (current.filesBaseSha !== undefined) {
+      const expected = {
+        branch: current.filesBranch ?? current.settings.defaultBranch,
+        baseSha: current.filesBaseSha,
+        files: [...(desired.files ?? [])].sort((left, right) =>
+          left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+        ),
+      };
+      if (
+        resource.managedFiles === undefined ||
+        !equalContentHash(
+          await hashCanonical(expected),
+          await hashCanonical(resource.managedFiles),
+        )
+      ) {
+        return { state: "state" };
+      }
+    }
     const stateHash = await hashCanonical(
       projectOwnedCurrentState(
         current,

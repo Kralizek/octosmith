@@ -296,6 +296,9 @@ repositories:
     pull_request:
       branch_prefix: "octosmith/"
       title: "Octosmith: reconcile {repository}"
+      introduction: |
+        Repository configuration is centrally managed.
+        Please review the changes before merging.
       labels:
         - automation
 ```
@@ -303,3 +306,72 @@ repositories:
 Use `mode: direct` to opt into writing one reconciliation commit directly to the
 default branch. Commit messages and pull-request titles support `{organization}`
 and `{repository}` placeholders.
+
+`introduction` is optional literal Markdown, not a placeholder template. It
+belongs to the central configuration (`repositories.fileChanges.pullRequest` in
+the TypeScript model), never to repository templates. It is written only on PR
+creation. Subsequent applies preserve human-authored text outside the
+`<!-- octosmith:files:start -->` / `<!-- octosmith:files:end -->` section. That
+section lists the full sorted create/update/remove delta and Octosmith
+attribution, without contents or diffs. Missing markers cause a section to be
+appended; malformed or duplicate markers fail before branch mutation.
+
+### Reconciliation lifecycle
+
+The reserved `<branch_prefix>reconcile` branch is authoritative, not cumulative.
+Each changed reconciliation has one commit based on the current target snapshot.
+For example, successive desired states A, A+B, and B produce exactly those
+managed changes, retaining unmerged changes that are still desired. Undeclared
+target-branch files remain untouched. Manual commits on the reserved branch are
+disposable.
+
+When the complete desired delta is empty, apply closes the matching owned PR
+with reason `no_differences`. This also works after removing all file
+declarations or when a saved plan contains zero operations. No matching open PR
+means no mutation. Missing inputs, stale targets, failed operations, and skipped
+runtime bindings never trigger closure. Direct mode does not manage PRs.
+
+Ownership requires the exact same-repository head and target plus an Octosmith
+commit trailer or a valid managed body section. An unrelated or ambiguous PR,
+unowned existing branch, or concurrently closed PR fails safely. Legacy branches
+without ownership evidence are not adopted automatically: inspect and close the
+old PR, then remove its reserved branch before running again.
+
+Branch replacement atomically checks both target and reserved-head SHAs using
+GitHub GraphQL `updateRefs`; it never force-updates the target. A temporary
+`<branch_prefix>reconcile-lock` ref serializes Octosmith executions through PR
+updates and closure. Conflicts are not retried against a competing head. Branch
+protection that rejects these operations causes failure, not a blind fallback.
+
+Closure resets the owned branch to a target-based empty-delta commit and retains
+it for reuse; Octosmith does not delete reconciliation branches. The temporary
+lock is deleted with an expected-SHA check. A cancelled run or indeterminate API
+failure can leave a lock: verify that no apply is running, inspect both refs and
+the PR, and have an operator remove only the abandoned lock before replanning.
+Do not configure other automation to write these reserved refs.
+
+GitHub does not provide a transaction spanning refs and PR metadata. Octosmith
+rechecks the target before every successful no-op return and validates the
+target, head, lock, and PR around lifecycle mutations. An already-correct PR is
+reread before accepting a no-op; human body changes are preserved. Successful
+mutation paths also validate PR state and target/head after releasing the lock,
+so target advancement during cleanup cannot silently succeed.
+
+Cleanup failures identify the reserved lock and retain any original failure.
+Cleanup uses an expected-SHA deletion and never removes a competing lock. A
+cancelled execution or ambiguous response can still leave the lock for operator
+recovery. Failed PR operations do not fall through to automatic closure.
+
+These checks establish correctness at their observations; they cannot prevent an
+external writer from changing refs or PR metadata during an in-flight request or
+after the final check. External writers do not honor the lock; avoid editing the
+reserved refs during apply. Detected drift fails reconciliation, but already
+executed GitHub side effects are not rolled back. A branch-only partial update
+produces no PR lifecycle outcome. Validated PR actions remain reported if an
+ancillary step or final validation later fails; see the
+[event success contract](automation.md#event-streaming).
+
+PR-mode planning snapshots the target commit even without file declarations.
+Applying requires Contents and Pull requests write permissions for cleanup;
+workflow changes and labels can need additional permissions. Use
+`template permissions` for the complete configured requirements.

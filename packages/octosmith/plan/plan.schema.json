@@ -101,6 +101,41 @@
         "state": {
           "$ref": "#/$defs/hash"
         },
+        "managedFiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["branch", "baseSha", "files"],
+          "properties": {
+            "branch": { "type": "string", "minLength": 1 },
+            "baseSha": { "type": "string", "minLength": 1 },
+            "files": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["path", "ensure", "content"],
+                    "properties": {
+                      "path": { "type": "string", "minLength": 1 },
+                      "ensure": { "enum": ["exact", "exists"] },
+                      "content": { "type": "string" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["path", "ensure"],
+                    "properties": {
+                      "path": { "type": "string", "minLength": 1 },
+                      "ensure": { "const": "absent" }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
         "operations": {
           "type": "array",
           "items": {

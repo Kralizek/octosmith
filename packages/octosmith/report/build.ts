@@ -7,7 +7,7 @@ import type { ApplyEvaluation, Plan } from "../plan/types.ts";
 import type {
   AppliedOperationLike,
   ApplyItemReport,
-  PullRequestReference,
+  PullRequestResult,
   RepositoryReport,
 } from "./types.ts";
 
@@ -41,10 +41,12 @@ export function reportAppliedRepository(
   operations: readonly AppliedOperationLike[],
   templateName?: string,
   diagnostics?: readonly RuntimeReferenceDiagnostic[],
-  pullRequestsOpened?: readonly PullRequestReference[],
+  pullRequests?: readonly PullRequestResult[],
+  error?: string,
 ): RepositoryReport {
   const applied = operations.filter((item) => item.status === "applied").length;
-  const failed = operations.some((item) => item.status === "failed");
+  const failed = error !== undefined ||
+    operations.some((item) => item.status === "failed");
   const skipped = operations.some((item) => item.status === "skipped");
 
   if (skipped && !failed) {
@@ -85,27 +87,39 @@ export function reportAppliedRepository(
     template,
     ...(templateName !== undefined && { templateName }),
     status: failed
-      ? applied > 0 ? "partially-applied" : "failed"
-      : operations.length === 0
+      ? applied > 0 || (pullRequests?.length ?? 0) > 0
+        ? "partially-applied"
+        : "failed"
+      : operations.length === 0 && (pullRequests?.length ?? 0) === 0
       ? "unchanged"
       : "applied",
     items,
     ...(diagnostics !== undefined && diagnostics.length > 0 && { diagnostics }),
-    ...(pullRequestsOpened !== undefined && pullRequestsOpened.length > 0 && {
-      pullRequestsOpened: uniquePullRequests(pullRequestsOpened),
+    ...(pullRequests !== undefined && pullRequests.length > 0 && {
+      pullRequests: uniquePullRequests(pullRequests),
     }),
+    ...(error !== undefined && { error }),
   };
 }
 
-function uniquePullRequests(
-  pullRequests: readonly PullRequestReference[],
-): readonly PullRequestReference[] {
+/** Deduplicate successful lifecycle outcomes and order them deterministically. */
+export function uniquePullRequests(
+  pullRequests: readonly PullRequestResult[],
+): readonly PullRequestResult[] {
   return [...new Map(
     pullRequests.map((pullRequest) => [
-      pullRequest.repository + "#" + pullRequest.number,
+      pullRequest.repository + "#" + pullRequest.number + ":" +
+      pullRequest.action,
       pullRequest,
     ]),
-  ).values()];
+  ).values()].sort((left, right) =>
+    left.repository < right.repository
+      ? -1
+      : left.repository > right.repository
+      ? 1
+      : left.number - right.number ||
+        (left.action < right.action ? -1 : left.action > right.action ? 1 : 0)
+  );
 }
 
 /** Build a repository report for a failed repository operation. */

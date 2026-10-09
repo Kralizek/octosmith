@@ -347,6 +347,55 @@ Deno.test("configuration rejects unsupported versions", async () => {
   );
 });
 
+Deno.test("configuration preserves a literal global PR introduction", async () => {
+  const introduction =
+    "Centrally **managed**.\nReview {repository} literally.\n";
+  await withConfiguration(
+    {
+      ...configuration,
+      repositories: {
+        ...configuration.repositories,
+        file_changes: {
+          mode: "pull_request",
+          pull_request: { introduction },
+        },
+      },
+    },
+    template,
+    async (root) => {
+      const loaded = await loadConfigurationDirectory(root);
+      const settings = loaded.configuration.repositories.fileChanges;
+      assertEquals(settings?.mode, "pull_request");
+      assertEquals(
+        settings?.mode === "pull_request" && settings.pullRequest?.introduction,
+        introduction,
+      );
+    },
+  );
+});
+
+Deno.test("configuration rejects a non-string PR introduction", async () => {
+  await withConfiguration(
+    {
+      ...configuration,
+      repositories: {
+        ...configuration.repositories,
+        file_changes: {
+          mode: "pull_request",
+          pull_request: { introduction: 42 },
+        },
+      },
+    },
+    template,
+    (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "introduction",
+      ),
+  );
+});
+
 Deno.test("configuration rejects empty file_changes", async () => {
   await withConfiguration(
     {

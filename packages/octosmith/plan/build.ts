@@ -25,8 +25,10 @@ import type {
   RulesetDefinition,
 } from "../state/rulesets.ts";
 import type {
+  CurrentFile,
   CurrentState,
   DesiredEnvironment,
+  DesiredFile,
   DesiredState,
 } from "../state/types.ts";
 import type { RuntimeReference } from "../configuration/runtime_references.ts";
@@ -101,6 +103,15 @@ export function buildPlan(
   return {
     repository: desired.repository,
     operations,
+    ...(current.filesBaseSha !== undefined && {
+      managedFiles: {
+        branch: current.filesBranch ?? current.settings.defaultBranch,
+        baseSha: current.filesBaseSha,
+        files: [...(desired.files ?? [])].sort((left, right) =>
+          left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+        ),
+      },
+    }),
   };
 }
 
@@ -584,11 +595,27 @@ function planFiles(
     return;
   }
 
-  assertUnique(desired.files.map((item) => item.path), "file");
+  operations.push(...buildFileOperations(current.files, desired.files));
+}
 
-  const currentByPath = new Map(current.files.map((item) => [item.path, item]));
+/** Compute the complete managed-file delta against a target snapshot. */
+export function buildFileOperations(
+  current: readonly CurrentFile[],
+  desired: readonly DesiredFile[],
+): Extract<
+  Operation,
+  { type: "create-file" | "update-file" | "delete-file" }
+>[] {
+  const operations: Extract<
+    Operation,
+    { type: "create-file" | "update-file" | "delete-file" }
+  >[] = [];
 
-  for (const file of desired.files) {
+  assertUnique(desired.map((item) => item.path), "file");
+
+  const currentByPath = new Map(current.map((item) => [item.path, item]));
+
+  for (const file of desired) {
     const actual = currentByPath.get(file.path);
 
     if (file.ensure === "absent") {
@@ -624,6 +651,7 @@ function planFiles(
       });
     }
   }
+  return operations;
 }
 
 function normalizeLineEndings(content: string): string {

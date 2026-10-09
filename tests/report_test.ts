@@ -2,11 +2,13 @@ import { assertEquals, assertStringIncludes } from "@std/assert";
 import {
   type ApplyEvaluation,
   type Operation,
+  type PullRequestResult,
   renderReport,
   type Report,
   reportAppliedRepository,
   reportFailedRepository,
   reportPlannedRepository,
+  uniquePullRequests,
 } from "@octosmith/octosmith";
 
 const operation: Operation = {
@@ -14,6 +16,72 @@ const operation: Operation = {
   name: "tier",
   value: "critical",
 };
+
+Deno.test("canonical PR reports sort and retain all outcomes across repository failures", () => {
+  const opened: PullRequestResult = {
+    repository: "zeta",
+    number: 7,
+    url: "https://github.com/acme/zeta/pull/7",
+    action: "opened",
+  };
+  const updated: PullRequestResult = {
+    repository: "alpha",
+    number: 3,
+    url: "https://github.com/acme/alpha/pull/3",
+    action: "updated",
+  };
+  const closed: PullRequestResult = {
+    repository: "beta",
+    number: 8,
+    url: "https://github.com/acme/beta/pull/8",
+    action: "closed",
+    reason: "no_differences",
+  };
+  const outcomes = uniquePullRequests([opened, closed, updated, opened]);
+  assertEquals(outcomes, [updated, closed, opened]);
+  const closureReport = reportAppliedRepository(
+    "code",
+    "beta",
+    [],
+    [],
+    undefined,
+    undefined,
+    [closed],
+  );
+  assertEquals(closureReport.status, "applied");
+  const report: Report = {
+    organization: "acme",
+    startedAt: new Date(0),
+    completedAt: new Date(1),
+    mode: "apply",
+    repositories: [
+      closureReport,
+      reportFailedRepository("failed", new Error("failed later")),
+    ],
+    pullRequests: outcomes,
+  };
+  const rendered = renderReport(report);
+  assertStringIncludes(rendered, "Pull requests:");
+  assertStringIncludes(rendered, "closed (no_differences)");
+  assertEquals(rendered.split(closed.url).length - 1, 1);
+  assertEquals(JSON.parse(JSON.stringify(report)).pullRequests, outcomes);
+  assertEquals(
+    renderReport({ ...report, mode: "plan" }).includes("Pull requests:"),
+    false,
+  );
+  const failed = reportAppliedRepository(
+    "code",
+    "beta",
+    [],
+    [],
+    undefined,
+    undefined,
+    [],
+    "closure failed",
+  );
+  assertEquals(failed.status, "failed");
+  assertEquals(failed.error, "closure failed");
+});
 
 const evaluation: ApplyEvaluation = {
   type: "custom-property",
@@ -520,6 +588,7 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
     repository: "sample",
     number: 42,
     url: "https://github.com/acme/sample/pull/42",
+    action: "opened" as const,
   };
   const failedOperation: Operation = {
     type: "set-custom-property",
@@ -550,7 +619,7 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
     [pullRequest, pullRequest],
   );
   assertEquals(applied.status, "partially-applied");
-  assertEquals(applied.pullRequestsOpened, [pullRequest]);
+  assertEquals(applied.pullRequests, [pullRequest]);
 
   const report: Report = {
     organization: "acme",
@@ -562,9 +631,9 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
       repository: "sample",
       status: "partially-applied",
       items: [],
-      pullRequestsOpened: [pullRequest, pullRequest],
+      pullRequests: [pullRequest, pullRequest],
     }],
-    pullRequestsOpened: [pullRequest],
+    pullRequests: [pullRequest],
     inspection: {
       resources: [{
         type: "repository",
@@ -579,7 +648,7 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
 
   assertStringIncludes(rendered, "Policy: error");
   assertStringIncludes(rendered, "Apply cannot complete successfully.");
-  assertStringIncludes(rendered, "Pull requests opened (1):");
+  assertStringIncludes(rendered, "Pull requests:");
   assertStringIncludes(
     rendered,
     "sample — acme/sample#42 https://github.com/acme/sample/pull/42",
@@ -589,7 +658,7 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
     1,
   );
   assertEquals(
-    (JSON.parse(JSON.stringify(report)) as Report).pullRequestsOpened,
+    (JSON.parse(JSON.stringify(report)) as Report).pullRequests,
     [pullRequest],
   );
 });

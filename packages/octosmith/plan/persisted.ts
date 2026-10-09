@@ -48,6 +48,7 @@ export interface PersistedResourcePlan {
   };
   readonly state: ContentHash;
   readonly operations: readonly Operation[];
+  readonly managedFiles?: Plan["managedFiles"];
   readonly evaluations: readonly PersistedApplyEvaluation[];
   readonly skippedRuntimeReferences?: readonly RuntimeReference[];
 }
@@ -114,6 +115,9 @@ export async function createPersistedPlanArtifact(
           ),
         ),
         operations: resource.plan.operations,
+        ...(resource.plan.managedFiles !== undefined && {
+          managedFiles: resource.plan.managedFiles,
+        }),
         evaluations: persistEvaluations(
           resource.evaluations,
           resource.plan.operations,
@@ -158,6 +162,7 @@ function normalizeConfigurationForHash(
         branchPrefix: fileChanges.pullRequest?.branchPrefix ?? "octosmith/",
         title: fileChanges.pullRequest?.title ??
           "Octosmith: reconcile managed files",
+        introduction: fileChanges.pullRequest?.introduction ?? "",
         labels: [...new Set(fileChanges.pullRequest?.labels ?? [])].sort(),
       },
     };

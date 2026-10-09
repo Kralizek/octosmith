@@ -12,6 +12,7 @@ import {
   type Operation,
   preflightRuntimeReferences,
   projectOwnedCurrentState,
+  type PullRequestResult,
   reportFailedRepository,
   reportPlannedRepository,
   resolveDesiredState,
@@ -56,7 +57,10 @@ export interface ApplyRuntime {
 
   recheck(resource: ExecutableResourcePlan): void | Promise<void>;
 
-  apply(resource: ExecutableResourcePlan): Promise<ApplyPlanResult>;
+  apply(
+    resource: ExecutableResourcePlan,
+    onPullRequest?: (result: PullRequestResult) => void | Promise<void>,
+  ): Promise<ApplyPlanResult>;
 }
 
 /** Describes GitHub runtime options. */
@@ -121,7 +125,9 @@ export function createGitHubRuntime(
         throw new Error("GitHub runtime has not discovered repositories yet");
       }
 
-      return await readCurrentState(source, desired, operations);
+      return await readCurrentState(source, desired, operations, {
+        authoritativeFiles: fileChanges?.mode === "pull_request",
+      });
     },
 
     async prepare(resource) {
@@ -130,12 +136,34 @@ export function createGitHubRuntime(
       }
 
       validateFileDeliveryPreconditions(resource, fileChanges);
+      if (fileChanges?.mode === "pull_request") {
+        const expected = {
+          branch: resource.current.filesBranch ??
+            resource.current.settings.defaultBranch,
+          baseSha: resource.current.filesBaseSha,
+          files: [...(resource.desired.files ?? [])].sort((left, right) =>
+            left.path < right.path ? -1 : left.path > right.path ? 1 : 0
+          ),
+        };
+        if (
+          resource.current.filesBaseSha === undefined ||
+          resource.plan.managedFiles === undefined ||
+          (await hashCanonical(expected)).hash !==
+            (await hashCanonical(resource.plan.managedFiles)).hash
+        ) {
+          throw new Error(
+            "Missing or incomplete managed-file desired-state snapshot",
+          );
+        }
+      }
       const prepared = sink.prepare
         ? await sink.prepare(
           resource.plan.repository,
           resource.plan.operations,
           resource.current.filesBranch ??
             resource.current.settings.defaultBranch,
+          resource.plan.managedFiles,
+          (resource.skippedRuntimeReferences?.length ?? 0) === 0,
         )
         : sink;
       preparedSinks.set(resource.plan.repository, prepared);
@@ -169,6 +197,7 @@ export function createGitHubRuntime(
         source,
         resource.desired,
         resource.plan.operations,
+        { authoritativeFiles: fileChanges?.mode === "pull_request" },
       );
       const before = await hashCanonical(
         projectOwnedCurrentState(
@@ -192,7 +221,7 @@ export function createGitHubRuntime(
       }
     },
 
-    async apply(resource) {
+    async apply(resource, onPullRequest) {
       const prepared = preparedSinks.get(resource.plan.repository);
       if (!prepared) {
         throw new Error(
@@ -204,12 +233,11 @@ export function createGitHubRuntime(
       preparedSinks.delete(resource.plan.repository);
       return await applyPlan(
         {
+          prepare: () => prepared,
           apply: prepared.apply.bind(prepared),
-          ...(prepared.pullRequestsOpened !== undefined && {
-            pullRequestsOpened: prepared.pullRequestsOpened,
-          }),
         },
         resource.plan,
+        { onPullRequest },
       );
     },
   };
@@ -217,6 +245,7 @@ export function createGitHubRuntime(
 
 /** Describes apply options. */
 export interface ApplyOptions {
+  readonly onPullRequest?: (result: PullRequestResult) => void | Promise<void>;
   readonly mode: ApplyMode;
   readonly resource?: string;
   readonly template?: string;
@@ -396,6 +425,7 @@ export async function apply(
     runtime,
     prepared,
     options.onRepositoryApplied,
+    options.onPullRequest,
   );
 }
 

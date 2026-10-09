@@ -47,6 +47,32 @@ Deno.test("GitHub client still resolves root API URLs", async () => {
   assertEquals(requestedUrl, "https://api.github.com/repos/acme/api");
 });
 
+for (
+  const [baseUrl, expected] of [
+    ["https://api.github.com", "https://api.github.com/graphql"],
+    [
+      "https://github.example.com/api/v3",
+      "https://github.example.com/api/graphql",
+    ],
+  ]
+) {
+  Deno.test("GraphQL uses the correct endpoint for " + baseUrl, async () => {
+    let requestedUrl = "";
+    const client = new FetchGitHubClient({
+      token: "token",
+      baseUrl,
+      fetch: (input) => {
+        requestedUrl = String(input);
+        return Promise.resolve(Response.json({ data: {} }));
+      },
+    });
+    await client.request("POST", "/graphql", {
+      body: { query: "query { viewer { login } }" },
+    });
+    assertEquals(requestedUrl, expected);
+  });
+}
+
 Deno.test("GitHub client throws on an ordinary 404", async () => {
   const client = responseClient(
     new Response("missing", {

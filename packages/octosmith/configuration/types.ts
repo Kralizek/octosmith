@@ -36,6 +36,7 @@ export interface FileChangesCommitConfiguration {
 export interface FileChangesPullRequestConfiguration {
   readonly branchPrefix?: string;
   readonly title?: string;
+  readonly introduction?: string;
   readonly labels?: readonly string[];
 }
 

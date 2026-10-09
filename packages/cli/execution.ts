@@ -3,6 +3,7 @@ import {
   type ApplyPlanResult,
   assertPersistedOperationsExecutable,
   type ExecutableResourcePlan,
+  type PullRequestResult,
   reportAppliedRepository,
   reportFailedRepository,
   type RepositoryReport,
@@ -12,7 +13,10 @@ import {
 export interface ExecutablePlanRuntime {
   prepare(resource: ExecutableResourcePlan): void | Promise<void>;
   recheck(resource: ExecutableResourcePlan): void | Promise<void>;
-  apply(resource: ExecutableResourcePlan): Promise<ApplyPlanResult>;
+  apply(
+    resource: ExecutableResourcePlan,
+    onPullRequest?: (result: PullRequestResult) => void | Promise<void>,
+  ): Promise<ApplyPlanResult>;
 }
 
 /** Execute already-built resource plans without rebuilding or reinterpreting them. */
@@ -22,6 +26,7 @@ export async function executeExecutableResources(
   onRepositoryApplied: (
     report: RepositoryReport,
   ) => void | Promise<void>,
+  onPullRequest?: (result: PullRequestResult) => void | Promise<void>,
 ): Promise<void> {
   for (const resource of resources) {
     assertPersistedOperationsExecutable(resource.plan.operations);
@@ -32,7 +37,7 @@ export async function executeExecutableResources(
     try {
       await runtime.recheck(resource);
 
-      const applied = await runtime.apply(resource);
+      const applied = await runtime.apply(resource, onPullRequest);
       await onRepositoryApplied(
         reportAppliedRepository(
           resource.desired.template,
@@ -41,11 +46,12 @@ export async function executeExecutableResources(
           applied.operations,
           resource.desired.templateName,
           resource.diagnostics,
-          applied.pullRequestsOpened,
+          applied.pullRequests,
+          applied.error,
         ),
       );
 
-      if (containsFailure(applied.operations)) {
+      if (applied.error !== undefined || containsFailure(applied.operations)) {
         break;
       }
     } catch (error) {

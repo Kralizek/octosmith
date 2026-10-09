@@ -6,6 +6,7 @@ import {
   type LoadedConfiguration,
   MissingRuntimeValueError,
   type Plan,
+  type PullRequestResult,
   type RepositoryMetadata,
   type RepositoryReport,
 } from "@octosmith/octosmith";
@@ -115,6 +116,58 @@ Deno.test("apply rejects an empty resource target before discovery", async () =>
 
   assertEquals(runtime.discoveredTargets, []);
   assertEquals(runtime.applied, []);
+});
+
+Deno.test("apply streams successful PR outcomes before a later repository fails", async () => {
+  const root = await configurationDirectory();
+  const lifecycle: PullRequestResult = {
+    repository: "sample",
+    number: 42,
+    url: "https://github.com/acme/sample/pull/42",
+    action: "opened",
+  };
+  const order: string[] = [];
+  class LifecycleRuntime extends FakeRuntime {
+    override async apply(
+      resource: ExecutableResourcePlan,
+      onPullRequest?: (result: PullRequestResult) => void | Promise<void>,
+    ): Promise<ApplyPlanResult> {
+      if (resource.plan.repository === "broken") {
+        throw new Error("later repository failed");
+      }
+      await onPullRequest?.(lifecycle);
+      order.push("operation completed");
+      return { ...await super.apply(resource), pullRequests: [lifecycle] };
+    }
+  }
+  try {
+    const reports: RepositoryReport[] = [];
+    await apply(
+      new LifecycleRuntime([metadata("sample"), metadata("broken")]),
+      await loadConfigurationDirectory(root),
+      {
+        mode: "apply",
+        onPullRequest: (result) => {
+          assertEquals(result, lifecycle);
+          order.push("pull_request.opened");
+        },
+        onRepositoryApplied: (report) => {
+          reports.push(report);
+          order.push("resource.applied:" + report.repository);
+        },
+      },
+    );
+    assertEquals(order, [
+      "pull_request.opened",
+      "operation completed",
+      "resource.applied:sample",
+      "resource.applied:broken",
+    ]);
+    assertEquals(reports[0].pullRequests, [lifecycle]);
+    assertEquals(reports[1].status, "failed");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
 });
 
 Deno.test("apply aborts all repositories when a later effective squash pair is invalid", async () => {

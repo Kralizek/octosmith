@@ -190,6 +190,9 @@
           "type": "string",
           "minLength": 1
         },
+        "introduction": {
+          "type": "string"
+        },
         "labels": {
           "type": "array",
           "uniqueItems": true,

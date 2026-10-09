@@ -129,6 +129,27 @@ class FakeStateSource implements RepositoryStateSource {
   }
 }
 
+Deno.test("authoritative files use an immutable snapshot even with no managed paths", async () => {
+  const source = new FakeStateSource();
+  const desired = { repository: "sample", template: "code", files: [] };
+  const empty = await readCurrentState(source, desired, undefined, {
+    authoritativeFiles: true,
+  });
+  assertEquals(empty.filesBaseSha, "head");
+  assertEquals(empty.filesBranch, "main");
+  assertEquals(source.calls, ["settings:sample", "branch:sample:main"]);
+  await readCurrentState(
+    source,
+    {
+      ...desired,
+      files: [{ path: "exists.txt", ensure: "exact", content: "desired" }],
+    },
+    undefined,
+    { authoritativeFiles: true },
+  );
+  assertEquals(source.fileBranches, ["head"]);
+});
+
 Deno.test("current-state reader fetches only desired resource families", async () => {
   const source = new FakeStateSource();
 

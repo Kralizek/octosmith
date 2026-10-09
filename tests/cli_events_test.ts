@@ -1,5 +1,30 @@
 import { assertEquals } from "@std/assert";
-import { toRepositoryEvent } from "../packages/cli/events.ts";
+import {
+  toPullRequestEvent,
+  toRepositoryEvent,
+} from "../packages/cli/events.ts";
+import type { PullRequestResult } from "@octosmith/octosmith";
+
+for (const action of ["opened", "updated", "closed"] as const) {
+  Deno.test("PR " + action + " uses the canonical Hooksmith envelope", () => {
+    const result: PullRequestResult = {
+      repository: "sample",
+      number: 42,
+      url: "https://github.com/acme/sample/pull/42",
+      ...(action === "closed"
+        ? { action, reason: "no_differences" }
+        : { action }),
+    };
+    assertEquals(toPullRequestEvent("acme", result, new Date(0)), {
+      type: "pull_request." + action,
+      timestamp: "1970-01-01T00:00:00.000Z",
+      source: { kind: "github.organization", id: "acme" },
+      subject: { kind: "github.pull_request", id: "sample#42" },
+      metadata: { producer: "octosmith" },
+      data: result,
+    });
+  });
+}
 
 Deno.test("repository plan report maps to Hooksmith event document", () => {
   const event = toRepositoryEvent(
