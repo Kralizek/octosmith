@@ -464,7 +464,7 @@ Deno.test("unmatched resources are grouped by type with redundant organization o
     "  These repositories are excluded from reconciliation.\n\n" +
       "  - repo-a\n  - repo-b",
   );
-  assertStringIncludes(rendered, "Unmatched environments (1):\n  - production");
+  assertStringIncludes(rendered, "  - repo-b\n\nUnmatched environments (1):\n  - production");
   assertStringIncludes(rendered, "Unmatched environments (1):");
   assertStringIncludes(
     rendered,
