@@ -14,6 +14,10 @@ import type {
   RepositoryFragment,
   RepositoryTemplate,
 } from "./types.ts";
+import {
+  arrayCompositionPolicies,
+  type ArrayCompositionPolicy,
+} from "./array_policies.ts";
 import configurationSchema from "./schemas/octosmith.schema.json" with {
   type: "json",
 };
@@ -408,18 +412,8 @@ function mergeRepositoryConfigurations(
   return mergeValues(earlier, later, []) as RepositoryConfiguration;
 }
 
-// Only these schema-defined collections have stable identities. Other arrays
-// (including ruleset rules, OIDC claims, and allowlists) replace as before.
-const keyedCollections = new Set([
-  "teams",
-  "rulesets",
-  "environments",
-  "actions.secrets",
-  "actions.variables",
-  "dependabot.secrets",
-  "environments.*.secrets",
-  "environments.*.variables",
-]);
+// All arrays replace by default; schema-defined collections may opt into
+// identity-aware composition through arrayCompositionPolicies.
 
 function mergeValues(
   earlier: unknown,
@@ -427,9 +421,10 @@ function mergeValues(
   path: readonly string[],
 ): unknown {
   if (Array.isArray(earlier) && Array.isArray(later)) {
-    return keyedCollections.has(path.join("."))
-      ? mergeKeyedCollection(earlier, later, path)
-      : later;
+    const policy = arrayCompositionPolicies[path.join(".")];
+    return policy === undefined || policy === "replace"
+      ? later
+      : mergeKeyedCollection(earlier, later, path, policy);
   }
 
   if (
@@ -464,6 +459,7 @@ function mergeKeyedCollection(
   earlier: readonly unknown[],
   later: readonly unknown[],
   path: readonly string[],
+  policy: Exclude<ArrayCompositionPolicy, "replace">,
 ): unknown[] {
   // An explicit empty array resets a collection inherited from fragments.
   if (later.length === 0) return [];
@@ -471,11 +467,11 @@ function mergeKeyedCollection(
   const result = [...earlier];
   const indices = new Map<string, number>();
   for (const [index, item] of result.entries()) {
-    indices.set(collectionItemKey(path, item), index);
+    indices.set(collectionItemKey(policy, item), index);
   }
 
   for (const item of later) {
-    const key = collectionItemKey(path, item);
+    const key = collectionItemKey(policy, item);
     const index = indices.get(key);
     if (index === undefined) {
       indices.set(key, result.length);
@@ -516,11 +512,12 @@ function validateUniqueCollectionIdentities(
 ): void {
   const visit = (value: unknown, path: readonly string[]): void => {
     if (Array.isArray(value)) {
-      if (!keyedCollections.has(path.join("."))) return;
+      const policy = arrayCompositionPolicies[path.join(".")];
+      if (policy === undefined || policy === "replace") return;
 
       const positions = new Map<string, number>();
       for (const [index, item] of value.entries()) {
-        const identity = collectionItemKey(path, item);
+        const identity = collectionItemKey(policy, item);
         const firstIndex = positions.get(identity);
         if (firstIndex !== undefined) {
           throw new Error(
@@ -545,16 +542,29 @@ function validateUniqueCollectionIdentities(
   visit(repository, []);
 }
 
-function collectionItemKey(path: readonly string[], item: unknown): string {
+function collectionItemKey(
+  policy: Exclude<ArrayCompositionPolicy, "replace">,
+  item: unknown,
+): string {
   if (typeof item === "string") return item;
 
-  // Inputs are schema-validated before composition. Destination names for
-  // renamed secrets/variables are the identities, not their source names.
-  const entry = item as { readonly name?: string; readonly to?: string };
-  const kind = path.at(-1);
-  if (kind === "secrets") return entry.to!;
-  if (kind === "variables") return (entry.to ?? entry.name)!;
-  return entry.name!;
+  // Inputs are schema-validated before composition. A renamed secret or
+  // variable is identified by its destination, not its source.
+  const entry = item as {
+    readonly name?: string;
+    readonly type?: string;
+    readonly to?: string;
+  };
+  switch (policy) {
+    case "name":
+      return entry.name!;
+    case "type":
+      return entry.type!;
+    case "secretDestination":
+      return entry.to!;
+    case "variableDestination":
+      return (entry.to ?? entry.name)!;
+  }
 }
 
 function validateEffectiveRepository(
