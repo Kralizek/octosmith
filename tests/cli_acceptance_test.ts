@@ -91,7 +91,7 @@ Deno.test("template print emits the composed schema-compatible template", async 
             {
               type: "creation",
               parameters: {
-                customKey: { nestedCustomKey: ["first", "second"] },
+                custom_key: { nested_custom_key: ["first", "second"] },
               },
             },
             { type: "update" },
