@@ -1,6 +1,25 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { parse, stringify } from "@std/yaml";
+import { Ajv2020 } from "ajv/2020";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
+import templateSchema from "../schemas/template.schema.json" with {
+  type: "json",
+};
+import repositorySchema from "../schemas/resources/repository.schema.json" with {
+  type: "json",
+};
+import repositorySelectorSchema from "../schemas/selectors/repository.schema.json" with {
+  type: "json",
+};
+import repositoryScopeSchema from "../schemas/scopes/repository.schema.json" with {
+  type: "json",
+};
+
+const templateValidator = new Ajv2020({ allErrors: true, strict: false });
+templateValidator.addSchema(repositorySchema);
+templateValidator.addSchema(repositorySelectorSchema);
+templateValidator.addSchema(repositoryScopeSchema);
+const validateTemplate = templateValidator.compile(templateSchema);
 
 Deno.test("template print emits the composed schema-compatible template", async () => {
   const root = await templatePrintConfigurationDirectory();
@@ -88,6 +107,11 @@ Deno.test("template print emits the composed schema-compatible template", async 
       },
     });
     assertEquals("includes" in yamlTemplate, false);
+    assertEquals(
+      validateTemplate(yamlTemplate),
+      true,
+      JSON.stringify(validateTemplate.errors),
+    );
     assertEquals(envReads, 0);
     assertEquals(ghCalls, 0);
     assertEquals(fetchCalls, 0);
@@ -108,7 +132,13 @@ Deno.test("template print emits the composed schema-compatible template", async 
       ),
       0,
     );
-    assertEquals(JSON.parse(jsonOutput.join("\n")), yamlTemplate);
+    const jsonTemplate = JSON.parse(jsonOutput.join("\n"));
+    assertEquals(jsonTemplate, yamlTemplate);
+    assertEquals(
+      validateTemplate(jsonTemplate),
+      true,
+      JSON.stringify(validateTemplate.errors),
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
