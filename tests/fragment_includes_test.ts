@@ -549,37 +549,40 @@ for (
     },
   ]
 ) {
-  Deno.test("rejects duplicate " + fixture.name + " in one fragment", async () => {
-    const root = await createRoot();
-    try {
-      await writeFragment(root, "duplicate.yml", [
-        "version: 1",
-        "kind: fragment",
-        "resource: repository",
-        "repository:",
-        ...fixture.lines,
-      ]);
-      await writeTemplate(root, [
-        "version: 1",
-        "kind: repository",
-        "match:",
-        "  include:",
-        "    names: [sample]",
-        "includes:",
-        "  - ../fragments/duplicate.yml",
-        "repository: {}",
-      ]);
-
-      await assertRejects(
-        () => loadConfigurationDirectory(root),
-        Error,
-        'Duplicate identity "' + fixture.identity +
-          '" in repository.' + fixture.path,
-      );
-    } finally {
-      await Deno.remove(root, { recursive: true });
-    }
-  });
+  Deno.test(
+    "rejects duplicate " + fixture.name + " in one fragment",
+    async () => {
+      const root = await createRoot();
+      try {
+        await writeFragment(root, "duplicate.yml", [
+          "version: 1",
+          "kind: fragment",
+          "resource: repository",
+          "repository:",
+          ...fixture.lines,
+        ]);
+        await writeTemplate(root, [
+          "version: 1",
+          "kind: repository",
+          "match:",
+          "  include:",
+          "    names: [sample]",
+          "includes:",
+          "  - ../fragments/duplicate.yml",
+          "repository: {}",
+        ]);
+  
+        await assertRejects(
+          () => loadConfigurationDirectory(root),
+          Error,
+          'Duplicate identity "' + fixture.identity +
+            '" in repository.' + fixture.path,
+        );
+      } finally {
+        await Deno.remove(root, { recursive: true });
+      }
+    },
+  );
 }
 
 Deno.test("rejects duplicate identities in templates without any includes", async () => {
