@@ -286,6 +286,9 @@ async function composeRepositoryTemplate(
   templatePath: string,
   template: RepositoryTemplate,
 ): Promise<RepositoryTemplate> {
+  // Validate each document before merging so repeated identities in one
+  // template cannot be mistaken for intentional cross-fragment overrides.
+  validateUniqueCollectionIdentities(template.repository, templatePath);
   if (template.includes === undefined) {
     return template;
   }
@@ -362,6 +365,7 @@ async function loadRepositoryFragment(
     canonicalPath,
     validateFragment,
   );
+  validateUniqueCollectionIdentities(fragment.repository ?? {}, canonicalPath);
 
   if (fragment.resource !== "repository") {
     throw new Error(
@@ -477,6 +481,22 @@ function mergeKeyedCollection(
       indices.set(key, result.length);
       result.push(item);
     } else {
+      if (path.length === 1 && path[0] === "rulesets") {
+        const inherited = result[index] as { readonly target?: string };
+        const override = item as { readonly target?: string };
+        if (
+          inherited.target !== undefined &&
+          override.target !== undefined &&
+          inherited.target !== override.target
+        ) {
+          throw new Error(
+            'Conflicting targets for ruleset "' + key + '": inherited "' +
+              inherited.target + '" but override declares "' +
+              override.target + '". Use a separate ruleset name instead.',
+          );
+        }
+      }
+
       // Rulesets and environments are objects whose fields can be enriched.
       // Secrets, variables, and team entries are replaced atomically.
       result[index] = path.length === 1 &&
@@ -487,6 +507,42 @@ function mergeKeyedCollection(
   }
 
   return result;
+}
+
+/** Reject ambiguous declarations within one fragment or template. */
+function validateUniqueCollectionIdentities(
+  repository: RepositoryConfiguration,
+  sourcePath: string,
+): void {
+  const visit = (value: unknown, path: readonly string[]): void => {
+    if (Array.isArray(value)) {
+      if (!keyedCollections.has(path.join("."))) return;
+
+      const positions = new Map<string, number>();
+      for (const [index, item] of value.entries()) {
+        const identity = collectionItemKey(path, item);
+        const firstIndex = positions.get(identity);
+        if (firstIndex !== undefined) {
+          throw new Error(
+            'Duplicate identity "' + identity + '" in repository.' +
+              path.join(".") + " at indexes " + firstIndex + " and " +
+              index + " in " + sourcePath,
+          );
+        }
+        positions.set(identity, index);
+        visit(item, [...path, "*"]);
+      }
+      return;
+    }
+
+    if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        visit(child, [...path, key]);
+      }
+    }
+  };
+
+  visit(repository, []);
 }
 
 function collectionItemKey(path: readonly string[], item: unknown): string {
