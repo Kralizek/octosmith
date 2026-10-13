@@ -412,6 +412,173 @@ Deno.test("later rules of the same type replace parameters atomically", async ()
   }
 });
 
+Deno.test("ruleset rules compose deterministically across two fragments and a template", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      target: branch",
+      "      enforcement: active",
+      "      rules:",
+      "        - type: deletion",
+      "        - type: pull_request",
+      "          parameters:",
+      "            required_approving_review_count: 1",
+      "            require_code_owner_review: true",
+      "        - type: non_fast_forward",
+    ]);
+    await writeFragment(root, "more-rules.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      rules:",
+      "        - type: pull_request",
+      "          parameters:",
+      "            required_approving_review_count: 2",
+      "        - type: required_signatures",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "  - ../fragments/more-rules.yml",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      rules:",
+      "        - type: pull_request",
+      "          parameters:",
+      "            required_approving_review_count: 3",
+      "        - type: required_linear_history",
+    ]);
+
+    const expected = [
+      { type: "deletion" },
+      {
+        type: "pull_request",
+        parameters: { requiredApprovingReviewCount: 3 },
+      },
+      { type: "non_fast_forward" },
+      { type: "required_signatures" },
+      { type: "required_linear_history" },
+    ];
+    const loadRules = async () =>
+      (await loadConfigurationDirectory(root))
+        .templates["repository:sample"].repository.rulesets?.[0].rules;
+
+    // Overrides retain the first position of a rule type. New types append
+    // in the order their fragment/template first introduces them.
+    assertEquals(await loadRules(), expected);
+    assertEquals(await loadRules(), expected);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("explicit empty rules array clears rules inherited from fragments", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      target: branch",
+      "      enforcement: active",
+      "      rules:",
+      "        - type: deletion",
+      "        - type: required_signatures",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      rules: []",
+    ]);
+
+    const ruleset = (await loadConfigurationDirectory(root))
+      .templates["repository:sample"].repository.rulesets?.[0];
+    assertEquals(ruleset, {
+      name: "protect",
+      target: "branch",
+      enforcement: "active",
+      rules: [],
+    });
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("unregistered ruleset bypass actor arrays replace inherited entries", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      target: branch",
+      "      bypass_actors:",
+      "        - actor_type: team",
+      "          actor_id: 100",
+      "          bypass_mode: always",
+      "        - actor_type: repository-role",
+      "          actor_id: 5",
+      "          bypass_mode: pull-request",
+      "      rules:",
+      "        - type: deletion",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      bypass_actors:",
+      "        - actor_type: team",
+      "          actor_id: 200",
+      "          bypass_mode: exempt",
+    ]);
+
+    const ruleset = (await loadConfigurationDirectory(root))
+      .templates["repository:sample"].repository.rulesets?.[0];
+    assertEquals(ruleset?.bypassActors, [
+      { actorType: "team", actorId: 200, bypassMode: "exempt" },
+    ]);
+    assertEquals(ruleset?.rules, [{ type: "deletion" }]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("ruleset target changes cannot inherit incompatible conditions and rules", async () => {
   for (const target of ["tag", "push"]) {
     const root = await createRoot();
@@ -669,6 +836,40 @@ Deno.test("rejects duplicate identities in templates without any includes", asyn
       Error,
       'Duplicate identity "REVIEW_TOKEN" in repository.actions.secrets',
     );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("rejects duplicate rule types in standalone templates without includes", async () => {
+  const root = await createRoot();
+  try {
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      target: branch",
+      "      rules:",
+      "        - type: pull_request",
+      "          parameters:",
+      "            required_approving_review_count: 1",
+      "        - type: pull_request",
+      "          parameters:",
+      "            required_approving_review_count: 2",
+    ]);
+
+    const error = await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      'Duplicate identity "pull_request" in repository.rulesets.*.rules',
+    );
+    assertEquals(error.message.includes("at indexes 0 and 1"), true);
+    assertEquals(error.message.includes("templates/sample.yml"), true);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
