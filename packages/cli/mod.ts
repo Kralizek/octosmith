@@ -511,9 +511,11 @@ function createCli(
             const effectiveTemplate = toSchemaCompatibleRepositoryTemplate(
               loaded.templates[identity],
             );
-            write(commandOptions.format === "json"
-              ? JSON.stringify(effectiveTemplate, null, 2)
-              : stringify(effectiveTemplate));
+            write(
+              commandOptions.format === "json"
+                ? JSON.stringify(effectiveTemplate, null, 2)
+                : stringify(effectiveTemplate),
+            );
           }),
       )
       .command(
