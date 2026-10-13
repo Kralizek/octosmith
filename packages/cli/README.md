@@ -47,9 +47,9 @@ The template argument accepts a short name or canonical `repository:` identity.
 YAML is the default output; `--format json` emits the same schema-compatible
 snake_case document as parseable JSON. The result contains `version`, `kind`,
 `match`, and the synthesized `repository`, but no `includes`. Managed file
-`source` paths and custom property names are preserved; file contents and runtime
-secret/environment values are not resolved. The command is fully offline and
-does not access GitHub.
+`source` paths and custom property names are preserved; file contents and
+runtime secret/environment values are not resolved. The command is fully offline
+and does not access GitHub.
 
 ### template list
 
