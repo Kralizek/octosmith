@@ -14,6 +14,10 @@ import type {
   RepositoryFragment,
   RepositoryTemplate,
 } from "./types.ts";
+import {
+  arrayCompositionPolicies,
+  type ArrayCompositionPolicy,
+} from "./array_policies.ts";
 import configurationSchema from "./schemas/octosmith.schema.json" with {
   type: "json",
 };
@@ -286,6 +290,9 @@ async function composeRepositoryTemplate(
   templatePath: string,
   template: RepositoryTemplate,
 ): Promise<RepositoryTemplate> {
+  // Validate each document before merging so repeated identities in one
+  // template cannot be mistaken for intentional cross-fragment overrides.
+  validateUniqueCollectionIdentities(template.repository, templatePath);
   if (template.includes === undefined) {
     return template;
   }
@@ -362,6 +369,7 @@ async function loadRepositoryFragment(
     canonicalPath,
     validateFragment,
   );
+  validateUniqueCollectionIdentities(fragment.repository ?? {}, canonicalPath);
 
   if (fragment.resource !== "repository") {
     throw new Error(
@@ -401,10 +409,24 @@ function mergeRepositoryConfigurations(
   earlier: RepositoryConfiguration,
   later: RepositoryConfiguration,
 ): RepositoryConfiguration {
-  return mergeValues(earlier, later) as RepositoryConfiguration;
+  return mergeValues(earlier, later, []) as RepositoryConfiguration;
 }
 
-function mergeValues(earlier: unknown, later: unknown): unknown {
+// All arrays replace by default; schema-defined collections may opt into
+// identity-aware composition through arrayCompositionPolicies.
+
+function mergeValues(
+  earlier: unknown,
+  later: unknown,
+  path: readonly string[],
+): unknown {
+  if (Array.isArray(earlier) && Array.isArray(later)) {
+    const policy = arrayCompositionPolicies[path.join(".")];
+    return policy === undefined || policy === "replace"
+      ? later
+      : mergeKeyedCollection(earlier, later, path, policy);
+  }
+
   if (
     earlier !== null &&
     later !== null &&
@@ -422,13 +444,127 @@ function mergeValues(earlier: unknown, later: unknown): unknown {
         later as Record<string, unknown>,
       )
     ) {
-      result[key] = key in result ? mergeValues(result[key], value) : value;
+      result[key] = key in result
+        ? mergeValues(result[key], value, [...path, key])
+        : value;
     }
 
     return result;
   }
 
   return later;
+}
+
+function mergeKeyedCollection(
+  earlier: readonly unknown[],
+  later: readonly unknown[],
+  path: readonly string[],
+  policy: Exclude<ArrayCompositionPolicy, "replace">,
+): unknown[] {
+  // An explicit empty array resets a collection inherited from fragments.
+  if (later.length === 0) return [];
+
+  const result = [...earlier];
+  const indices = new Map<string, number>();
+  for (const [index, item] of result.entries()) {
+    indices.set(collectionItemKey(policy, item), index);
+  }
+
+  for (const item of later) {
+    const key = collectionItemKey(policy, item);
+    const index = indices.get(key);
+    if (index === undefined) {
+      indices.set(key, result.length);
+      result.push(item);
+    } else {
+      if (path.length === 1 && path[0] === "rulesets") {
+        const inherited = result[index] as { readonly target?: string };
+        const override = item as { readonly target?: string };
+        if (
+          inherited.target !== undefined &&
+          override.target !== undefined &&
+          inherited.target !== override.target
+        ) {
+          throw new Error(
+            'Conflicting targets for ruleset "' + key + '": inherited "' +
+              inherited.target + '" but override declares "' +
+              override.target + '". Use a separate ruleset name instead.',
+          );
+        }
+      }
+
+      // Rulesets and environments are objects whose fields can be enriched.
+      // Secrets, variables, and team entries are replaced atomically.
+      result[index] = path.length === 1 &&
+          (path[0] === "rulesets" || path[0] === "environments")
+        ? mergeValues(result[index], item, [...path, "*"])
+        : item;
+    }
+  }
+
+  return result;
+}
+
+/** Reject ambiguous declarations within one fragment or template. */
+function validateUniqueCollectionIdentities(
+  repository: RepositoryConfiguration,
+  sourcePath: string,
+): void {
+  const visit = (value: unknown, path: readonly string[]): void => {
+    if (Array.isArray(value)) {
+      const policy = arrayCompositionPolicies[path.join(".")];
+      if (policy === undefined || policy === "replace") return;
+
+      const positions = new Map<string, number>();
+      for (const [index, item] of value.entries()) {
+        const identity = collectionItemKey(policy, item);
+        const firstIndex = positions.get(identity);
+        if (firstIndex !== undefined) {
+          throw new Error(
+            'Duplicate identity "' + identity + '" in repository.' +
+              path.join(".") + " at indexes " + firstIndex + " and " +
+              index + " in " + sourcePath,
+          );
+        }
+        positions.set(identity, index);
+        visit(item, [...path, "*"]);
+      }
+      return;
+    }
+
+    if (value !== null && typeof value === "object") {
+      for (const [key, child] of Object.entries(value)) {
+        visit(child, [...path, key]);
+      }
+    }
+  };
+
+  visit(repository, []);
+}
+
+function collectionItemKey(
+  policy: Exclude<ArrayCompositionPolicy, "replace">,
+  item: unknown,
+): string {
+  if (typeof item === "string") return item;
+
+  // Inputs are schema-validated before composition. A renamed secret or
+  // variable is identified by its destination, not its source.
+  const entry = item as {
+    readonly name?: string;
+    readonly type?: string;
+    readonly to?: string;
+  };
+  switch (policy) {
+    case "name":
+      return entry.name!;
+    case "type":
+      return entry.type!;
+    case "secretDestination":
+      return entry.to!;
+    case "variableDestination":
+      return (entry.to ?? entry.name)!;
+  }
 }
 
 function validateEffectiveRepository(

@@ -182,9 +182,40 @@ fragments are invalid. Repository templates still require their `repository`
 payload; use `repository: {}` when all desired state comes from included
 fragments.
 
-Composition is deterministic. Objects merge recursively, scalar values from
-later inputs replace earlier values, and arrays are replaced wholesale. Includes
-are applied in declaration order and the local template is applied last.
+Composition is deterministic. Objects merge recursively, and scalar values from
+later inputs replace earlier values. Schema-defined named collections merge by
+identity, preserving the order of inherited entries, replacing matching entries,
+and appending new ones:
+
+- `teams`, `rulesets`, and `environments` use their `name`.
+- Actions, Dependabot, and environment `secrets` use the destination secret name
+  (the string value or `to` in a renamed secret).
+- Actions and environment `variables` use the destination variable name (the
+  string value, `to`, or `name`).
+- Rules within the same named ruleset merge by `type`, replacing a matching rule
+  atomically rather than merging its parameters.
+
+Matching rulesets and environments recursively merge their object fields. A
+ruleset cannot change an explicitly inherited `target` to another target under
+the same name: composition fails instead of inheriting potentially incompatible
+conditions and rules. Matching teams, secrets, and variables replace the earlier
+entry as a whole, so changing a variable from `from`/`to` to `name`/`value` does
+not mix representations.
+
+A document cannot declare the same identity twice in one named collection,
+including nested environment secrets and variables. Validation reports the
+collection path, duplicate identity, positions, and source file. Overrides
+across different fragments and templates remain supported. A later empty named
+collection (`teams: []`, for example) clears inherited entries.
+
+Array replacement remains the default for paths without an explicit policy,
+including OIDC claims and ruleset bypass actors. Supported identity merges are
+opted in by Octosmith itself; YAML authors do not configure merge modes. A CI
+test requires an explicit decision for primary repository collections and checks
+that registered paths exist. Nested arrays are opt-in: a newly added nested
+array can retain the default replacement behavior without a declaration.
+Includes are applied in declaration order and the local template is applied
+last.
 
 Nested includes are limited to 32 levels and must remain within the
 configuration root after path canonicalization. Cycles are rejected across the
