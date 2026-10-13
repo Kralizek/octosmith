@@ -25,6 +25,16 @@ deno run -A jsr:@octosmith/cli@0 --help
 
 ## Commands
 
+| Command                           | GitHub access | Mutates GitHub | Purpose                                                              |
+| --------------------------------- | ------------- | -------------- | -------------------------------------------------------------------- |
+| `template print <template>`       | No            | No             | Print a synthesized repository template                              |
+| `template validate`               | No            | No             | Validate configuration and static planner invariants                 |
+| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates      |
+| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                     |
+| `resource create <template>`      | No            | No             | Reserved command; currently reports that creation is not implemented |
+| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                      |
+| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                     |
+
 ### template print
 
 ```sh
@@ -40,16 +50,6 @@ snake_case document as parseable JSON. The result contains `version`, `kind`,
 `source` paths and custom property names are preserved; file contents and runtime
 secret/environment values are not resolved. The command is fully offline and
 does not access GitHub.
-
-| Command                           | GitHub access | Mutates GitHub | Purpose                                                              |
-| --------------------------------- | ------------- | -------------- | -------------------------------------------------------------------- |
-| `template print <template>`       | No            | No             | Print a synthesized repository template                              |
-| `template validate`               | No            | No             | Validate configuration and static planner invariants                 |
-| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates      |
-| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                     |
-| `resource create <template>`      | No            | No             | Reserved command; currently reports that creation is not implemented |
-| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                      |
-| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                     |
 
 ### template list
 
@@ -437,8 +437,9 @@ The CLI returns:
 ```
 
 `--verbose`, `--trace`, and `--events-output` apply to `plan` and `apply`.
-`resource list` also supports `--trace`. `resource list`, `resource create`, `template print`, `template validate`, and
-`template permissions` support `--path` and `--format`.
+`resource list` also supports `--trace`. `resource list`, `resource create`,
+`template print`, `template validate`, and `template permissions` support
+`--path` and `--format`.
 
 ### Permission output
 
