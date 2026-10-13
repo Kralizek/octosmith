@@ -392,6 +392,7 @@ Deno.test("unkeyed arrays replace and empty keyed arrays reset inherited entries
       "    secrets: []",
       "    oidc:",
       "      subject_claim_template:",
+      "        source: custom",
       "        claims: [repo]",
     ]);
 
