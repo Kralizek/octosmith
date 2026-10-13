@@ -192,8 +192,8 @@ and appending new ones:
   (the string value or `to` in a renamed secret).
 - Actions and environment `variables` use the destination variable name (the
   string value, `to`, or `name`).
-- Rules within the same named ruleset merge by `type`, replacing a matching
-  rule atomically rather than merging its parameters.
+- Rules within the same named ruleset merge by `type`, replacing a matching rule
+  atomically rather than merging its parameters.
 
 Matching rulesets and environments recursively merge their object fields. A
 ruleset cannot change an explicitly inherited `target` to another target under
