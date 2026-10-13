@@ -259,7 +259,8 @@ function normalizeYaml(
 
   const preserveKeys = path.at(-1) === "properties" ||
     path.at(-1) === "customProperties" ||
-    path.at(-1) === "files";
+    path.at(-1) === "files" ||
+    path.includes("parameters");
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, child]) => {
@@ -611,7 +612,8 @@ function denormalizeYaml(
 
   const preserveKeys = path.at(-1) === "properties" ||
     path.at(-1) === "customProperties" ||
-    path.at(-1) === "files";
+    path.at(-1) === "files" ||
+    path.includes("parameters");
 
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, child]) => {

@@ -69,7 +69,12 @@ Deno.test("template print emits the composed schema-compatible template", async 
             },
           },
           rules: [
-            { type: "creation" },
+            {
+              type: "creation",
+              parameters: {
+                customKey: { nestedCustomKey: ["first", "second"] },
+              },
+            },
             { type: "update" },
             { type: "deletion" },
           ],
@@ -473,6 +478,9 @@ async function templatePrintConfigurationDirectory(): Promise<string> {
       "          exclude: [archive]",
       "      rules:",
       "        - type: creation",
+      "          parameters:",
+      "            customKey:",
+      "              nestedCustomKey: [first, second]",
       "        - type: update",
       "",
     ].join("\n"),
