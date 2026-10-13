@@ -192,6 +192,8 @@ and appending new ones:
   (the string value or `to` in a renamed secret).
 - Actions and environment `variables` use the destination variable name (the
   string value, `to`, or `name`).
+- Rules within the same named ruleset merge by `type`, replacing a matching
+  rule atomically rather than merging its parameters.
 
 Matching rulesets and environments recursively merge their object fields. A
 ruleset cannot change an explicitly inherited `target` to another target under
@@ -206,10 +208,14 @@ collection path, duplicate identity, positions, and source file. Overrides
 across different fragments and templates remain supported. A later empty named
 collection (`teams: []`, for example) clears inherited entries.
 
-Every other array still replaces wholesale, including OIDC claims and the
-`rules` inside a ruleset. No identity configuration or array merging syntax is
-required. Includes are applied in declaration order and the local template is
-applied last.
+Array replacement remains the default for paths without an explicit policy,
+including OIDC claims and ruleset bypass actors. Supported identity merges are
+opted in by Octosmith itself; YAML authors do not configure merge modes. A CI
+test requires an explicit decision for primary repository collections and checks
+that registered paths exist. Nested arrays are opt-in: a newly added nested
+array can retain the default replacement behavior without a declaration.
+Includes are applied in declaration order and the local template is applied
+last.
 
 Nested includes are limited to 32 levels and must remain within the
 configuration root after path canonicalization. Cycles are rejected across the
