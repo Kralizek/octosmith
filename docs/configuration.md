@@ -182,9 +182,27 @@ fragments are invalid. Repository templates still require their `repository`
 payload; use `repository: {}` when all desired state comes from included
 fragments.
 
-Composition is deterministic. Objects merge recursively, scalar values from
-later inputs replace earlier values, and arrays are replaced wholesale. Includes
-are applied in declaration order and the local template is applied last.
+Composition is deterministic. Objects merge recursively, and scalar values
+from later inputs replace earlier values. Schema-defined named collections merge
+by identity, preserving the order of inherited entries, replacing matching
+entries, and appending new ones:
+
+- `teams`, `rulesets`, and `environments` use their `name`.
+- Actions, Dependabot, and environment `secrets` use the destination secret
+  name (the string value or `to` in a renamed secret).
+- Actions and environment `variables` use the destination variable name
+  (the string value, `to`, or `name`).
+
+Matching rulesets and environments recursively merge their object fields.
+Matching teams, secrets, and variables replace the earlier entry as a whole,
+so changing a variable from `from`/`to` to `name`/`value` does not mix
+representations. A later empty named collection (`teams: []`, for example)
+clears inherited entries.
+
+Every other array still replaces wholesale, including OIDC claims and the
+`rules` inside a ruleset. No identity configuration or array merging syntax is
+required. Includes are applied in declaration order and the local template is
+applied last.
 
 Nested includes are limited to 32 levels and must remain within the
 configuration root after path canonicalization. Cycles are rejected across the
