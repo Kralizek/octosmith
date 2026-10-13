@@ -571,7 +571,7 @@ for (
           "  - ../fragments/duplicate.yml",
           "repository: {}",
         ]);
-  
+
         await assertRejects(
           () => loadConfigurationDirectory(root),
           Error,
