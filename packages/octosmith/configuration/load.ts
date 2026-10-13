@@ -401,10 +401,33 @@ function mergeRepositoryConfigurations(
   earlier: RepositoryConfiguration,
   later: RepositoryConfiguration,
 ): RepositoryConfiguration {
-  return mergeValues(earlier, later) as RepositoryConfiguration;
+  return mergeValues(earlier, later, []) as RepositoryConfiguration;
 }
 
-function mergeValues(earlier: unknown, later: unknown): unknown {
+// Only these schema-defined collections have stable identities. Other arrays
+// (including ruleset rules, OIDC claims, and allowlists) replace as before.
+const keyedCollections = new Set([
+  "teams",
+  "rulesets",
+  "environments",
+  "actions.secrets",
+  "actions.variables",
+  "dependabot.secrets",
+  "environments.*.secrets",
+  "environments.*.variables",
+]);
+
+function mergeValues(
+  earlier: unknown,
+  later: unknown,
+  path: readonly string[],
+): unknown {
+  if (Array.isArray(earlier) && Array.isArray(later)) {
+    return keyedCollections.has(path.join("."))
+      ? mergeKeyedCollection(earlier, later, path)
+      : later;
+  }
+
   if (
     earlier !== null &&
     later !== null &&
@@ -422,13 +445,60 @@ function mergeValues(earlier: unknown, later: unknown): unknown {
         later as Record<string, unknown>,
       )
     ) {
-      result[key] = key in result ? mergeValues(result[key], value) : value;
+      result[key] = key in result
+        ? mergeValues(result[key], value, [...path, key])
+        : value;
     }
 
     return result;
   }
 
   return later;
+}
+
+function mergeKeyedCollection(
+  earlier: readonly unknown[],
+  later: readonly unknown[],
+  path: readonly string[],
+): unknown[] {
+  // An explicit empty array resets a collection inherited from fragments.
+  if (later.length === 0) return [];
+
+  const result = [...earlier];
+  const indices = new Map<string, number>();
+  for (const [index, item] of result.entries()) {
+    indices.set(collectionItemKey(path, item), index);
+  }
+
+  for (const item of later) {
+    const key = collectionItemKey(path, item);
+    const index = indices.get(key);
+    if (index === undefined) {
+      indices.set(key, result.length);
+      result.push(item);
+    } else {
+      // Rulesets and environments are objects whose fields can be enriched.
+      // Secrets, variables, and team entries are replaced atomically.
+      result[index] = path.length === 1 &&
+          (path[0] === "rulesets" || path[0] === "environments")
+        ? mergeValues(result[index], item, [...path, "*"])
+        : item;
+    }
+  }
+
+  return result;
+}
+
+function collectionItemKey(path: readonly string[], item: unknown): string {
+  if (typeof item === "string") return item;
+
+  // Inputs are schema-validated before composition. Destination names for
+  // renamed secrets/variables are the identities, not their source names.
+  const entry = item as { readonly name?: string; readonly to?: string };
+  const kind = path.at(-1);
+  if (kind === "secrets") return entry.to!;
+  if (kind === "variables") return (entry.to ?? entry.name)!;
+  return entry.name!;
 }
 
 function validateEffectiveRepository(
