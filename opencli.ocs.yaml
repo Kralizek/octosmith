@@ -192,6 +192,41 @@ commands:
     kind: group
     summary: Template operations.
 
+  octosmith template print:
+    kind: action
+    summary: Print an effective repository template without accessing GitHub.
+    description: |
+      Compose the selected template with its reusable fragments and print the
+      complete effective template in schema-compatible snake_case. YAML is the
+      default; JSON has the same representation. Includes are omitted, file
+      source paths are retained, and runtime values or file contents are not
+      resolved.
+    args:
+      - name: template
+        type: string
+        required: true
+        summary: Template name or repository identity.
+    flags:
+      - name: path
+        aliases: [p]
+        type: string
+        default: "."
+        summary: Configuration directory.
+      - name: format
+        type: string
+        default: yaml
+        choices:
+          - value: yaml
+          - value: json
+        summary: Output format.
+    examples:
+      - title: Print a template as YAML
+        content: |
+          $ octosmith template print services --path ./github
+      - title: Print a template as JSON
+        content: |
+          $ octosmith template print repository:services --path ./github --format json
+
   octosmith template list:
     kind: action
     summary: List configured repository templates.
