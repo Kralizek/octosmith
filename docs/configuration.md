@@ -182,20 +182,20 @@ fragments are invalid. Repository templates still require their `repository`
 payload; use `repository: {}` when all desired state comes from included
 fragments.
 
-Composition is deterministic. Objects merge recursively, and scalar values
-from later inputs replace earlier values. Schema-defined named collections merge
-by identity, preserving the order of inherited entries, replacing matching
-entries, and appending new ones:
+Composition is deterministic. Objects merge recursively, and scalar values from
+later inputs replace earlier values. Schema-defined named collections merge by
+identity, preserving the order of inherited entries, replacing matching entries,
+and appending new ones:
 
 - `teams`, `rulesets`, and `environments` use their `name`.
-- Actions, Dependabot, and environment `secrets` use the destination secret
-  name (the string value or `to` in a renamed secret).
-- Actions and environment `variables` use the destination variable name
-  (the string value, `to`, or `name`).
+- Actions, Dependabot, and environment `secrets` use the destination secret name
+  (the string value or `to` in a renamed secret).
+- Actions and environment `variables` use the destination variable name (the
+  string value, `to`, or `name`).
 
 Matching rulesets and environments recursively merge their object fields.
-Matching teams, secrets, and variables replace the earlier entry as a whole,
-so changing a variable from `from`/`to` to `name`/`value` does not mix
+Matching teams, secrets, and variables replace the earlier entry as a whole, so
+changing a variable from `from`/`to` to `name`/`value` does not mix
 representations. A later empty named collection (`teams: []`, for example)
 clears inherited entries.
 
