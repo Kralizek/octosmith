@@ -1,6 +1,9 @@
 import { assertEquals, assertRejects } from "@std/assert";
 import { join, relative } from "@std/path";
-import { loadConfigurationDirectory } from "../packages/octosmith/mod.ts";
+import {
+  loadConfigurationDirectory,
+  validateConfigurationDirectory,
+} from "../packages/octosmith/mod.ts";
 
 async function createRoot(): Promise<string> {
   const root = await Deno.makeTempDir();
@@ -354,6 +357,253 @@ Deno.test("rulesets and environments compose by name without merging rule arrays
       },
       { name: "production", secrets: ["PROD_ONLY"] },
     ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("ruleset target changes cannot inherit incompatible conditions and rules", async () => {
+  for (const target of ["tag", "push"]) {
+    const root = await createRoot();
+    try {
+      await writeFragment(root, "base.yml", [
+        "version: 1",
+        "kind: fragment",
+        "resource: repository",
+        "repository:",
+        "  rulesets:",
+        "    - name: protect-default-branch",
+        "      target: branch",
+        "      enforcement: active",
+        "      conditions:",
+        "        ref_name:",
+        "          include: [~DEFAULT_BRANCH]",
+        "      rules:",
+        "        - type: deletion",
+      ]);
+      await writeTemplate(root, [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        "    names: [sample]",
+        "includes:",
+        "  - ../fragments/base.yml",
+        "repository:",
+        "  rulesets:",
+        "    - name: protect-default-branch",
+        "      target: " + target,
+      ]);
+
+      await assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        'Conflicting targets for ruleset "protect-default-branch"',
+      );
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  }
+});
+
+Deno.test("ruleset with implicit original target still gets target-specific planner validation", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  rulesets:",
+      "    - name: example",
+      "      conditions:",
+      "        ref_name:",
+      "          include: [~DEFAULT_BRANCH]",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "repository:",
+      "  rulesets:",
+      "    - name: example",
+      "      target: push",
+      "      enforcement: active",
+      "      rules:",
+      "        - type: max_file_size",
+      "          parameters:",
+      "            max_file_size_mb: 1",
+    ]);
+
+    await assertRejects(
+      () => validateConfigurationDirectory(root),
+      Error,
+      "Push ruleset example cannot declare ref conditions",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+for (
+  const fixture of [
+    {
+      name: "teams",
+      lines: [
+        "  teams:",
+        "    - name: platform",
+        "      permission: read",
+        "    - name: platform",
+        "      permission: write",
+      ],
+      path: "teams",
+      identity: "platform",
+    },
+    {
+      name: "rulesets",
+      lines: [
+        "  rulesets:",
+        "    - name: protection",
+        "      target: branch",
+        "    - name: protection",
+        "      target: tag",
+      ],
+      path: "rulesets",
+      identity: "protection",
+    },
+    {
+      name: "environments",
+      lines: [
+        "  environments:",
+        "    - name: staging",
+        "    - name: staging",
+      ],
+      path: "environments",
+      identity: "staging",
+    },
+    {
+      name: "Actions secrets",
+      lines: [
+        "  actions:",
+        "    secrets:",
+        "      - REVIEW_TOKEN",
+        "      - from: DIFFERENT_SOURCE",
+        "        to: REVIEW_TOKEN",
+      ],
+      path: "actions.secrets",
+      identity: "REVIEW_TOKEN",
+    },
+    {
+      name: "Actions variables",
+      lines: [
+        "  actions:",
+        "    variables:",
+        "      - FEED_URI",
+        "      - name: FEED_URI",
+        "        value: https://example.org",
+      ],
+      path: "actions.variables",
+      identity: "FEED_URI",
+    },
+    {
+      name: "Dependabot secrets",
+      lines: [
+        "  dependabot:",
+        "    secrets:",
+        "      - BOT_TOKEN",
+        "      - from: SOURCE",
+        "        to: BOT_TOKEN",
+      ],
+      path: "dependabot.secrets",
+      identity: "BOT_TOKEN",
+    },
+    {
+      name: "environment secrets",
+      lines: [
+        "  environments:",
+        "    - name: staging",
+        "      secrets:",
+        "        - DEPLOY_TOKEN",
+        "        - from: OTHER",
+        "          to: DEPLOY_TOKEN",
+      ],
+      path: "environments.*.secrets",
+      identity: "DEPLOY_TOKEN",
+    },
+    {
+      name: "environment variables",
+      lines: [
+        "  environments:",
+        "    - name: staging",
+        "      variables:",
+        "        - REGION",
+        "        - name: REGION",
+        "          value: west",
+      ],
+      path: "environments.*.variables",
+      identity: "REGION",
+    },
+  ]
+) {
+  Deno.test("rejects duplicate " + fixture.name + " in one fragment", async () => {
+    const root = await createRoot();
+    try {
+      await writeFragment(root, "duplicate.yml", [
+        "version: 1",
+        "kind: fragment",
+        "resource: repository",
+        "repository:",
+        ...fixture.lines,
+      ]);
+      await writeTemplate(root, [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include:",
+        "    names: [sample]",
+        "includes:",
+        "  - ../fragments/duplicate.yml",
+        "repository: {}",
+      ]);
+
+      await assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        'Duplicate identity "' + fixture.identity +
+          '" in repository.' + fixture.path,
+      );
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}
+
+Deno.test("rejects duplicate identities in templates without any includes", async () => {
+  const root = await createRoot();
+  try {
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "repository:",
+      "  actions:",
+      "    secrets:",
+      "      - REVIEW_TOKEN",
+      "      - from: OTHER",
+      "        to: REVIEW_TOKEN",
+    ]);
+
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      'Duplicate identity "REVIEW_TOKEN" in repository.actions.secrets',
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }
