@@ -98,7 +98,7 @@ Deno.test("composes nested fragments relative to the declaring fragment", async 
   }
 });
 
-Deno.test("later arrays replace earlier arrays wholesale", async () => {
+Deno.test("named collections preserve unrelated entries from fragments", async () => {
   const root = await createRoot();
   try {
     await writeFragment(root, "base.yml", [
@@ -134,8 +134,275 @@ Deno.test("later arrays replace earlier arrays wholesale", async () => {
 
     const loaded = await loadConfigurationDirectory(root);
     assertEquals(loaded.templates["repository:sample"].repository.teams, [
+      { name: "platform", permission: "read" },
       { name: "developers", permission: "write" },
     ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("later team entries override the same identity in place", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  teams:",
+      "    - name: platform",
+      "      permission: read",
+      "    - name: developers",
+      "      permission: read",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "repository:",
+      "  teams:",
+      "    - name: developers",
+      "      permission: write",
+      "    - name: maintainers",
+      "      permission: maintain",
+    ]);
+
+    const loaded = await loadConfigurationDirectory(root);
+    assertEquals(loaded.templates["repository:sample"].repository.teams, [
+      { name: "platform", permission: "read" },
+      { name: "developers", permission: "write" },
+      { name: "maintainers", permission: "maintain" },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("Actions and Dependabot values merge by destination, not source", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  actions:",
+      "    secrets:",
+      "      - COPILOT_REVIEW_TOKEN",
+      "      - from: OLD_SECRET",
+      "        to: FEED_SECRET",
+      "    variables:",
+      "      - from: OLD_SOURCE",
+      "        to: FEED_URI",
+      "      - name: KEEP",
+      "        value: baseline",
+      "  dependabot:",
+      "    secrets:",
+      "      - from: OLD_DEPENDABOT",
+      "        to: BOT_TOKEN",
+    ]);
+    await writeFragment(root, "more.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  actions:",
+      "    secrets:",
+      "      - from: NEW_SECRET",
+      "        to: FEED_SECRET",
+      "      - EXTRA_SECRET",
+      "    variables:",
+      "      - name: FEED_URI",
+      "        value: https://example.org/feed",
+      "      - NEW_VARIABLE",
+      "  dependabot:",
+      "    secrets:",
+      "      - from: NEW_DEPENDABOT",
+      "        to: BOT_TOKEN",
+      "      - EXTRA_BOT_TOKEN",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "  - ../fragments/more.yml",
+      "repository: {}",
+    ]);
+
+    const repository = (await loadConfigurationDirectory(root))
+      .templates["repository:sample"].repository;
+    assertEquals(repository.actions?.secrets, [
+      "COPILOT_REVIEW_TOKEN",
+      { from: "NEW_SECRET", to: "FEED_SECRET" },
+      "EXTRA_SECRET",
+    ]);
+    assertEquals(repository.actions?.variables, [
+      { name: "FEED_URI", value: "https://example.org/feed" },
+      { name: "KEEP", value: "baseline" },
+      "NEW_VARIABLE",
+    ]);
+    assertEquals(repository.dependabot?.secrets, [
+      { from: "NEW_DEPENDABOT", to: "BOT_TOKEN" },
+      "EXTRA_BOT_TOKEN",
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("rulesets and environments compose by name without merging rule arrays", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect-default-branch",
+      "      target: branch",
+      "      enforcement: active",
+      "      rules:",
+      "        - type: deletion",
+      "    - name: other",
+      "      target: branch",
+      "      rules:",
+      "        - type: non_fast_forward",
+      "  environments:",
+      "    - name: staging",
+      "      secrets:",
+      "        - ORIGINAL_SECRET",
+      "        - from: OLD_TOKEN",
+      "          to: DEPLOY_TOKEN",
+      "      variables:",
+      "        - name: REGION",
+      "          value: east",
+      "    - name: production",
+      "      secrets:",
+      "        - PROD_ONLY",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect-default-branch",
+      "      rules:",
+      "        - type: required_signatures",
+      "    - name: extra",
+      "      target: branch",
+      "      rules:",
+      "        - type: deletion",
+      "  environments:",
+      "    - name: staging",
+      "      secrets:",
+      "        - from: NEW_TOKEN",
+      "          to: DEPLOY_TOKEN",
+      "        - ADDITIONAL_SECRET",
+      "      variables:",
+      "        - name: REGION",
+      "          value: west",
+      "        - REGION_2",
+    ]);
+
+    const repository = (await loadConfigurationDirectory(root))
+      .templates["repository:sample"].repository;
+    assertEquals(repository.rulesets, [
+      {
+        name: "protect-default-branch",
+        target: "branch",
+        enforcement: "active",
+        rules: [{ type: "required_signatures" }],
+      },
+      {
+        name: "other",
+        target: "branch",
+        rules: [{ type: "non_fast_forward" }],
+      },
+      {
+        name: "extra",
+        target: "branch",
+        rules: [{ type: "deletion" }],
+      },
+    ]);
+    assertEquals(repository.environments, [
+      {
+        name: "staging",
+        secrets: [
+          "ORIGINAL_SECRET",
+          { from: "NEW_TOKEN", to: "DEPLOY_TOKEN" },
+          "ADDITIONAL_SECRET",
+        ],
+        variables: [
+          { name: "REGION", value: "west" },
+          "REGION_2",
+        ],
+      },
+      { name: "production", secrets: ["PROD_ONLY"] },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("unkeyed arrays replace and empty keyed arrays reset inherited entries", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "base.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  teams:",
+      "    - name: platform",
+      "      permission: read",
+      "  actions:",
+      "    secrets:",
+      "      - COPILOT_REVIEW_TOKEN",
+      "    oidc:",
+      "      subject_claim_template:",
+      "        source: custom",
+      "        claims: [repo, context]",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "repository:",
+      "  teams: []",
+      "  actions:",
+      "    secrets: []",
+      "    oidc:",
+      "      subject_claim_template:",
+      "        claims: [repo]",
+    ]);
+
+    const repository = (await loadConfigurationDirectory(root))
+      .templates["repository:sample"].repository;
+    assertEquals(repository.teams, []);
+    assertEquals(repository.actions?.secrets, []);
+    assertEquals(repository.actions?.oidc?.subjectClaimTemplate, {
+      source: "custom",
+      claims: ["repo"],
+    });
   } finally {
     await Deno.remove(root, { recursive: true });
   }
