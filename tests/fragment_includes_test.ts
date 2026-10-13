@@ -262,7 +262,7 @@ Deno.test("Actions and Dependabot values merge by destination, not source", asyn
   }
 });
 
-Deno.test("rulesets and environments compose by name without merging rule arrays", async () => {
+Deno.test("rulesets and environments compose by name, with rules keyed by type", async () => {
   const root = await createRoot();
   try {
     await writeFragment(root, "base.yml", [
@@ -329,7 +329,7 @@ Deno.test("rulesets and environments compose by name without merging rule arrays
         name: "protect-default-branch",
         target: "branch",
         enforcement: "active",
-        rules: [{ type: "required_signatures" }],
+        rules: [{ type: "deletion" }, { type: "required_signatures" }],
       },
       {
         name: "other",
@@ -356,6 +356,56 @@ Deno.test("rulesets and environments compose by name without merging rule arrays
         ],
       },
       { name: "production", secrets: ["PROD_ONLY"] },
+    ]);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("later rules of the same type replace parameters atomically", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "rules.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      target: branch",
+      "      rules:",
+      "        - type: deletion",
+      "        - type: pull_request",
+      "          parameters:",
+      "            required_approving_review_count: 1",
+      "            required_review_thread_resolution: true",
+    ]);
+    await writeTemplate(root, [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include:",
+      "    names: [sample]",
+      "includes:",
+      "  - ../fragments/rules.yml",
+      "repository:",
+      "  rulesets:",
+      "    - name: protect",
+      "      rules:",
+      "        - type: pull_request",
+      "          parameters:",
+      "            required_approving_review_count: 2",
+      "        - type: required_signatures",
+    ]);
+    const repository = (await loadConfigurationDirectory(root))
+      .templates["repository:sample"].repository;
+    assertEquals(repository.rulesets?.[0].rules, [
+      { type: "deletion" },
+      {
+        type: "pull_request",
+        parameters: { requiredApprovingReviewCount: 2 },
+      },
+      { type: "required_signatures" },
     ]);
   } finally {
     await Deno.remove(root, { recursive: true });
@@ -520,6 +570,18 @@ for (
       ],
       path: "dependabot.secrets",
       identity: "BOT_TOKEN",
+    },
+    {
+      name: "ruleset rules",
+      lines: [
+        "  rulesets:",
+        "    - name: protect",
+        "      rules:",
+        "        - type: deletion",
+        "        - type: deletion",
+      ],
+      path: "rulesets.*.rules",
+      identity: "deletion",
     },
     {
       name: "environment secrets",
