@@ -87,6 +87,16 @@ export async function loadConfigurationDirectory(
   return result.loaded;
 }
 
+/** Convert an effective template to its schema-compatible YAML/JSON shape. */
+export function toSchemaCompatibleRepositoryTemplate(
+  template: RepositoryTemplate,
+): Readonly<Record<string, unknown>> {
+  const { includes: _includes, ...effectiveTemplate } = template;
+  return denormalizeYaml(effectiveTemplate) as Readonly<
+    Record<string, unknown>
+  >;
+}
+
 /** Load a configuration directory while collecting individual template failures. */
 export async function loadConfigurationDirectoryCollectingIssues(
   root: string,

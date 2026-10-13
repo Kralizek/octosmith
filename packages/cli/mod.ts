@@ -8,6 +8,7 @@
  */
 
 import { Command } from "@cliffy/command";
+import { stringify } from "@std/yaml";
 import {
   type ConfigurationValidationIssue,
   createPersistedPlanArtifact,
@@ -27,6 +28,7 @@ import {
   type ResourceInspection,
   type RuntimeReferenceDiagnostic,
   summarizeResourceInspection,
+  toSchemaCompatibleRepositoryTemplate,
   validateConfigurationDirectoryDetailed,
   validateLoadedConfiguration,
   validateTemplateDirectoryDetailed,
@@ -479,6 +481,41 @@ function createCli(
     "template",
     new Command()
       .description("Template operations.")
+      .command(
+        "print",
+        new Command()
+          .description("Print an effective repository template.")
+          .arguments("<template:string>")
+          .option("-p, --path <path:string>", "Configuration directory.", {
+            default: ".",
+          })
+          .option("--format <format:string>", "Output format: yaml or json.", {
+            default: "yaml",
+          })
+          .action(async (commandOptions, template: string) => {
+            if (
+              commandOptions.format !== "yaml" &&
+              commandOptions.format !== "json"
+            ) {
+              throw new Error(
+                "Unsupported output format: " + commandOptions.format +
+                  ". Expected yaml or json",
+              );
+            }
+
+            const loaded = await loadConfigurationDirectory(
+              commandOptions.path,
+              template,
+            );
+            const identity = resolveTemplateIdentity(loaded, template);
+            const effectiveTemplate = toSchemaCompatibleRepositoryTemplate(
+              loaded.templates[identity],
+            );
+            write(commandOptions.format === "json"
+              ? JSON.stringify(effectiveTemplate, null, 2)
+              : stringify(effectiveTemplate));
+          }),
+      )
       .command(
         "list",
         new Command()

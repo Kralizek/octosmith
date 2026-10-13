@@ -1,5 +1,6 @@
 export {
   loadConfigurationDirectory,
+  toSchemaCompatibleRepositoryTemplate,
   type LoadedConfiguration,
 } from "./load.ts";
 export * from "./resolve.ts";

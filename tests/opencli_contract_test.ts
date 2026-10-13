@@ -9,7 +9,14 @@ interface OpenCliFlag {
 
 interface OpenCliCommand {
   readonly kind?: "action" | "group";
+  readonly args?: readonly {
+    readonly name: string;
+    readonly type: string;
+    readonly required?: boolean;
+    readonly summary: string;
+  }[];
   readonly flags?: readonly (OpenCliFlag & {
+    readonly default?: string;
     readonly choices?: readonly { readonly value: string }[];
   })[];
   readonly examples?: readonly {
@@ -57,6 +64,7 @@ Deno.test("OpenCLI contract tracks the implemented root command surface", async 
       "octosmith resource list",
       "octosmith resource create",
       "octosmith template",
+      "octosmith template print",
       "octosmith template list",
       "octosmith template validate",
       "octosmith template permissions",
@@ -156,6 +164,7 @@ Deno.test("OpenCLI contract includes representative canonical examples", async (
       "octosmith resource list",
       "octosmith resource create",
       "octosmith template list",
+      "octosmith template print",
       "octosmith template validate",
       "octosmith template permissions",
     ]
@@ -178,6 +187,28 @@ Deno.test("OpenCLI template list options match the implemented command", async (
   assertEquals(
     command.flags?.[1].choices?.map(({ value }) => value),
     ["text", "json"],
+  );
+});
+
+Deno.test("OpenCLI template print documents the required argument and formats", async () => {
+  const document = await loadContract();
+  const command = document.commands["octosmith template print"];
+
+  assertEquals(command.args, [{
+    name: "template",
+    type: "string",
+    required: true,
+    summary: "Template name or repository identity.",
+  }]);
+  assertEquals(
+    command.flags?.map((flag) => flag.name),
+    ["path", "format"],
+  );
+  assertEquals(command.flags?.[0].aliases, ["p"]);
+  assertEquals(command.flags?.[1].default, "yaml");
+  assertEquals(
+    command.flags?.[1].choices?.map(({ value }) => value),
+    ["yaml", "json"],
   );
 });
 

@@ -1,6 +1,167 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
-import { stringify } from "@std/yaml";
+import { parse, stringify } from "@std/yaml";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
+
+Deno.test("template print emits the composed schema-compatible template", async () => {
+  const root = await templatePrintConfigurationDirectory();
+  try {
+    const yamlOutput: string[] = [];
+    const errors: string[] = [];
+    let envReads = 0;
+    let ghCalls = 0;
+    let fetchCalls = 0;
+    assertEquals(
+      await main(["template", "print", "services", "--path", root], {
+        credentials: {
+          getEnv: () => {
+            envReads++;
+            throw new Error("template print must not resolve credentials");
+          },
+          runGhAuthToken: () => {
+            ghCalls++;
+            return Promise.reject(
+              new Error("template print must not invoke gh"),
+            );
+          },
+        },
+        fetch: () => {
+          fetchCalls++;
+          throw new Error("template print must not access GitHub");
+        },
+        write: (value) => yamlOutput.push(value),
+        writeError: (value) => errors.push(value),
+      }),
+      0,
+    );
+    assertEquals(errors, []);
+
+    const yamlTemplate = parse(yamlOutput.join("\n")) as Record<
+      string,
+      unknown
+    >;
+    assertEquals(yamlTemplate, {
+      version: 1,
+      kind: "repository",
+      match: { include: { names: ["backend"] } },
+      repository: {
+        settings: {
+          has_issues: true,
+          topics: ["service"],
+        },
+        custom_properties: {
+          team_name: "platform",
+          CustomProperty: "preserved",
+        },
+        actions: {
+          secrets: [{ from: "UNSET_PRINT_SECRET", to: "RELEASE_TOKEN" }],
+        },
+        teams: [
+          { name: "platform", permission: "write" },
+          { name: "docs", permission: "read" },
+        ],
+        rulesets: [{
+          name: "protect",
+          target: "branch",
+          conditions: {
+            ref_name: {
+              include: ["main", "release"],
+              exclude: ["archive"],
+            },
+          },
+          rules: [
+            { type: "creation" },
+            { type: "update" },
+            { type: "deletion" },
+          ],
+        }],
+        files: {
+          ".github/workflows/ci.yml": {
+            ensure: "exists",
+            source: "files/not-inlined.yml",
+          },
+        },
+      },
+    });
+    assertEquals("includes" in yamlTemplate, false);
+    assertEquals(envReads, 0);
+    assertEquals(ghCalls, 0);
+    assertEquals(fetchCalls, 0);
+
+    const jsonOutput: string[] = [];
+    assertEquals(
+      await main(
+        [
+          "template",
+          "print",
+          "repository:services",
+          "--path",
+          root,
+          "--format",
+          "json",
+        ],
+        { write: (value) => jsonOutput.push(value) },
+      ),
+      0,
+    );
+    assertEquals(JSON.parse(jsonOutput.join("\n")), yamlTemplate);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("template print reports unknown and invalid composed templates", async () => {
+  const root = await templatePrintConfigurationDirectory();
+  try {
+    const errors: string[] = [];
+    assertEquals(
+      await main(
+        ["template", "print", "missing", "--path", root],
+        { writeError: (value) => errors.push(value) },
+      ),
+      1,
+    );
+    assertStringIncludes(errors.join("\n"), "Unknown template: missing");
+
+    await Deno.writeTextFile(
+      root + "/fragments/conflicting.yml",
+      [
+        "version: 1",
+        "kind: fragment",
+        "resource: repository",
+        "repository:",
+        "  rulesets:",
+        "    - name: protect",
+        "      target: tag",
+        "",
+      ].join("\n"),
+    );
+    await Deno.writeTextFile(
+      root + "/templates/invalid.yml",
+      [
+        "version: 1",
+        "kind: repository",
+        "match:",
+        "  include: all",
+        "includes:",
+        "  - ../fragments/base.yml",
+        "  - ../fragments/conflicting.yml",
+        "repository: {}",
+        "",
+      ].join("\n"),
+    );
+    errors.length = 0;
+    assertEquals(
+      await main(
+        ["template", "print", "invalid", "--path", root],
+        { writeError: (value) => errors.push(value) },
+      ),
+      1,
+    );
+    assertStringIncludes(errors.join("\n"), "Conflicting targets for ruleset");
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 Deno.test("template list reports configured templates with source paths", async () => {
   const root = await templateListConfigurationDirectory();
@@ -260,6 +421,104 @@ async function templateListConfigurationDirectory(): Promise<string> {
       "    names:",
       "      - backend",
       "repository: {}",
+      "",
+    ].join("\n"),
+  );
+
+  return root;
+}
+
+async function templatePrintConfigurationDirectory(): Promise<string> {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(root + "/templates");
+  await Deno.mkdir(root + "/fragments");
+
+  await Deno.writeTextFile(
+    root + "/octosmith.yml",
+    [
+      "version: 1",
+      "organization: acme",
+      "repositories:",
+      "  scope:",
+      "    include: all",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/fragments/base.yml",
+    [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  settings:",
+      "    has_issues: false",
+      "    topics: [base, shared]",
+      "  custom_properties:",
+      "    team_name: platform",
+      "    CustomProperty: preserved",
+      "  actions:",
+      "    secrets:",
+      "      - from: UNSET_PRINT_SECRET",
+      "        to: RELEASE_TOKEN",
+      "  teams:",
+      "    - name: platform",
+      "      permission: read",
+      "  rulesets:",
+      "    - name: protect",
+      "      target: branch",
+      "      conditions:",
+      "        ref_name:",
+      "          include: [main]",
+      "          exclude: [archive]",
+      "      rules:",
+      "        - type: creation",
+      "        - type: update",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/fragments/overlay.yml",
+    [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  teams:",
+      "    - name: platform",
+      "      permission: write",
+      "    - name: docs",
+      "      permission: read",
+      "  rulesets:",
+      "    - name: protect",
+      "      conditions:",
+      "        ref_name:",
+      "          include: [main, release]",
+      "      rules:",
+      "        - type: creation",
+      "        - type: deletion",
+      "",
+    ].join("\n"),
+  );
+  await Deno.writeTextFile(
+    root + "/templates/services.yml",
+    [
+      "version: 1",
+      "kind: repository",
+      "includes:",
+      "  - ../fragments/base.yml",
+      "  - ../fragments/overlay.yml",
+      "match:",
+      "  include:",
+      "    names: [backend]",
+      "repository:",
+      "  settings:",
+      "    has_issues: true",
+      "    topics: [service]",
+      "  files:",
+      '    ".github/workflows/ci.yml":',
+      "      ensure: exists",
+      "      source: files/not-inlined.yml",
       "",
     ].join("\n"),
   );
