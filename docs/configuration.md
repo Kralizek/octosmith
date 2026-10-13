@@ -194,10 +194,17 @@ and appending new ones:
   string value, `to`, or `name`).
 
 Matching rulesets and environments recursively merge their object fields.
-Matching teams, secrets, and variables replace the earlier entry as a whole, so
-changing a variable from `from`/`to` to `name`/`value` does not mix
-representations. A later empty named collection (`teams: []`, for example)
-clears inherited entries.
+A ruleset cannot change an explicitly inherited `target` to another target
+under the same name: composition fails instead of inheriting potentially
+incompatible conditions and rules. Matching teams, secrets, and variables
+replace the earlier entry as a whole, so changing a variable from `from`/`to`
+to `name`/`value` does not mix representations.
+
+A document cannot declare the same identity twice in one named collection,
+including nested environment secrets and variables. Validation reports the
+collection path, duplicate identity, positions, and source file. Overrides across
+different fragments and templates remain supported. A later empty named
+collection (`teams: []`, for example) clears inherited entries.
 
 Every other array still replaces wholesale, including OIDC claims and the
 `rules` inside a ruleset. No identity configuration or array merging syntax is
