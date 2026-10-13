@@ -473,7 +473,7 @@ Deno.test("ruleset rules compose deterministically across two fragments and a te
       { type: "non_fast_forward" },
       { type: "required_signatures" },
       { type: "required_linear_history" },
-    ];
+    ] as const;
     const loadRules = async () =>
       (await loadConfigurationDirectory(root))
         .templates["repository:sample"].repository.rulesets?.[0].rules;
