@@ -94,6 +94,12 @@ GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 plan \
 The artifact contains resolved non-secret operation values, but never resolved
 secret values. Treat it as potentially sensitive configuration data.
 
+New artifacts use persisted-plan version 2, which supports explicit secret
+reconciliation scope. Version 1 is the legacy format; existing version-1 plans
+remain accepted without regeneration and are not automatically upgraded or
+replanned. Older Octosmith releases may not read version-2 artifacts. The root
+configuration version remains 1.
+
 ## Apply
 
 ```sh

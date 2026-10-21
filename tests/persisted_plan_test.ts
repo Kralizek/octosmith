@@ -4,7 +4,9 @@ import {
   assertRejects,
   assertThrows,
 } from "@std/assert";
+import { stringify } from "@std/yaml";
 import {
+  applyPlan,
   buildApplyEvaluations,
   buildPlan,
   createPersistedPlanArtifact,
@@ -14,14 +16,451 @@ import {
   hashEffectiveTemplate,
   type LoadedConfiguration,
   MissingRuntimeValueError,
+  type Operation,
   parsePersistedPlanArtifact,
   persistedOperationContract,
   projectOwnedCurrentState,
+  resolveDesiredState,
 } from "../packages/octosmith/mod.ts";
+import legacyPlanFixture from "./fixtures/persisted-plan-v1.json" with {
+  type: "json",
+};
 import { currentState } from "./plan/fixtures.ts";
 import { applyPersistedPlan } from "../packages/cli/persisted.ts";
 import { apply } from "../packages/cli/apply.ts";
 import { executeExecutableResources } from "../packages/cli/execution.ts";
+import { main } from "../packages/cli/mod.ts";
+
+function legacyFixtureConfiguration(
+  secrets?: "automatic" | "manual",
+): LoadedConfiguration {
+  return {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: "all" },
+        settings: {
+          collectionManagement: "strict",
+          ...(secrets && { secrets }),
+        },
+        fileChanges: { mode: "direct" },
+      },
+    },
+    templates: {
+      "repository:legacy": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: {
+          settings: { hasIssues: false },
+          actions: {
+            variables: [{ name: "REGION", value: "east" }],
+            secrets: [{ from: "DEPLOY_TOKEN", to: "TOKEN" }],
+          },
+          dependabot: { secrets: ["DEPENDABOT_TOKEN"] },
+          environments: [{
+            name: "production",
+            variables: [{ name: "REGION", value: "east" }],
+            secrets: ["ENV_TOKEN"],
+          }],
+        },
+      },
+    },
+  };
+}
+
+function legacyFixtureCurrent() {
+  return currentState({
+    actions: { secrets: ["OLD_ACTIONS"] },
+    dependabot: { secrets: ["OLD_DEPENDABOT"] },
+    environments: [{ name: "production", secrets: ["OLD_ENV"], variables: [] }],
+  });
+}
+
+Deno.test("v1 fixture emitted by base 15ce6076 preserves its schema, hashes and serialization", async () => {
+  const legacy = parsePersistedPlanArtifact(legacyPlanFixture);
+  assertEquals(legacy.version, 1);
+  assertEquals<unknown>(legacy, legacyPlanFixture);
+  const loaded = legacyFixtureConfiguration();
+  const desired = await resolveDesiredState(
+    loaded,
+    { name: "sample", teams: [], properties: {} },
+    () => {
+      throw new Error("No runtime variable sources required");
+    },
+  );
+  const current = legacyFixtureCurrent();
+  const plan = buildPlan(current, desired);
+  const generated = await createPersistedPlanArtifact(loaded, [{
+    desired,
+    current,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }], new Date(legacy.createdAt));
+  assertEquals<unknown>(generated, { ...legacyPlanFixture, version: 2 });
+});
+
+for (
+  const flag of [[], ["--include-secrets"], ["--include-secrets=true"], [
+    "--include-secrets=false",
+  ]]
+) {
+  Deno.test(`legacy v1 CLI replay ignores ${flag.join(" ") || "omitted secret flag"}`, async () => {
+    const root = await Deno.makeTempDir();
+    try {
+      await Deno.mkdir(root + "/templates");
+      await Deno.writeTextFile(
+        root + "/octosmith.yml",
+        stringify({
+          version: 1,
+          organization: "acme",
+          repositories: {
+            scope: { include: "all" },
+            settings: { collection_management: "strict", secrets: "manual" },
+            file_changes: { mode: "direct" },
+          },
+        }),
+      );
+      const template =
+        legacyFixtureConfiguration().templates["repository:legacy"];
+      await Deno.writeTextFile(
+        root + "/templates/legacy.yml",
+        stringify({
+          ...template,
+          repository: {
+            ...template.repository,
+            settings: { has_issues: false },
+          },
+        }),
+      );
+      const path = root + "/legacy-plan.json";
+      const serialized = JSON.stringify(legacyPlanFixture);
+      await Deno.writeTextFile(path, serialized);
+      const operations: Operation[] = [];
+      const sources: string[] = [];
+      const output: string[] = [];
+      const errors: string[] = [];
+      assertEquals(
+        await main([
+          "apply",
+          "--path",
+          root,
+          "--plan",
+          path,
+          "--template",
+          "legacy",
+          "--format",
+          "json",
+          ...flag,
+        ], {
+          runtime: {
+            value: (name) => {
+              sources.push(name);
+              return "legacy-runtime-secret";
+            },
+            discover: () =>
+              Promise.resolve({
+                repositories: [{ name: "sample", teams: [], properties: {} }],
+                failures: [],
+              }),
+            read: () => Promise.resolve(legacyFixtureCurrent()),
+            prepare: () => {},
+            recheck: () => {},
+            apply: (resource) =>
+              applyPlan({
+                apply: (_repository, operation) => {
+                  operations.push(operation);
+                  return Promise.resolve();
+                },
+              }, resource.plan),
+          },
+          write: (value) => output.push(value),
+          writeError: (value) => errors.push(value),
+        }),
+        0,
+        errors.join("\n"),
+      );
+      assertEquals<unknown>(
+        operations,
+        legacyPlanFixture.resources[0].operations,
+      );
+      assertEquals(sources.sort(), [
+        "DEPENDABOT_TOKEN",
+        "DEPLOY_TOKEN",
+        "ENV_TOKEN",
+      ]);
+      assertEquals(output.join("\n").includes("legacy-runtime-secret"), false);
+      assertEquals(await Deno.readTextFile(path), serialized);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}
+
+Deno.test("new persisted plans use v2 even with no selected resources", async () => {
+  for (const secrets of ["automatic", "manual"] as const) {
+    const artifact = await createPersistedPlanArtifact(
+      legacyFixtureConfiguration(secrets),
+      [],
+    );
+    assertEquals(artifact.version, 2);
+    assertEquals(parsePersistedPlanArtifact(artifact).resources, []);
+  }
+});
+
+for (const version of [1, 2]) {
+  for (const secrets of ["automatic", "manual"] as const) {
+    Deno.test(`v${version} fixture replays exact operations with current secrets=${secrets}`, async () => {
+      const artifact = parsePersistedPlanArtifact({
+        ...legacyPlanFixture,
+        version,
+      });
+      const executed: Operation[] = [];
+      const sources: string[] = [];
+      const reports: unknown[] = [];
+      let prepared = 0;
+      const runtime = {
+        value: (name: string) => {
+          sources.push(name);
+          return "runtime-secret-never-serialize";
+        },
+        discover: () =>
+          Promise.resolve({
+            repositories: [{ name: "sample", teams: [], properties: {} }],
+            failures: [],
+          }),
+        read: () => Promise.resolve(legacyFixtureCurrent()),
+        prepare: () => {
+          prepared++;
+        },
+        recheck: () => {},
+        apply: (resource: ExecutableResourcePlan) =>
+          applyPlan({
+            apply: (_repository, operation) => {
+              executed.push(operation);
+              return Promise.resolve();
+            },
+          }, resource.plan),
+      };
+      const loaded = legacyFixtureConfiguration(secrets);
+      await applyPersistedPlan(runtime, loaded, artifact, (report) => {
+        reports.push(report);
+      });
+      assertEquals(prepared, 1);
+      assertEquals(executed, artifact.resources[0].operations);
+      assertEquals(sources.sort(), [
+        "DEPENDABOT_TOKEN",
+        "DEPLOY_TOKEN",
+        "ENV_TOKEN",
+      ]);
+      assertEquals(
+        JSON.stringify({ artifact, reports }).includes(
+          "runtime-secret-never-serialize",
+        ),
+        false,
+      );
+
+      const executedCount = executed.length;
+      const changedTemplate = {
+        ...loaded,
+        templates: {
+          "repository:legacy": {
+            ...loaded.templates["repository:legacy"],
+            repository: {
+              ...loaded.templates["repository:legacy"].repository,
+              settings: { hasIssues: true },
+            },
+          },
+        },
+      };
+      await assertRejects(
+        () => applyPersistedPlan(runtime, changedTemplate, artifact, () => {}),
+        Error,
+        "saved plan is stale",
+      );
+      await assertRejects(
+        () =>
+          applyPersistedPlan(
+            runtime,
+            {
+              ...loaded,
+              configuration: {
+                ...loaded.configuration,
+                organization: "changed",
+              },
+            },
+            artifact,
+            () => {},
+          ),
+        Error,
+        "saved plan is stale",
+      );
+      await assertRejects(
+        () =>
+          applyPersistedPlan(
+            {
+              ...runtime,
+              read: () =>
+                Promise.resolve({
+                  ...legacyFixtureCurrent(),
+                  dependabot: { secrets: ["DRIFT"] },
+                }),
+            },
+            loaded,
+            artifact,
+            () => {},
+          ),
+        Error,
+        "saved plan is stale",
+      );
+      await assertRejects(
+        () =>
+          applyPersistedPlan(
+            {
+              ...runtime,
+              read: () =>
+                Promise.resolve({
+                  ...legacyFixtureCurrent(),
+                  environments: [{
+                    name: "production",
+                    secrets: ["DRIFT"],
+                    variables: [],
+                  }],
+                }),
+            },
+            loaded,
+            artifact,
+            () => {},
+          ),
+        Error,
+        "saved plan is stale",
+      );
+      await assertRejects(
+        () =>
+          applyPersistedPlan(
+            {
+              ...runtime,
+              value: (name: string): string => {
+                throw new MissingRuntimeValueError(name);
+              },
+            },
+            loaded,
+            artifact,
+            () => {},
+          ),
+        Error,
+        "Missing environment value",
+      );
+      assertEquals(prepared, 1);
+      assertEquals(executed.length, executedCount);
+    });
+  }
+
+  Deno.test(`v${version} rejects malformed artifacts without weakening integrity checks`, () => {
+    const base = { ...legacyPlanFixture, version };
+    const resource = base.resources[0];
+    const invalid = [
+      { ...base, createdAt: "2026-02-30T12:00:00Z" },
+      { ...base, configuration: { algorithm: "sha256", hash: "invalid" } },
+      { ...base, unexpected: true },
+      { ...base, resources: [resource, resource] },
+      {
+        ...base,
+        resources: [{ ...resource, operations: [{ type: "unsupported" }] }],
+      },
+      {
+        ...base,
+        resources: [{
+          ...resource,
+          evaluations: [{
+            type: "environment",
+            details: {},
+            operationIndex: 999,
+          }],
+        }],
+      },
+      {
+        ...base,
+        resources: [{
+          ...resource,
+          operations: [{
+            type: "set-actions-secret",
+            secret: {
+              name: "TOKEN",
+              source: "DEPLOY_TOKEN",
+              value: "do-not-serialize",
+            },
+          }],
+        }],
+      },
+      {
+        ...base,
+        resources: [{
+          ...resource,
+          operations: [{
+            type: "update-ruleset",
+            id: 1,
+            changes: { name: "main", target: "push" },
+          }],
+        }],
+      },
+    ];
+    for (const value of invalid) {
+      assertThrows(
+        () => parsePersistedPlanArtifact(value),
+        Error,
+        "Invalid persisted plan",
+      );
+    }
+  });
+}
+
+Deno.test("secret exclusion is a v2-only literal true resource property", () => {
+  const resource = legacyPlanFixture.resources[0];
+  for (const version of [1, 2]) {
+    for (const secretsExcluded of [false, null, "true", 1]) {
+      assertThrows(
+        () =>
+          parsePersistedPlanArtifact({
+            ...legacyPlanFixture,
+            version,
+            resources: [{ ...resource, secretsExcluded }],
+          }),
+        Error,
+        "Invalid persisted plan",
+      );
+    }
+  }
+  assertThrows(
+    () =>
+      parsePersistedPlanArtifact({
+        ...legacyPlanFixture,
+        resources: [{ ...resource, secretsExcluded: true }],
+      }),
+    Error,
+    "/resources/0/secretsExcluded",
+  );
+  const excluded = parsePersistedPlanArtifact({
+    ...legacyPlanFixture,
+    version: 2,
+    resources: [{
+      ...resource,
+      secretsExcluded: true,
+      operations: [],
+      evaluations: [],
+    }],
+  });
+  assertEquals(excluded.resources[0].secretsExcluded, true);
+  for (const version of [0, 3, -1, "2", null]) {
+    assertThrows(
+      () => parsePersistedPlanArtifact({ ...legacyPlanFixture, version }),
+      Error,
+      "Unsupported persisted plan version",
+    );
+  }
+});
 
 Deno.test("canonical hashing is independent of object key order", async () => {
   assertEquals(
@@ -1895,7 +2334,7 @@ Deno.test("persisted artifact stores exact operations without secret material", 
   );
 
   assertEquals(artifact.format, "octosmith-plan");
-  assertEquals(artifact.version, 1);
+  assertEquals(artifact.version, 2);
   assertEquals(artifact.resources[0].operations, plan.operations);
   assertEquals(
     JSON.stringify(artifact).includes("super-secret-value"),
@@ -2462,9 +2901,9 @@ Deno.test("persisted artifact parsing rejects unsupported versions and invalid i
   }
 
   assertThrows(
-    () => parsePersistedPlanArtifact({ ...base, version: 2 }),
+    () => parsePersistedPlanArtifact({ ...base, version: 3 }),
     Error,
-    "Unsupported persisted plan version: 2",
+    "Unsupported persisted plan version: 3",
   );
 
   assertThrows(

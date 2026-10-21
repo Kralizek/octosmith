@@ -84,11 +84,18 @@ collections. Variables and environment membership remain managed, except that
 strict cleanup preserves undeclared environments containing secrets to avoid
 indirect deletion. Policy diagnostics are distinct from skipped-value warnings.
 
-Saved resources optionally record `secretsExcluded: true`. Absence preserves
-legacy automatic behavior. Replay restores this planning scope without
-consulting the current policy; the root execution-relevant hash intentionally
-excludes the planning-only secret setting. Artifact version and existing hash
-normalization are unchanged.
+All new persisted plans use artifact version 2. Its resources optionally record
+`secretsExcluded: true`; absence means secrets were not excluded by policy.
+Version 1 is the legacy format and forbids this property. Version-aware schema
+validation and a discriminated TypeScript union accept both formats before
+execution. Existing version-1 plans continue replaying without regeneration,
+automatic upgrading, or replanning; older Octosmith releases may reject
+version 2.
+
+Replay restores the saved planning scope without consulting the current policy.
+The root execution-relevant hash intentionally excludes the planning-only secret
+setting. Existing hash normalization, runtime dependencies, and preflight checks
+remain unchanged for both versions. The configuration schema stays at version 1.
 
 ## Collection semantics
 

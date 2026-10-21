@@ -287,6 +287,15 @@ actual configuration/template changes, state preconditions, and replay
 dependency checks remain enforced. Required sources for saved secret operations
 must still exist.
 
+New persisted artifacts always use version 2, including plans with secrets
+included. Version 2 introduces optional `secretsExcluded: true` on resources;
+omission means secrets were not excluded by policy. Legacy version-1 artifacts
+cannot contain that field and remain accepted without regeneration. Octosmith
+does not automatically upgrade or replan existing artifacts. Both versions
+replay saved operations independently of the current mode. Older Octosmith
+releases may not read version-2 artifacts. This does not change the root
+configuration's `version: 1`.
+
 ## Managed files
 
 Managed file sources are local to the configuration root.

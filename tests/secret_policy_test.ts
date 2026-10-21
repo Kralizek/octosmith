@@ -331,7 +331,7 @@ for (const originalMode of ["automatic", "manual"] as const) {
         const serialized = await Deno.readTextFile(path);
         assertEquals(serialized.includes(secretValue), false);
         const artifact = parsePersistedPlanArtifact(JSON.parse(serialized));
-        assertEquals(artifact.version, 1);
+        assertEquals(artifact.version, 2);
         assertEquals(
           artifact.resources[0].secretsExcluded,
           originalMode === "manual" ? true : undefined,

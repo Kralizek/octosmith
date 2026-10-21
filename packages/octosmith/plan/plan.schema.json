@@ -16,7 +16,7 @@
       "const": "octosmith-plan"
     },
     "version": {
-      "const": 1
+      "enum": [1, 2]
     },
     "createdAt": {
       "type": "string",
@@ -32,7 +32,28 @@
       }
     }
   },
+  "oneOf": [
+    {
+      "properties": {
+        "version": { "const": 1 },
+        "resources": {
+          "items": { "$ref": "#/$defs/resourceV1" }
+        }
+      }
+    },
+    {
+      "properties": {
+        "version": { "const": 2 }
+      }
+    }
+  ],
   "$defs": {
+    "resourceV1": {
+      "allOf": [
+        { "$ref": "#/$defs/resource" },
+        { "properties": { "secretsExcluded": false } }
+      ]
+    },
     "hash": {
       "type": "object",
       "additionalProperties": false,

@@ -312,7 +312,7 @@ function createCli(
                 resources: persistedArtifact.resources.filter((resource) =>
                   resource.template.id === template
                 ),
-              };
+              } as typeof persistedArtifact;
               await applyPersistedPlan(
                 runtime,
                 loaded,

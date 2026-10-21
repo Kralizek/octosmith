@@ -215,6 +215,14 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration --out plan.json
 The persisted artifact is distinct from `--format json` output. It may contain
 resolved variables and managed-file contents, but never resolved secret values.
 
+All new persisted artifacts use version 2, even when secrets are included or no
+resources are selected. Version 2 adds optional resource-level
+`secretsExcluded: true`; omission means secrets were not excluded by policy.
+Version 1 is the legacy format and does not accept that property. Octosmith
+continues accepting and executing version-1 plans without regeneration,
+automatic upgrading, or replanning. Older releases may not read version-2 plans.
+The configuration schema version remains 1.
+
 ### apply
 
 ```sh
