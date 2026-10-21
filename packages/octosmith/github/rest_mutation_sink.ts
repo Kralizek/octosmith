@@ -335,42 +335,45 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         readonly allowed_actions: "all" | "local_only" | "selected";
         readonly sha_pinning_required?: boolean;
       }>(base);
+      const enabled = settings.enabled ?? current.enabled;
 
       await this.#client.request("PUT", base, {
-        body: {
-          enabled: settings.enabled ?? current.enabled,
-          allowed_actions: settings.allowedActions === undefined
-            ? settings.selectedActions !== undefined
-              ? "selected"
-              : current.allowed_actions
-            : settings.allowedActions === "local-only"
-            ? "local_only"
-            : settings.allowedActions,
-          sha_pinning_required: settings.shaPinningRequired ??
-            current.sha_pinning_required ??
-            false,
-        },
+        body: enabled
+          ? {
+            enabled,
+            allowed_actions: settings.allowedActions === undefined
+              ? settings.selectedActions !== undefined
+                ? "selected"
+                : current.allowed_actions
+              : settings.allowedActions === "local-only"
+              ? "local_only"
+              : settings.allowedActions,
+            sha_pinning_required: settings.shaPinningRequired ??
+              current.sha_pinning_required ??
+              false,
+          }
+          : { enabled: false },
       });
-    }
 
-    if (settings.selectedActions !== undefined) {
-      const path = base + "/selected-actions";
-      const current = await this.#client.get<{
-        readonly github_owned_allowed: boolean;
-        readonly verified_allowed: boolean;
-        readonly patterns_allowed: readonly string[];
-      }>(path);
+      if (enabled && settings.selectedActions !== undefined) {
+        const path = base + "/selected-actions";
+        const current = await this.#client.get<{
+          readonly github_owned_allowed: boolean;
+          readonly verified_allowed: boolean;
+          readonly patterns_allowed: readonly string[];
+        }>(path);
 
-      await this.#client.request("PUT", path, {
-        body: {
-          github_owned_allowed: settings.selectedActions.githubOwnedAllowed ??
-            current.github_owned_allowed,
-          verified_allowed: settings.selectedActions.verifiedAllowed ??
-            current.verified_allowed,
-          patterns_allowed: settings.selectedActions.patternsAllowed ??
-            current.patterns_allowed,
-        },
-      });
+        await this.#client.request("PUT", path, {
+          body: {
+            github_owned_allowed: settings.selectedActions.githubOwnedAllowed ??
+              current.github_owned_allowed,
+            verified_allowed: settings.selectedActions.verifiedAllowed ??
+              current.verified_allowed,
+            patterns_allowed: settings.selectedActions.patternsAllowed ??
+              current.patterns_allowed,
+          },
+        });
+      }
     }
   }
 
