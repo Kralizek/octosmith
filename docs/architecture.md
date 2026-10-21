@@ -75,6 +75,21 @@ destination names before omitting skipped bindings. The engine uses the same
 exclusions for planning ownership and reports; environment update operations
 also record preserved names so strict cleanup cannot remove skipped values.
 
+## Secret policy
+
+Fresh secret policy is computed in the core with `shouldIncludeSecrets` and
+passed to runtime preflight and desired-state normalization. Manual exclusion
+omits secret collections entirely rather than treating them as empty strict
+collections. Variables and environment membership remain managed, except that
+strict cleanup preserves undeclared environments containing secrets to avoid
+indirect deletion. Policy diagnostics are distinct from skipped-value warnings.
+
+Saved resources optionally record `secretsExcluded: true`. Absence preserves
+legacy automatic behavior. Replay restores this planning scope without
+consulting the current policy; the root execution-relevant hash intentionally
+excludes the planning-only secret setting. Artifact version and existing hash
+normalization are unchanged.
+
 ## Collection semantics
 
 Collection management belongs to desired-state interpretation, not GitHub API

@@ -50,6 +50,7 @@ export interface PersistedResourcePlan {
   readonly operations: readonly Operation[];
   readonly managedFiles?: Plan["managedFiles"];
   readonly evaluations: readonly PersistedApplyEvaluation[];
+  readonly secretsExcluded?: true;
   readonly skippedRuntimeReferences?: readonly RuntimeReference[];
 }
 
@@ -115,6 +116,8 @@ export async function createPersistedPlanArtifact(
           ),
         ),
         operations: resource.plan.operations,
+        ...(resource.desired.secretsExcluded &&
+          { secretsExcluded: true as const }),
         ...(resource.plan.managedFiles !== undefined && {
           managedFiles: resource.plan.managedFiles,
         }),

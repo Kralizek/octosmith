@@ -61,6 +61,9 @@ commands:
       - name: out
         type: string
         summary: Write the persisted plan artifact.
+      - name: include-secrets
+        type: boolean
+        summary: Include secrets in a fresh plan; false honors the configured mode.
       - name: skip-missing-values
         type: boolean
         summary: Exclude unavailable runtime values from the new plan and preserve their remote state.
@@ -109,6 +112,9 @@ commands:
       - name: plan
         type: string
         summary: Apply a persisted plan artifact.
+      - name: include-secrets
+        type: boolean
+        summary: Include secrets in fresh apply; false honors configuration. Ignored with --plan.
       - name: skip-missing-values
         type: boolean
         summary: Exclude unavailable runtime values during direct apply; cannot be combined with --plan.

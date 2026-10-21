@@ -115,6 +115,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "secrets": {
+          "type": "string",
+          "enum": ["automatic", "manual"],
+          "default": "automatic"
+        },
         "collection_management": {
           "type": "string",
           "enum": [

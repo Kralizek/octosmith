@@ -29,6 +29,10 @@ inputs:
     description: Emit GitHub API request traces to stderr
     required: false
     default: "false"
+  include-secrets:
+    description: Include secrets in fresh plan/apply; false honors configured mode
+    required: false
+    default: "false"
   events-output:
     description: Optional writable path for NDJSON Hooksmith resource events
     required: false
@@ -53,5 +57,6 @@ runs:
         OCTOSMITH_FORMAT: ${{ inputs.format }}
         OCTOSMITH_VERBOSE: ${{ inputs.verbose }}
         OCTOSMITH_TRACE: ${{ inputs.trace }}
+        OCTOSMITH_INCLUDE_SECRETS: ${{ inputs.include-secrets }}
         OCTOSMITH_EVENTS_OUTPUT: ${{ inputs.events-output }}
       run: bash "$GITHUB_ACTION_PATH/scripts/run-action.sh"

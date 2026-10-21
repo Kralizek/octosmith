@@ -246,6 +246,47 @@ Secret values are never materialized into desired state, reports, or plans.
 `apply` resolves required secrets again immediately before mutation so a future
 persisted plan can be applied safely in a different runtime context.
 
+## Secret reconciliation
+
+Secret reconciliation is `automatic` by default, including when the setting is
+omitted. Opt out of routine secret updates in the root configuration:
+
+```yaml
+version: 1
+organization: acme
+repositories:
+  scope:
+    include: all
+  settings:
+    collection_management: strict
+    secrets: manual
+```
+
+Only `automatic` and `manual` are valid. Manual mode excludes all Actions
+repository secrets, Dependabot secrets, and environment secrets before runtime
+input resolution. It requires no secret sources and generates no secret writes
+or removals, even under strict collection management. Undeclared environments
+containing secrets are preserved too, because deleting them would delete their
+secrets. Other environment reconciliation, variables, and non-secret resources
+continue normally. Reports give one policy warning without listing secret names.
+
+For fresh `plan` and `apply`, `--include-secrets` or `--include-secrets=true`
+opts secrets back in. `--include-secrets=false` is the same as omitting the
+flag: it respects the configured mode, not a forced exclusion in automatic mode.
+Only literal `true` and `false` are accepted as explicit values.
+
+This is independent of `--skip-missing-values`: policy excludes every secret,
+even available ones; missing-value handling applies only to participating
+values. Once opted in, secrets follow the usual required-runtime-value checks
+and `--skip-missing-values` behavior.
+
+Saved plans retain their original exclusions and operations. During
+`apply --plan`, the current secret mode and `--include-secrets` have no effect
+on operation selection. Changing only the mode does not invalidate a plan;
+actual configuration/template changes, state preconditions, and replay
+dependency checks remain enforced. Required sources for saved secret operations
+must still exist.
+
 ## Managed files
 
 Managed file sources are local to the configuration root.

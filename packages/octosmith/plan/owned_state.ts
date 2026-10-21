@@ -191,6 +191,7 @@ export function projectOwnedCurrentState(
       desired.environments,
       strict,
       skippedRuntimeReferences,
+      desired.secretsExcluded,
     );
   }
 
@@ -334,6 +335,7 @@ function projectEnvironments(
   desired: NonNullable<DesiredState["environments"]>,
   strict: boolean,
   skippedRuntimeReferences: readonly RuntimeReference[],
+  secretsExcluded = false,
 ): readonly unknown[] {
   const desiredByName = new Map(desired.map((item) => [item.name, item]));
 
@@ -353,7 +355,13 @@ function projectEnvironments(
     );
 
     if (owned === undefined) {
-      return strict ? [{ name: environment.name }] : [];
+      return strict
+        ? [{
+          name: environment.name,
+          ...(secretsExcluded &&
+            { hasSecrets: environment.secrets.length > 0 }),
+        }]
+        : [];
     }
 
     return [{

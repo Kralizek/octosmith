@@ -14,6 +14,7 @@ import {
   resolveDesiredState,
   restoreEvaluations,
   type RuntimeReferenceDiagnostic,
+  secretPolicyDiagnostics,
   withoutSkippedRuntimeValues,
 } from "@octosmith/octosmith";
 import type { ApplyRuntime } from "./apply.ts";
@@ -249,8 +250,12 @@ async function inspectResource(
       loaded,
       metadata,
       (name) => "persisted-plan:" + name,
-      { skippedRuntimeReferences: skipped },
+      {
+        skippedRuntimeReferences: skipped,
+        includeSecrets: resource.secretsExcluded !== true,
+      },
     );
+    diagnostics.push(...secretPolicyDiagnostics(stateDesired));
     desired = withoutSkippedRuntimeValues(
       stateDesired,
       skipped,

@@ -25,6 +25,35 @@ The Action resolves the exact `@octosmith/cli` version recorded in its release
 commit and runs that published JSR package. Moving Action tags such as `v0` and
 `v0.x` are updated only after the matching CLI package has been published.
 
+Fresh plan/apply obey `repositories.settings.secrets` (`automatic` by default,
+or `manual` to preserve secrets without requiring their runtime sources). The
+Action's optional `include-secrets` input accepts `"true"` and `"false"`:
+
+```yaml
+- uses: Kralizek/octosmith@v0
+  with:
+    mode: apply
+    github-token: ${{ secrets.OCTOSMITH_TOKEN }}
+    include-secrets: ${{ inputs.include-secrets }}
+```
+
+For a directly installed CLI, optional booleans support CI parameterization:
+
+```yaml
+- name: Apply Octosmith configuration
+  run: |
+    octosmith apply \
+      --path ./github \
+      --include-secrets=${{ inputs.include-secrets }}
+```
+
+The bare CLI flag and `=true` explicitly include all supported secrets alongside
+other resources. `=false` honors the configured mode, so it does not disable
+secrets in automatic mode. Only literal `true` and `false` are valid explicit
+values. `--skip-missing-values` remains independent. Persisted `apply --plan`
+ignores this flag and the current secret-mode policy for operation selection; it
+executes only the reviewed stored operations with the existing safety checks.
+
 ## Credentials
 
 The credential is exposed to the CLI through `GITHUB_TOKEN`; it is not passed as

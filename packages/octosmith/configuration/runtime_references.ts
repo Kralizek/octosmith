@@ -25,7 +25,8 @@ export interface RuntimeReferenceDiagnostic {
     | "missing_variable"
     | "missing_secret"
     | "skipped_variable"
-    | "skipped_secret";
+    | "skipped_secret"
+    | "excluded_secrets";
   readonly name: string;
   readonly template: string;
   readonly path: string;
@@ -141,6 +142,7 @@ export function preflightRuntimeReferences(
   options: {
     readonly secretValues?: (name: string) => string;
     readonly skipMissingValues?: boolean;
+    readonly includeSecrets?: boolean;
     readonly onSkipped?: (
       reference: RuntimeReference,
       diagnostic: RuntimeReferenceDiagnostic,
@@ -150,7 +152,9 @@ export function preflightRuntimeReferences(
   const resolved = new Map<string, string>();
   const missing = new Set<string>();
   const diagnostics: RuntimeReferenceDiagnostic[] = [];
-  const references = collectRuntimeReferences(template);
+  const references = collectRuntimeReferences(template).filter((reference) =>
+    options.includeSecrets !== false || reference.kind !== "secret"
+  );
   const key = (kind: RuntimeReference["kind"], name: string) =>
     kind + ":" + name;
 
@@ -355,6 +359,9 @@ export function runtimeReferenceWarnings(
 export function describeRuntimeReferenceDiagnostic(
   diagnostic: Pick<RuntimeReferenceDiagnostic, "severity" | "code" | "name">,
 ): string {
+  if (diagnostic.code === "excluded_secrets") {
+    return "Secrets excluded (manual mode). Use --include-secrets to reconcile them.";
+  }
   const kind = diagnostic.code.endsWith("_secret") ? "secret" : "variable";
   if (diagnostic.code.startsWith("skipped_")) {
     return `Skipped ${kind} "${diagnostic.name}": runtime value unavailable.`;
@@ -363,6 +370,22 @@ export function describeRuntimeReferenceDiagnostic(
     ? "is not available in the current context"
     : "requires a runtime value";
   return `Required ${kind} "${diagnostic.name}" ${availability}.`;
+}
+
+/** Describe policy exclusion without enumerating individual secret bindings. */
+export function secretPolicyDiagnostics(
+  desired: DesiredState,
+): readonly RuntimeReferenceDiagnostic[] {
+  return desired.secretsExcluded
+    ? [{
+      severity: "warning",
+      code: "excluded_secrets",
+      name: "secrets",
+      template: desired.template,
+      path: "repositories.settings.secrets",
+      resource: { type: "repository", name: desired.repository },
+    }]
+    : [];
 }
 
 /** Render the reference lines for a runtime-reference diagnostic. */

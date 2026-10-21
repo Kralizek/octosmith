@@ -148,6 +148,9 @@
             "$ref": "#/$defs/evaluation"
           }
         },
+        "secretsExcluded": {
+          "const": true
+        },
         "skippedRuntimeReferences": {
           "type": "array",
           "items": {

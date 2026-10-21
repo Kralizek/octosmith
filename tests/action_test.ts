@@ -81,6 +81,20 @@ Deno.test("action wrapper maps trimmed inputs to CLI arguments", async () => {
   ]);
 });
 
+for (const value of ["true", "false"]) {
+  Deno.test(`action wrapper maps include-secrets=${value}`, async () => {
+    const result = await runActionWrapper({
+      OCTOSMITH_MODE: "apply",
+      OCTOSMITH_INCLUDE_SECRETS: value,
+    });
+    assertEquals(result.code, 0);
+    assertEquals(
+      result.args.includes("--include-secrets=true"),
+      value === "true",
+    );
+  });
+}
+
 Deno.test("action wrapper supports offline validate", async () => {
   const result = await runActionWrapper({
     OCTOSMITH_MODE: "validate",
@@ -131,6 +145,11 @@ Deno.test("action wrapper applies optional input defaults", async () => {
 for (
   const [name, env, message] of [
     [
+      "include-secrets for validate",
+      { OCTOSMITH_MODE: "validate", OCTOSMITH_INCLUDE_SECRETS: "true" },
+      "include-secrets is not supported for validate",
+    ],
+    [
       "resource for validate",
       { OCTOSMITH_MODE: "validate", OCTOSMITH_RESOURCE: "api-service" },
       "resource is not supported for validate",
@@ -164,6 +183,11 @@ for (
 
 for (
   const [name, env, message] of [
+    [
+      "include-secrets",
+      { OCTOSMITH_MODE: "apply", OCTOSMITH_INCLUDE_SECRETS: "maybe" },
+      "include-secrets must be either 'true' or 'false'",
+    ],
     [
       "mode",
       { OCTOSMITH_MODE: "invalid" },
