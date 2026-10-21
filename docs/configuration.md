@@ -142,6 +142,77 @@ repository:
       squash_commit_message: blank
 ```
 
+### GitHub Actions permissions
+
+Actions permission settings (`allowed_actions`, `sha_pinning_required`, and
+`selected_actions`) require an explicit `enabled: true` in the same
+configuration block. `enabled: false` must not be combined with any of these
+permission settings, even if a setting is `false` or an empty object. This is an
+intentional tightening of configuration validation: existing permission blocks
+without `enabled: true` must add it.
+
+When `selected_actions` is specified, `allowed_actions` must either be
+`selected` or omitted. If omitted, Octosmith infers `allowed_actions: selected`.
+
+Valid examples:
+
+```yaml
+repository:
+  actions:
+    enabled: true
+    sha_pinning_required: true
+    selected_actions: # allowed_actions: selected is inferred
+      github_owned_allowed: true
+      verified_allowed: false
+      patterns_allowed: ["acme/*"]
+```
+
+```yaml
+repository:
+  actions:
+    enabled: false
+```
+
+Invalid examples:
+
+```yaml
+repository:
+  actions:
+    allowed_actions: all # Missing enabled: true
+```
+
+```yaml
+repository:
+  actions:
+    enabled: false
+    sha_pinning_required: false # Permissions cannot accompany enabled: false
+```
+
+```yaml
+repository:
+  actions:
+    enabled: true
+    allowed_actions: all # Must be selected or omitted with selected_actions
+    selected_actions:
+      github_owned_allowed: true
+```
+
+OIDC, secrets, and variables are independent of these permission constraints.
+They do not require `enabled` and may also be configured alongside
+`enabled: false`:
+
+```yaml
+repository:
+  actions:
+    oidc:
+      immutable_subject: true
+    secrets:
+      - DEPLOY_TOKEN
+    variables:
+      - name: REGION
+        value: eu-north-1
+```
+
 ### Fragment composition
 
 Repository templates may compose reusable desired-state fragments with

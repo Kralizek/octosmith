@@ -338,6 +338,104 @@ Deno.test("configuration accepts Actions and Dependabot value blocks", async () 
   );
 });
 
+Deno.test("configuration accepts valid Actions permissions", async () => {
+  for (
+    const actions of [
+      { enabled: false },
+      { enabled: true },
+      { enabled: true, allowed_actions: "all", sha_pinning_required: false },
+      {
+        enabled: true,
+        allowed_actions: "local_only",
+        sha_pinning_required: true,
+      },
+      {
+        enabled: true,
+        allowed_actions: "selected",
+        selected_actions: { github_owned_allowed: true },
+      },
+      { enabled: true, selected_actions: { verified_allowed: true } },
+    ]
+  ) {
+    await withConfiguration(configuration, {
+      ...template,
+      repository: { actions },
+    }, async (root) => {
+      await loadConfigurationDirectory(root);
+    });
+  }
+});
+
+Deno.test("configuration requires explicit enabled true for each Actions permission", async () => {
+  for (
+    const permission of [
+      { allowed_actions: "all" },
+      { allowed_actions: "local_only" },
+      { allowed_actions: "selected" },
+      { sha_pinning_required: true },
+      { sha_pinning_required: false },
+      { selected_actions: {} },
+    ]
+  ) {
+    for (const enabled of [undefined, false]) {
+      await withConfiguration(configuration, {
+        ...template,
+        repository: {
+          actions: {
+            ...permission,
+            ...(enabled !== undefined && { enabled }),
+          },
+        },
+      }, (root) =>
+        assertRejects(
+          () => loadConfigurationDirectory(root),
+          Error,
+          "/repository/actions",
+        ));
+    }
+  }
+});
+
+Deno.test("configuration rejects selected Actions with incompatible allowed actions", async () => {
+  for (const allowed_actions of ["all", "local_only"]) {
+    await withConfiguration(configuration, {
+      ...template,
+      repository: {
+        actions: { enabled: true, allowed_actions, selected_actions: {} },
+      },
+    }, (root) =>
+      assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "/repository/actions/allowed_actions",
+      ));
+  }
+});
+
+Deno.test("Actions OIDC, secrets and variables do not require enabled true", async () => {
+  for (
+    const settings of [
+      { oidc: { immutable_subject: true } },
+      { secrets: ["DEPLOY_TOKEN"] },
+      { variables: [{ name: "REGION", value: "eu-north-1" }] },
+    ]
+  ) {
+    for (const enabled of [undefined, false]) {
+      await withConfiguration(configuration, {
+        ...template,
+        repository: {
+          actions: {
+            ...settings,
+            ...(enabled !== undefined && { enabled }),
+          },
+        },
+      }, async (root) => {
+        await loadConfigurationDirectory(root);
+      });
+    }
+  }
+});
+
 Deno.test("configuration rejects unsupported versions", async () => {
   await withConfiguration(
     { ...configuration, version: 2 },

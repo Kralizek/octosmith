@@ -284,6 +284,19 @@ interface RecordedRequest {
 
 class MappingClient implements GitHubClient {
   readonly requests: RecordedRequest[] = [];
+  readonly gets: string[] = [];
+
+  constructor(
+    readonly actionsPermissions: {
+      enabled: boolean;
+      allowed_actions: "all" | "local_only" | "selected";
+      sha_pinning_required?: boolean;
+    } = {
+      enabled: true,
+      allowed_actions: "all",
+      sha_pinning_required: false,
+    },
+  ) {}
 
   request<T>(
     method: string,
@@ -321,6 +334,7 @@ class MappingClient implements GitHubClient {
     path: string,
     _query: Readonly<Record<string, GitHubQueryValue>> = {},
   ): Promise<T> {
+    this.gets.push(path);
     if (path.endsWith("/rulesets/1")) {
       return Promise.resolve({
         id: 1,
@@ -343,11 +357,7 @@ class MappingClient implements GitHubClient {
     }
 
     if (path.endsWith("/actions/permissions")) {
-      return Promise.resolve({
-        enabled: true,
-        allowed_actions: "all",
-        sha_pinning_required: false,
-      } as T);
+      return Promise.resolve(this.actionsPermissions as T);
     }
 
     if (path.endsWith("/actions/permissions/selected-actions")) {
@@ -617,6 +627,94 @@ Deno.test("push rules map max file size to GitHub's parameter name", async () =>
   });
 });
 
+Deno.test("disabling Actions sends only enabled false and never accesses selected actions", async () => {
+  for (const selectedActions of [undefined, { githubOwnedAllowed: true }]) {
+    const client = new MappingClient({
+      enabled: true,
+      allowed_actions: "selected",
+      sha_pinning_required: true,
+    });
+    const sink = new GitHubRepositoryMutationSink({
+      client,
+      owner: "acme",
+      secretValue: () => "unused",
+    });
+
+    await sink.apply("sample", {
+      type: "update-actions-settings",
+      settings: { enabled: false, selectedActions },
+    });
+
+    assertEquals(client.requests, [{
+      method: "PUT",
+      path: "/repos/acme/sample/actions/permissions",
+      body: { enabled: false },
+    }]);
+    assertEquals(
+      client.gets.includes(
+        "/repos/acme/sample/actions/permissions/selected-actions",
+      ),
+      false,
+    );
+  }
+});
+
+Deno.test("enabling Actions preserves current permissions and SHA pinning", async () => {
+  const client = new MappingClient({
+    enabled: false,
+    allowed_actions: "local_only",
+    sha_pinning_required: true,
+  });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-actions-settings",
+    settings: { enabled: true },
+  });
+
+  assertEquals(client.requests, [{
+    method: "PUT",
+    path: "/repos/acme/sample/actions/permissions",
+    body: {
+      enabled: true,
+      allowed_actions: "local_only",
+      sha_pinning_required: true,
+    },
+  }]);
+});
+
+Deno.test("Actions permission updates preserve enabled state and map local-only", async () => {
+  const client = new MappingClient({
+    enabled: true,
+    allowed_actions: "all",
+    sha_pinning_required: true,
+  });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-actions-settings",
+    settings: { allowedActions: "local-only", shaPinningRequired: false },
+  });
+
+  assertEquals(client.requests, [{
+    method: "PUT",
+    path: "/repos/acme/sample/actions/permissions",
+    body: {
+      enabled: true,
+      allowed_actions: "local_only",
+      sha_pinning_required: false,
+    },
+  }]);
+});
+
 Deno.test("selected Actions settings switch the repository to selected mode", async () => {
   const client = new MappingClient();
   const sink = new GitHubRepositoryMutationSink({
@@ -634,16 +732,93 @@ Deno.test("selected Actions settings switch the repository to selected mode", as
     },
   });
 
-  const permissions = client.requests.find((request) =>
-    request.method === "PUT" &&
-    request.path.endsWith("/actions/permissions")
-  );
+  assertEquals(client.requests, [{
+    method: "PUT",
+    path: "/repos/acme/sample/actions/permissions",
+    body: {
+      enabled: true,
+      allowed_actions: "selected",
+      sha_pinning_required: false,
+    },
+  }, {
+    method: "PUT",
+    path: "/repos/acme/sample/actions/permissions/selected-actions",
+    body: {
+      github_owned_allowed: true,
+      verified_allowed: false,
+      patterns_allowed: [],
+    },
+  }]);
+});
 
-  assertEquals(permissions?.body, {
-    enabled: true,
-    allowed_actions: "selected",
-    sha_pinning_required: false,
+Deno.test("selected Actions settings apply after enabling Actions", async () => {
+  const client = new MappingClient({
+    enabled: false,
+    allowed_actions: "all",
   });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-actions-settings",
+    settings: {
+      enabled: true,
+      selectedActions: {
+        verifiedAllowed: true,
+        patternsAllowed: ["acme/*"],
+      },
+    },
+  });
+
+  assertEquals(client.requests, [{
+    method: "PUT",
+    path: "/repos/acme/sample/actions/permissions",
+    body: {
+      enabled: true,
+      allowed_actions: "selected",
+      sha_pinning_required: false,
+    },
+  }, {
+    method: "PUT",
+    path: "/repos/acme/sample/actions/permissions/selected-actions",
+    body: {
+      github_owned_allowed: false,
+      verified_allowed: true,
+      patterns_allowed: ["acme/*"],
+    },
+  }]);
+});
+
+Deno.test("selected Actions requests require an effectively enabled repository", async () => {
+  const client = new MappingClient({
+    enabled: false,
+    allowed_actions: "selected",
+  });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+
+  await sink.apply("sample", {
+    type: "update-actions-settings",
+    settings: { selectedActions: { githubOwnedAllowed: true } },
+  });
+
+  assertEquals(client.requests, [{
+    method: "PUT",
+    path: "/repos/acme/sample/actions/permissions",
+    body: { enabled: false },
+  }]);
+  assertEquals(
+    client.gets.includes(
+      "/repos/acme/sample/actions/permissions/selected-actions",
+    ),
+    false,
+  );
 });
 
 Deno.test("organization OIDC templates do not collapse to GitHub defaults", async () => {

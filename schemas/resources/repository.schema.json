@@ -454,6 +454,43 @@
     "actionsSettings": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              {
+                "required": ["allowed_actions"]
+              },
+              {
+                "required": ["sha_pinning_required"]
+              },
+              {
+                "required": ["selected_actions"]
+              }
+            ]
+          },
+          "then": {
+            "required": ["enabled"],
+            "properties": {
+              "enabled": {
+                "const": true
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["selected_actions"]
+          },
+          "then": {
+            "properties": {
+              "allowed_actions": {
+                "const": "selected"
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "secrets": {
           "$ref": "#/$defs/secretList"
