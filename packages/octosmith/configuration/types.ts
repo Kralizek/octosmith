@@ -54,6 +54,7 @@ export type FileChangesConfiguration =
 
 /** Describes repository management settings. */
 export interface RepositoryManagementSettings {
+  readonly secrets?: "automatic" | "manual";
   readonly collectionManagement?: CollectionManagementMode;
   readonly unmatchedRepositories?: "error" | "ignore";
 }

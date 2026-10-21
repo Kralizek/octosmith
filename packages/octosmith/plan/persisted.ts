@@ -29,7 +29,7 @@ const validatePersistedPlan = new Ajv2020({
 export const PERSISTED_PLAN_FORMAT = "octosmith-plan" as const;
 
 /** Current persisted executable plan artifact version. */
-export const PERSISTED_PLAN_VERSION = 1 as const;
+export const PERSISTED_PLAN_VERSION = 2 as const;
 
 /** Describes a persisted apply evaluation. */
 export interface PersistedApplyEvaluation {
@@ -50,17 +50,37 @@ export interface PersistedResourcePlan {
   readonly operations: readonly Operation[];
   readonly managedFiles?: Plan["managedFiles"];
   readonly evaluations: readonly PersistedApplyEvaluation[];
+  readonly secretsExcluded?: true;
   readonly skippedRuntimeReferences?: readonly RuntimeReference[];
 }
 
-/** Describes a versioned persisted executable plan. */
-export interface PersistedPlanArtifact {
+interface PersistedPlanArtifactBase {
   readonly format: typeof PERSISTED_PLAN_FORMAT;
-  readonly version: typeof PERSISTED_PLAN_VERSION;
   readonly createdAt: string;
   readonly configuration: ContentHash;
+}
+
+/** Describes a legacy resource without policy-based secret exclusions. */
+export type PersistedResourcePlanV1 =
+  & Omit<PersistedResourcePlan, "secretsExcluded">
+  & { readonly secretsExcluded?: never };
+
+/** Describes the legacy executable plan format accepted without upgrading. */
+export interface PersistedPlanArtifactV1 extends PersistedPlanArtifactBase {
+  readonly version: 1;
+  readonly resources: readonly PersistedResourcePlanV1[];
+}
+
+/** Describes an executable plan with explicit secret reconciliation scope. */
+export interface PersistedPlanArtifactV2 extends PersistedPlanArtifactBase {
+  readonly version: typeof PERSISTED_PLAN_VERSION;
   readonly resources: readonly PersistedResourcePlan[];
 }
+
+/** Describes the supported, version-discriminated persisted executable plans. */
+export type PersistedPlanArtifact =
+  | PersistedPlanArtifactV1
+  | PersistedPlanArtifactV2;
 
 /** Complete in-memory executable plan for one resource. */
 export interface ExecutableResourcePlan {
@@ -80,7 +100,7 @@ export async function createPersistedPlanArtifact(
   loaded: LoadedConfiguration,
   resources: readonly ExecutableResourcePlan[],
   createdAt: Date = new Date(),
-): Promise<PersistedPlanArtifact> {
+): Promise<PersistedPlanArtifactV2> {
   return {
     format: PERSISTED_PLAN_FORMAT,
     version: PERSISTED_PLAN_VERSION,
@@ -115,6 +135,8 @@ export async function createPersistedPlanArtifact(
           ),
         ),
         operations: resource.plan.operations,
+        ...(resource.desired.secretsExcluded &&
+          { secretsExcluded: true as const }),
         ...(resource.plan.managedFiles !== undefined && {
           managedFiles: resource.plan.managedFiles,
         }),
@@ -332,7 +354,7 @@ export function parsePersistedPlanArtifact(
   if (record.format !== PERSISTED_PLAN_FORMAT) {
     throw new Error("Unsupported persisted plan format");
   }
-  if (record.version !== PERSISTED_PLAN_VERSION) {
+  if (record.version !== 1 && record.version !== PERSISTED_PLAN_VERSION) {
     throw new Error(
       "Unsupported persisted plan version: " + String(record.version),
     );

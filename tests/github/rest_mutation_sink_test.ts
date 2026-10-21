@@ -187,6 +187,52 @@ Deno.test("environment sync preserves sparse siblings and paginates strict clean
   );
 });
 
+Deno.test("manual secret policy never reaches secret transport on environment create or update", async () => {
+  const client = new EnvironmentClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => {
+      throw new Error("Excluded secrets must not be resolved");
+    },
+  });
+  const plan = buildPlan(
+    currentState({
+      environments: [{
+        name: "production",
+        secrets: ["KEEP_SECRET"],
+        variables: [],
+      }],
+    }),
+    {
+      repository: "sample",
+      template: "repository:code",
+      secretsExcluded: true,
+      collections: "strict",
+      environments: [
+        { name: "production", variables: [{ name: "KEEP", value: "new" }] },
+        { name: "staging", variables: [{ name: "KEEP", value: "new" }] },
+      ],
+    },
+  );
+  assertEquals(plan.operations.map((operation) => operation.type), [
+    "update-environment",
+    "create-environment",
+  ]);
+  for (const operation of plan.operations) {
+    await sink.apply("sample", operation);
+  }
+  assertEquals(
+    client.calls.some((call) => call.path.includes("/secrets")),
+    false,
+  );
+  assert(
+    client.calls.some((call) =>
+      call.method === "DELETE" && call.path.includes("/variables/EXTRA_0")
+    ),
+  );
+});
+
 Deno.test("environment create preserves skipped values that appear concurrently", async () => {
   const client = new EnvironmentClient();
   const sink = new GitHubRepositoryMutationSink({

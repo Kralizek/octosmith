@@ -20,6 +20,8 @@ import {
   type RuntimeReference,
   type RuntimeReferenceDiagnostic,
   type RuntimeValueProvider,
+  secretPolicyDiagnostics,
+  shouldIncludeSecrets,
   withoutSkippedRuntimeValues,
 } from "@octosmith/octosmith";
 import { executeExecutableResources } from "./execution.ts";
@@ -252,6 +254,7 @@ export interface ApplyOptions {
   /** Override runtime values for variables; secrets use the runtime provider. */
   readonly values?: RuntimeValueProvider;
   readonly skipMissingValues?: boolean;
+  readonly includeSecrets?: boolean;
   readonly onResourceInspected?: (resource: ResourceInspection) => void;
   readonly onRepositoryApplied: (
     report: import("@octosmith/octosmith").RepositoryReport,
@@ -289,6 +292,10 @@ export async function apply(
     });
   const values = options.values ?? runtime.value ?? environmentValue;
   const secretValues = runtime.value ?? environmentValue;
+  const includeSecrets = shouldIncludeSecrets(
+    loaded.configuration,
+    options.includeSecrets,
+  );
   const failures: import("@octosmith/octosmith").RepositoryReport[] = [];
   const prepared: ExecutableResourcePlan[] = [];
 
@@ -325,6 +332,7 @@ export async function apply(
           values,
           {
             secretValues,
+            includeSecrets,
             skipMissingValues: options.skipMissingValues,
             onSkipped: (reference, diagnostic) => {
               skippedRuntimeReferences.push(reference);
@@ -338,8 +346,9 @@ export async function apply(
         loaded,
         repository,
         runtimeValues,
-        { skippedRuntimeReferences },
+        { skippedRuntimeReferences, includeSecrets },
       );
+      diagnostics.push(...secretPolicyDiagnostics(resolvedDesired));
       template = resolvedDesired.template;
       templateName = resolvedDesired.templateName;
 

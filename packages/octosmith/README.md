@@ -182,7 +182,13 @@ Secret values are not stored in configuration or reports. Before mutating a
 repository, Octosmith resolves the secret values required by that repository; if
 one is missing, that repository is not partially mutated first.
 
-Plan mode does not require secret values.
+Fresh planning checks availability of participating secret sources without
+storing their values. Set `repositories.settings.secrets: manual` to exclude all
+secrets before preflight and desired-state construction. The core
+`shouldIncludeSecrets(configuration, optIn)` helper computes fresh policy;
+`resolveDesiredState` accepts the resulting `includeSecrets` decision. Persisted
+replay restores the saved decision instead of consulting current policy. See
+[secret reconciliation](../../docs/configuration.md#secret-reconciliation).
 
 ## Managed files
 

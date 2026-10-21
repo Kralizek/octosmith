@@ -42,6 +42,7 @@ export interface DesiredState {
   readonly repository: string;
   readonly template: string;
   readonly templateName?: string;
+  readonly secretsExcluded?: true;
   readonly collections?: CollectionManagementMode;
   readonly settings?: DesiredRepositorySettings;
   readonly customProperties?: Readonly<Record<string, CustomPropertyValue>>;

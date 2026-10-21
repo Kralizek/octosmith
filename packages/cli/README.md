@@ -160,7 +160,8 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration --quiet
 ```
 
 `plan` reads GitHub and reports the operations required to reach the desired
-state. It does not mutate GitHub and does not require secret runtime values.
+state. It does not mutate GitHub. Participating secrets must have runtime
+sources available; their values are never included in the plan or report.
 
 Use `--template <template>` to limit planning to repositories classified with a
 template. The value may be a template name or its canonical identity:
@@ -231,6 +232,14 @@ GITHUB_TOKEN=... octosmith plan --path ./configuration --out plan.json
 The persisted artifact is distinct from `--format json` output. It may contain
 resolved variables and managed-file contents, but never resolved secret values.
 
+All new persisted artifacts use version 2, even when secrets are included or no
+resources are selected. Version 2 adds optional resource-level
+`secretsExcluded: true`; omission means secrets were not excluded by policy.
+Version 1 is the legacy format and does not accept that property. Octosmith
+continues accepting and executing version-1 plans without regeneration,
+automatic upgrading, or replanning. Older releases may not read version-2 plans.
+The configuration schema version remains 1.
+
 ### apply
 
 ```sh
@@ -280,6 +289,36 @@ delivery retains its existing managed-path concurrency semantics.
 Apply is not transactional. If one operation fails, earlier operations for that
 repository may already have been applied. Remaining operations for that
 repository are skipped, and Octosmith stops before mutating later repositories.
+
+## Secret opt-in
+
+Both `plan` and fresh `apply` accept an optional boolean:
+
+```sh
+octosmith plan --include-secrets
+octosmith plan --include-secrets=true
+octosmith plan --include-secrets=false
+octosmith apply --include-secrets
+octosmith apply --include-secrets=true
+octosmith apply --include-secrets=false
+```
+
+The default configured mode is `automatic`, which includes secrets in every
+fresh run. With `repositories.settings.secrets: manual`, only the bare flag or
+explicit `true` opts secrets in. Explicit `false` respects the configured mode;
+it does not force secrets off. Invalid explicit values such as `yes`, `1`, or
+`maybe` fail argument parsing.
+
+Manual exclusion covers Actions, Dependabot, and environment secrets, preserves
+remote secrets even under strict management, and requires no secret inputs.
+Variables and other resources continue reconciling. Text and JSON reports
+explain policy exclusion without enumerating secret names. The independent
+`--skip-missing-values` flag still governs missing participating inputs.
+
+With `apply --plan`, all three flag forms are accepted but ignored. Saved
+operations and exclusions are authoritative, even after the configured mode
+changes. Mode-only changes leave configuration hashes valid; real configuration,
+template, state, and replay dependency changes remain checked.
 
 ## Target one resource
 

@@ -1,0 +1,101 @@
+{
+  "format": "octosmith-plan",
+  "version": 1,
+  "createdAt": "2026-10-20T12:00:00.000Z",
+  "configuration": {
+    "algorithm": "sha256",
+    "hash": "646676c80dbefa06f5feb989783971956cef9e24293bcbc97575f9ff4149f8f3"
+  },
+  "resources": [
+    {
+      "type": "repository",
+      "name": "sample",
+      "template": {
+        "id": "repository:legacy",
+        "algorithm": "sha256",
+        "hash": "c1e57b3f2b1ff9ad6896e45d9fd718a908e05ce6e8358c721a14e4d24bf41a42"
+      },
+      "state": {
+        "algorithm": "sha256",
+        "hash": "63d06bd6ec75e902324496c0324afc6abaaf3495917a2b9f2ddf8101e4716883"
+      },
+      "operations": [
+        {
+          "type": "update-repository-settings",
+          "settings": { "hasIssues": false }
+        },
+        { "type": "remove-actions-secret", "secret": "OLD_ACTIONS" },
+        {
+          "type": "set-actions-secret",
+          "secret": { "name": "TOKEN", "source": "DEPLOY_TOKEN" }
+        },
+        {
+          "type": "set-actions-variable",
+          "variable": { "name": "REGION", "value": "east" }
+        },
+        { "type": "remove-dependabot-secret", "secret": "OLD_DEPENDABOT" },
+        {
+          "type": "set-dependabot-secret",
+          "secret": { "name": "DEPENDABOT_TOKEN", "source": "DEPENDABOT_TOKEN" }
+        },
+        {
+          "type": "update-environment",
+          "environment": {
+            "name": "production",
+            "secrets": [{ "name": "ENV_TOKEN", "source": "ENV_TOKEN" }],
+            "variables": [{ "name": "REGION", "value": "east" }]
+          },
+          "collections": "strict"
+        }
+      ],
+      "evaluations": [
+        {
+          "type": "repository-settings",
+          "details": {
+            "settings": { "hasIssues": false },
+            "action": "update",
+            "changes": [
+              {
+                "path": "hasIssues",
+                "before": true,
+                "beforeSet": true,
+                "after": false
+              }
+            ]
+          },
+          "operationIndex": 0
+        },
+        {
+          "type": "actions-secret",
+          "details": { "name": "OLD_ACTIONS", "action": "remove" },
+          "operationIndex": 1
+        },
+        {
+          "type": "actions-secret",
+          "details": { "name": "TOKEN", "action": "set" },
+          "operationIndex": 2
+        },
+        {
+          "type": "actions-variable",
+          "details": { "name": "REGION", "action": "create" },
+          "operationIndex": 3
+        },
+        {
+          "type": "dependabot-secret",
+          "details": { "name": "OLD_DEPENDABOT", "action": "remove" },
+          "operationIndex": 4
+        },
+        {
+          "type": "dependabot-secret",
+          "details": { "name": "DEPENDABOT_TOKEN", "action": "set" },
+          "operationIndex": 5
+        },
+        {
+          "type": "environment",
+          "details": { "name": "production", "action": "update" },
+          "operationIndex": 6
+        }
+      ]
+    }
+  ]
+}

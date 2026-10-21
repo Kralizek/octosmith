@@ -485,7 +485,10 @@ function planEnvironments(
 
   if (collections === "strict") {
     for (const environment of current.environments) {
-      if (!desiredNames.has(environment.name)) {
+      if (
+        !desiredNames.has(environment.name) &&
+        !(desired.secretsExcluded && environment.secrets.length > 0)
+      ) {
         operations.push({
           type: "delete-environment",
           name: environment.name,
@@ -549,7 +552,10 @@ function planEnvironments(
 
       operations.push({
         type: "create-environment",
-        environment: materializeEnvironment(filteredEnvironment),
+        environment: materializeEnvironment(
+          filteredEnvironment,
+          !desired.secretsExcluded,
+        ),
         ...(skippedSecrets.size > 0 && {
           preserveSecrets: [...skippedSecrets].sort(),
         }),
@@ -1744,10 +1750,11 @@ function environmentNeedsUpdate(
 
 function materializeEnvironment(
   desired: DesiredEnvironment,
+  includeSecrets = true,
 ): DesiredEnvironment {
   return {
     name: desired.name,
-    secrets: desired.secrets ?? [],
+    ...(includeSecrets && { secrets: desired.secrets ?? [] }),
     variables: desired.variables ?? [],
   };
 }

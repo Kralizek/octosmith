@@ -14,6 +14,7 @@ resource="$(trim "${OCTOSMITH_RESOURCE:-}")"
 format="$(trim "${OCTOSMITH_FORMAT:-text}")"
 verbose="$(trim "${OCTOSMITH_VERBOSE:-false}")"
 trace="$(trim "${OCTOSMITH_TRACE:-false}")"
+include_secrets="$(trim "${OCTOSMITH_INCLUDE_SECRETS:-false}")"
 events_output="$(trim "${OCTOSMITH_EVENTS_OUTPUT:-}")"
 
 deno_args=(--quiet --minimum-dependency-age 0)
@@ -47,6 +48,14 @@ esac
 normalized_verbose="$(printf '%s' "$verbose" | tr '[:upper:]' '[:lower:]')"
 normalized_trace="$(printf '%s' "$trace" | tr '[:upper:]' '[:lower:]')"
 
+case "$include_secrets" in
+  true|false) ;;
+  *)
+    echo "::error::include-secrets must be either 'true' or 'false'." >&2
+    exit 1
+    ;;
+esac
+
 case "$normalized_verbose" in
   true)
     verbose=true
@@ -78,6 +87,10 @@ if [[ -z "$path" ]]; then
 fi
 
 if [[ "$mode" == "validate" ]]; then
+  if [[ "$include_secrets" == "true" ]]; then
+    echo "::error::include-secrets is not supported for validate." >&2
+    exit 1
+  fi
   if [[ -n "$resource" ]]; then
     echo "::error::resource is not supported for validate." >&2
     exit 1
@@ -105,6 +118,10 @@ if [[ -n "$resource" ]]; then
   args+=("$resource")
 fi
 args+=(--path "$path" --format "$format")
+
+if [[ "$include_secrets" == "true" ]]; then
+  args+=(--include-secrets=true)
+fi
 
 if [[ "$verbose" == "true" ]]; then
   args+=(--verbose)

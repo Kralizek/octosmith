@@ -91,6 +91,14 @@ CLI. Use `--template <template>` with `plan` or `apply` to target all
 repositories classified by one template, or pass a repository name directly to
 target one repository.
 
+Secrets reconcile automatically by default. Set
+`repositories.settings.secrets: manual` to exclude Actions, Dependabot, and
+environment secrets from fresh plan/apply, then opt in with `--include-secrets`
+when needed. `--include-secrets=true` also opts in; `--include-secrets=false`
+honors the configured mode. Saved plans always execute their stored operations,
+regardless of the current secret mode or flag. See
+[secret reconciliation](docs/configuration.md#secret-reconciliation).
+
 `template list` is offline and reports each template's canonical identity,
 optional display name, and source file path relative to the configuration root.
 

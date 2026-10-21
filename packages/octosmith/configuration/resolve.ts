@@ -81,13 +81,24 @@ const BUILT_IN_PERMISSION_ALIASES: Readonly<
   write: "push",
 };
 
+/** Determine the secret policy for fresh reconciliation, allowing explicit opt-in. */
+export function shouldIncludeSecrets(
+  configuration: LoadedConfiguration["configuration"],
+  includeSecrets?: boolean,
+): boolean {
+  return configuration.repositories.settings?.secrets !== "manual" ||
+    includeSecrets === true;
+}
+
 /** Resolve repository configuration into normalized desired state. */
 export async function resolveDesiredState(
   loaded: LoadedConfiguration,
   repository: RepositoryMetadata,
   values: RuntimeValueProvider,
-  options: { readonly skippedRuntimeReferences?: readonly RuntimeReference[] } =
-    {},
+  options: {
+    readonly skippedRuntimeReferences?: readonly RuntimeReference[];
+    readonly includeSecrets?: boolean;
+  } = {},
 ): Promise<DesiredState> {
   const classification = classifyResource(loaded, repository);
 
@@ -102,6 +113,8 @@ export async function resolveDesiredState(
 
   const templateName = classification.template;
   const template = loaded.templates[templateName];
+  const includeSecrets = options.includeSecrets ??
+    shouldIncludeSecrets(loaded.configuration);
   const readSource = createConfigurationSourceReader(loaded.root);
   const skippedVariables = new Set(
     (options.skippedRuntimeReferences ?? [])
@@ -112,6 +125,7 @@ export async function resolveDesiredState(
   return {
     repository: repository.name,
     template: templateName,
+    ...(!includeSecrets && { secretsExcluded: true as const }),
     ...(template.name !== undefined && { templateName: template.name }),
     collections:
       loaded.configuration.repositories.settings?.collectionManagement ??
@@ -130,11 +144,13 @@ export async function resolveDesiredState(
         template.repository.actions,
         values,
         skippedVariables,
+        includeSecrets,
       ),
     }),
     ...(template.repository.dependabot && {
       dependabot: {
-        ...(template.repository.dependabot.secrets !== undefined && {
+        ...(includeSecrets &&
+          template.repository.dependabot.secrets !== undefined && {
           secrets: template.repository.dependabot.secrets.map(normalizeSecret),
         }),
       },
@@ -144,7 +160,12 @@ export async function resolveDesiredState(
     }),
     ...(template.repository.environments && {
       environments: template.repository.environments.map((environment) =>
-        normalizeEnvironment(environment, values, skippedVariables)
+        normalizeEnvironment(
+          environment,
+          values,
+          skippedVariables,
+          includeSecrets,
+        )
       ),
     }),
     ...(template.repository.files && {
@@ -410,9 +431,10 @@ function normalizeActions(
     : never,
   values: RuntimeValueProvider,
   skippedVariables: ReadonlySet<string>,
+  includeSecrets: boolean,
 ): DesiredActions {
   return {
-    ...(actions.secrets !== undefined && {
+    ...(includeSecrets && actions.secrets !== undefined && {
       secrets: actions.secrets.map(normalizeSecret),
     }),
     ...(actions.variables !== undefined && {
@@ -521,10 +543,11 @@ function normalizeEnvironment(
   >[number],
   values: RuntimeValueProvider,
   skippedVariables: ReadonlySet<string>,
+  includeSecrets: boolean,
 ): DesiredEnvironment {
   return {
     name: environment.name,
-    ...(environment.secrets !== undefined && {
+    ...(includeSecrets && environment.secrets !== undefined && {
       secrets: environment.secrets.map(normalizeSecret),
     }),
     ...(environment.variables !== undefined && {

@@ -75,6 +75,28 @@ destination names before omitting skipped bindings. The engine uses the same
 exclusions for planning ownership and reports; environment update operations
 also record preserved names so strict cleanup cannot remove skipped values.
 
+## Secret policy
+
+Fresh secret policy is computed in the core with `shouldIncludeSecrets` and
+passed to runtime preflight and desired-state normalization. Manual exclusion
+omits secret collections entirely rather than treating them as empty strict
+collections. Variables and environment membership remain managed, except that
+strict cleanup preserves undeclared environments containing secrets to avoid
+indirect deletion. Policy diagnostics are distinct from skipped-value warnings.
+
+All new persisted plans use artifact version 2. Its resources optionally record
+`secretsExcluded: true`; absence means secrets were not excluded by policy.
+Version 1 is the legacy format and forbids this property. Version-aware schema
+validation and a discriminated TypeScript union accept both formats before
+execution. Existing version-1 plans continue replaying without regeneration,
+automatic upgrading, or replanning; older Octosmith releases may reject
+version 2.
+
+Replay restores the saved planning scope without consulting the current policy.
+The root execution-relevant hash intentionally excludes the planning-only secret
+setting. Existing hash normalization, runtime dependencies, and preflight checks
+remain unchanged for both versions. The configuration schema stays at version 1.
+
 ## Collection semantics
 
 Collection management belongs to desired-state interpretation, not GitHub API

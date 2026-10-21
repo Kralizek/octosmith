@@ -67,6 +67,22 @@ never written or deleted, even with strict collection management. Available
 values, including explicitly empty values, are still reconciled normally.
 Configuration errors and unrelated runtime-provider failures still fail.
 
+For routine runs without secret reconciliation, set
+`repositories.settings.secrets: manual` in the root configuration. Actions,
+Dependabot, and environment secrets are preserved without requiring their
+runtime sources, even in strict mode; variables still reconcile. Include secrets
+explicitly when rotating them:
+
+```sh
+octosmith plan --path ./github-config --include-secrets
+octosmith apply --path ./github-config --include-secrets=true
+```
+
+The optional boolean supports bare, `=true`, and `=false` forms. `false` honors
+the configured mode, so automatic mode still includes secrets. Other explicit
+values are rejected. This is separate from `--skip-missing-values`, which skips
+only unavailable participating values.
+
 To persist the exact reviewed operations:
 
 ```sh
@@ -77,6 +93,12 @@ GITHUB_TOKEN=... deno run -A jsr:@octosmith/cli@0 plan \
 
 The artifact contains resolved non-secret operation values, but never resolved
 secret values. Treat it as potentially sensitive configuration data.
+
+New artifacts use persisted-plan version 2, which supports explicit secret
+reconciliation scope. Version 1 is the legacy format; existing version-1 plans
+remain accepted without regeneration and are not automatically upgraded or
+replanned. Older Octosmith releases may not read version-2 artifacts. The root
+configuration version remains 1.
 
 ## Apply
 
@@ -102,6 +124,14 @@ summary reports `valid`, `template`, or `state`.
 Each resource state precondition is checked again immediately before that
 resource is mutated. Persisted operations are never rebuilt or silently
 replanned.
+
+The saved operations also determine secret reconciliation. Changing only
+`repositories.settings.secrets` after planning does not invalidate the artifact.
+A saved automatic plan still applies its secret operations after switching to
+manual; a saved manual plan stays secret-free after switching to automatic.
+`--include-secrets`, `--include-secrets=true`, and `--include-secrets=false` are
+accepted with `--plan` but ignored. Other configuration/template changes and
+state/replay safety checks still apply.
 
 Exclusions made with `plan --skip-missing-values --out plan.json` are saved in
 the artifact and honored automatically by `apply --plan plan.json`, with the

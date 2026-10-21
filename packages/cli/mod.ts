@@ -142,6 +142,14 @@ function createCli(
 
   for (const mode of ["plan", "apply"] as const) {
     const command = new Command()
+      .type("secret-boolean", ({ value }) => {
+        if (value !== "true" && value !== "false") {
+          throw new Error(
+            "--include-secrets requires a boolean value: true or false.",
+          );
+        }
+        return value === "true";
+      })
       .description(
         mode === "plan" ? "Show required changes." : "Apply required changes.",
       )
@@ -159,6 +167,10 @@ function createCli(
       .option("--quiet", "Suppress normal output.")
       .option("-v, --verbose", "Show additional result details.")
       .option("--trace", "Emit GitHub API request traces to stderr.")
+      .option(
+        "--include-secrets [value:secret-boolean]",
+        "Include secrets in fresh reconciliation; false honors configuration (ignored with --plan).",
+      )
       .option(
         "--skip-missing-values",
         "Skip unavailable runtime values when creating a fresh plan (not with --plan).",
@@ -183,12 +195,18 @@ function createCli(
     root.command(
       mode,
       command.action(async (commandOptions, resource?: string) => {
+        if (args?.includes("--include-secrets=")) {
+          throw new Error(
+            "--include-secrets requires a boolean value: true or false.",
+          );
+        }
         assertResourcePosition(args, mode, resource);
         const modeOptions = commandOptions as typeof commandOptions & {
           readonly plan?: string;
           readonly out?: string;
           readonly template?: string;
           readonly skipMissingValues?: boolean;
+          readonly includeSecrets?: boolean;
           readonly quiet?: boolean;
         };
 
@@ -296,7 +314,7 @@ function createCli(
                 resources: persistedArtifact.resources.filter((resource) =>
                   resource.template.id === template
                 ),
-              };
+              } as typeof persistedArtifact;
               await applyPersistedPlan(
                 runtime,
                 loaded,
@@ -325,6 +343,7 @@ function createCli(
               ...(resource !== undefined && { resource }),
               ...(template !== undefined && { template }),
               skipMissingValues: modeOptions.skipMissingValues,
+              includeSecrets: modeOptions.includeSecrets,
               onRepositoryApplied,
               onPullRequest,
               onResourceInspected: (resource) =>
