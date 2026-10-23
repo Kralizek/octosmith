@@ -200,6 +200,8 @@ function normalizeConfigurationForHash(
         }),
       },
       settings: {
+        ...(repositories.settings?.defaultBranchDrift === "enforce" &&
+          { defaultBranchDrift: "enforce" }),
         collectionManagement: repositories.settings?.collectionManagement ??
           "explicit",
         unmatchedRepositories: repositories.settings?.unmatchedRepositories ??

@@ -16,12 +16,15 @@ import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 import type { PullRequestResult } from "../report/types.ts";
 import { reconcileFilePullRequest } from "./file_pull_request.ts";
+import type { RepositoryBootstrap } from "./bootstrap.ts";
+import { GitHubRepositoryStateSource } from "./rest_state_source.ts";
 
 /** Describes secret value provider. */
 export type SecretValueProvider = (name: string) => string;
 
 /** Describes GitHub repository mutation sink options. */
 export interface GitHubRepositoryMutationSinkOptions {
+  readonly bootstrap?: RepositoryBootstrap;
   readonly client: GitHubClient;
   readonly owner: string;
   readonly secretValue: SecretValueProvider;
@@ -69,9 +72,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #fileBranch?: string;
   readonly #managedFiles?: ManagedFileSnapshot;
   readonly #allowClosure: boolean;
+  readonly #bootstrap?: RepositoryBootstrap;
+  #bootstrapped = false;
+  #bootstrapSnapshot?: ManagedFileSnapshot;
   #filesReconciled = false;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
+    this.#bootstrap = options.bootstrap;
     this.#client = options.client;
     this.#owner = options.owner;
     this.#secretValue = options.secretValue;
@@ -103,8 +110,18 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     const fileOperations = operations.filter(isFileOperation);
+    const initialization = operations.find((operation) =>
+      operation.type === "initialize-repository"
+    );
+    if (initialization) {
+      if (!this.#bootstrap) {
+        throw new Error("Repository bootstrap service is not configured");
+      }
+      this.#bootstrap.prepare?.(initialization.branch);
+    }
 
     return new GitHubRepositoryMutationSink({
+      bootstrap: this.#bootstrap,
       client: this.#client,
       owner: this.#owner,
       secretValue: (name) => {
@@ -138,6 +155,51 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 
   async apply(repository: string, operation: Operation): Promise<void> {
     switch (operation.type) {
+      case "initialize-repository": {
+        if (!this.#bootstrap) {
+          throw new Error("Repository bootstrap service is not configured");
+        }
+        const files = this.#fileChanges.mode === "direct"
+          ? (this.#preparedFileChanges?.operations ?? []).flatMap((item) =>
+            item.type === "create-file" ? [item.file] : []
+          )
+          : [];
+        await this.#bootstrap.initialize(repository, operation.branch, files);
+        const source = new GitHubRepositoryStateSource(
+          this.#client,
+          this.#owner,
+        );
+        const settings = await source.getRepositorySettings(repository);
+        if (settings.defaultBranch !== operation.branch) {
+          throw new Error(
+            "GitHub default branch does not match the bootstrap branch",
+          );
+        }
+        const baseSha = await source.getBranchHead(
+          repository,
+          operation.branch,
+        );
+        if (this.#fileChanges.mode === "direct") {
+          for (const file of files) {
+            const actual = await source.getFile(repository, file.path, baseSha);
+            if (actual?.content !== file.content) {
+              throw new Error(
+                "Bootstrap file verification failed: " + file.path,
+              );
+            }
+          }
+        }
+        this.#bootstrapSnapshot = {
+          branch: operation.branch,
+          baseSha,
+          files: this.#managedFiles?.files ??
+            (this.#preparedFileChanges?.operations ?? []).flatMap((item) =>
+              item.type === "create-file" ? [item.file] : []
+            ),
+        };
+        this.#bootstrapped = true;
+        return;
+      }
       case "update-repository-settings":
         await this.updateRepositorySettings(repository, operation.settings);
         return;
@@ -273,6 +335,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       case "create-file":
       case "update-file":
       case "delete-file":
+        if (this.#bootstrapped && this.#fileChanges.mode === "direct") return;
         if (this.#preparedFileChanges !== undefined) {
           if (this.#preparedFileChanges.error !== undefined) {
             throw this.#preparedFileChanges.error;
@@ -574,7 +637,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     operations: readonly FileOperation[],
   ): Promise<void> {
     if (this.#fileChanges.mode === "pull_request") {
-      if (this.#managedFiles === undefined) {
+      const snapshot = this.#bootstrapSnapshot ?? this.#managedFiles;
+      if (snapshot === undefined) {
         throw new Error(
           "Pull-request delivery requires a complete managed-file snapshot",
         );
@@ -583,7 +647,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         client: this.#client,
         owner: this.#owner,
         repository,
-        snapshot: this.#managedFiles,
+        snapshot,
         operations,
         commitMessage: this.#fileChanges.commitMessage,
         settings: this.#fileChanges,

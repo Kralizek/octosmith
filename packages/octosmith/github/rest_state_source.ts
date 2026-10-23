@@ -14,8 +14,11 @@ import type {
   TeamPermission,
   Variable,
 } from "../mod.ts";
-import type { GitHubClient } from "./client.ts";
-import type { RepositoryStateSource } from "./state_source.ts";
+import { type GitHubClient, GitHubRequestError } from "./client.ts";
+import type {
+  RepositoryHistory,
+  RepositoryStateSource,
+} from "./state_source.ts";
 
 interface RepositoryResponse {
   readonly name: string;
@@ -309,6 +312,25 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
         };
       }),
     );
+  }
+
+  async getRepositoryHistory(
+    repository: string,
+    defaultBranch: string,
+  ): Promise<RepositoryHistory> {
+    try {
+      const head = await this.getBranchHead(repository, defaultBranch);
+      return { initialized: true, branch: defaultBranch, head };
+    } catch (error) {
+      if (
+        error instanceof GitHubRequestError && error.status === 409 &&
+        (error.details?.message === "Git Repository is empty." ||
+          error.details?.message === "Git Repository is empty")
+      ) {
+        return { initialized: false };
+      }
+      throw error;
+    }
   }
 
   async getBranchHead(repository: string, branch: string): Promise<string> {

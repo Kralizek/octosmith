@@ -125,6 +125,8 @@ export async function resolveDesiredState(
   return {
     repository: repository.name,
     template: templateName,
+    ...(loaded.configuration.repositories.settings?.defaultBranchDrift ===
+        "enforce" && { defaultBranchDrift: "enforce" as const }),
     ...(!includeSecrets && { secretsExcluded: true as const }),
     ...(template.name !== undefined && { templateName: template.name }),
     collections:

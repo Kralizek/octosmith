@@ -125,10 +125,21 @@
         "managedFiles": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["branch", "baseSha", "files"],
+          "required": ["branch", "files"],
+          "oneOf": [
+            {
+              "required": ["baseSha"],
+              "not": { "required": ["uninitialized"] }
+            },
+            {
+              "required": ["uninitialized"],
+              "not": { "required": ["baseSha"] }
+            }
+          ],
           "properties": {
             "branch": { "type": "string", "minLength": 1 },
             "baseSha": { "type": "string", "minLength": 1 },
+            "uninitialized": { "const": true },
             "files": {
               "type": "array",
               "items": {
@@ -210,6 +221,15 @@
     },
     "operation": {
       "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "branch"],
+          "properties": {
+            "type": { "const": "initialize-repository" },
+            "branch": { "type": "string", "minLength": 1 }
+          }
+        },
         {
           "type": "object",
           "additionalProperties": false,
@@ -712,6 +732,7 @@
       "properties": {
         "type": {
           "enum": [
+            "repository-initialization",
             "repository-settings",
             "custom-property",
             "actions-settings",

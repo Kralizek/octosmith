@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run=gh
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run=gh,git
 
 /**
  * Octosmith command-line host for validating, planning, and applying GitHub

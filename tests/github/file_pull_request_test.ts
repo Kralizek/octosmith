@@ -14,10 +14,98 @@ import type {
 } from "@octosmith/octosmith";
 import {
   applyPlan,
+  buildPlan,
   GitHubRepositoryMutationSink,
   GitHubRequestError,
 } from "@octosmith/octosmith";
 import { createGitHubRuntime, main } from "../../packages/cli/mod.ts";
+import { currentState } from "../plan/fixtures.ts";
+
+for (
+  const files of [[], [{
+    path: "managed.txt",
+    ensure: "exact" as const,
+    content: "managed",
+  }]]
+) {
+  Deno.test(`PR bootstrap preserves delivery and reconciliation (${files.length} files)`, async () => {
+    const client = new ReconciliationClient();
+    client.refs.clear();
+    const desired = { repository: "sample", template: "code", files };
+    const plan = buildPlan(
+      currentState({ history: { initialized: false }, filesBranch: "main" }),
+      desired,
+    );
+    let bootstraps = 0;
+    const result = await applyPlan(
+      new GitHubRepositoryMutationSink({
+        client,
+        owner: "acme",
+        secretValue: () => "unused",
+        fileChanges: { mode: "pull_request" },
+        bootstrap: {
+          initialize(_repository, branch, initialFiles) {
+            assertEquals(initialFiles, []);
+            assertEquals(branch, "main");
+            bootstraps++;
+            client.advanceTarget({});
+            return Promise.resolve();
+          },
+        },
+      }),
+      plan,
+    );
+    assertEquals(result.error, undefined);
+    assert(result.operations.every((item) => item.status === "applied"));
+    assertEquals(bootstraps, 1);
+    assertEquals(client.files("main"), {});
+    assertEquals(client.pulls.length, files.length);
+    if (files.length) {
+      assertEquals(client.files(), { "managed.txt": "managed" });
+    }
+    await client.reconcile(files);
+    assertEquals(client.pulls.length, files.length);
+    assertEquals(bootstraps, 1);
+  });
+}
+
+Deno.test("PR delivery can retry after successful bootstrap and failed PR creation", async () => {
+  const client = new ReconciliationClient();
+  client.refs.clear();
+  client.failCreate = true;
+  const files = [{
+    path: "managed.txt",
+    ensure: "exact" as const,
+    content: "managed",
+  }];
+  const plan = buildPlan(
+    currentState({ history: { initialized: false }, filesBranch: "main" }),
+    { repository: "sample", template: "code", files },
+  );
+  const result = await applyPlan(
+    new GitHubRepositoryMutationSink({
+      client,
+      owner: "acme",
+      secretValue: () => "unused",
+      fileChanges: { mode: "pull_request" },
+      bootstrap: {
+        initialize() {
+          client.advanceTarget({});
+          return Promise.resolve();
+        },
+      },
+    }),
+    plan,
+  );
+  assertEquals(result.operations.map((item) => item.status), [
+    "applied",
+    "failed",
+  ]);
+  assertEquals(client.files("main"), {});
+  client.failCreate = false;
+  await client.reconcile(files);
+  assertEquals(client.files(), { "managed.txt": "managed" });
+});
 
 type Tree = Record<string, string>;
 interface Commit {

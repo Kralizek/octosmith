@@ -25,6 +25,28 @@ deno run -A jsr:@octosmith/cli@0 --help
 
 ## Commands
 
+Newly created repositories do not need an initial README or commit:
+
+```sh
+gh repo create acme/repo --private
+octosmith apply -p .
+```
+
+For in-scope repositories matching a template, `apply` automatically initializes
+missing Git history before installing managed rulesets, even without managed
+files. Local Git is required only for bootstrap. `plan` reports initialization
+without mutating the repository. The initial branch is the declared
+`repository.settings.default_branch`, or bootstrap-only `main` when omitted.
+Initialized repositories preserve their default branch unless the root
+`repositories.settings.default_branch_drift: enforce` policy is set and the
+template explicitly declares a branch that already exists.
+
+Direct delivery includes managed files in the root commit; PR delivery starts
+with an empty commit and delivers files through the normal PR workflow. Existing
+and inherited policies are never bypassed. See the
+[configuration guide](../../docs/configuration.md#default-branch-and-automatic-initialization)
+for protection, concurrency, and retry limitations.
+
 | Command                           | GitHub access | Mutates GitHub | Purpose                                                              |
 | --------------------------------- | ------------- | -------------- | -------------------------------------------------------------------- |
 | `template print <template>`       | No            | No             | Print a synthesized repository template                              |

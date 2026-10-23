@@ -53,16 +53,26 @@ export function buildPlan(
   const operations: Operation[] = [];
   const collections = desired.collections ?? "explicit";
   const skipped = options.skippedRuntimeReferences ?? [];
+  const empty = current.history?.initialized === false;
+  const branch = empty || desired.defaultBranchDrift === "enforce"
+    ? desired.settings?.defaultBranch ??
+      (empty ? "main" : current.settings.defaultBranch)
+    : current.settings.defaultBranch;
+
+  if (empty) {
+    operations.push({ type: "initialize-repository", branch });
+  }
 
   if (
     desired.files?.length &&
     (current.filesBranch ?? current.settings.defaultBranch) !==
-      (desired.settings?.defaultBranch ?? current.settings.defaultBranch)
+      branch
   ) {
     throw new Error(
       "Managed file snapshot does not match the execution branch",
     );
   }
+  if (empty) planFiles(current, desired, operations);
 
   planRepositorySettings(
     current,
@@ -98,15 +108,19 @@ export function buildPlan(
     collections,
     skipped.filter((reference) => reference.scope === "environment"),
   );
-  planFiles(current, desired, operations);
+  if (!empty) planFiles(current, desired, operations);
 
   return {
     repository: desired.repository,
     operations,
-    ...(current.filesBaseSha !== undefined && {
+    ...((empty || current.filesBaseSha !== undefined) && {
       managedFiles: {
-        branch: current.filesBranch ?? current.settings.defaultBranch,
-        baseSha: current.filesBaseSha,
+        branch: empty
+          ? branch
+          : current.filesBranch ?? current.settings.defaultBranch,
+        ...(empty
+          ? { uninitialized: true as const }
+          : { baseSha: current.filesBaseSha! }),
         files: [...(desired.files ?? [])].sort((left, right) =>
           left.path < right.path ? -1 : left.path > right.path ? 1 : 0
         ),
@@ -127,7 +141,13 @@ function planRepositorySettings(
 
   const changes = diffRepositorySettings(
     current.settings,
-    desired.settings,
+    {
+      ...desired.settings,
+      defaultBranch: current.history?.initialized !== false &&
+          desired.defaultBranchDrift === "enforce"
+        ? desired.settings.defaultBranch
+        : undefined,
+    },
     { offlineValidation },
   );
 
@@ -820,6 +840,12 @@ function operationEvaluation(
   current?: CurrentState,
 ): ApplyEvaluation {
   switch (operation.type) {
+    case "initialize-repository":
+      return {
+        type: "repository-initialization",
+        details: { branch: operation.branch },
+        operation,
+      };
     case "update-repository-settings":
       return {
         type: "repository-settings",

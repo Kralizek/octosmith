@@ -91,6 +91,7 @@ Deno.test("loads example configuration and templates", async () => {
     version: 1,
     organization: "example-org",
     repositories: {
+      settings: { defaultBranchDrift: "ignore" },
       fileChanges: {
         mode: "pull_request",
         pullRequest: {

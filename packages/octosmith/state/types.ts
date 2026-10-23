@@ -22,6 +22,8 @@ import type { CurrentRuleset, DesiredRuleset } from "./rulesets.ts";
 /** Describes current state. */
 export interface CurrentState {
   readonly repository: string;
+  /** Explicitly records repositories with no Git history. */
+  readonly history?: { readonly initialized: boolean };
   readonly settings: CurrentRepositorySettings;
   readonly customProperties: Readonly<Record<string, CustomPropertyValue>>;
   readonly actions: CurrentActions;
@@ -40,6 +42,7 @@ export interface CurrentState {
 /** Describes desired state. */
 export interface DesiredState {
   readonly repository: string;
+  readonly defaultBranchDrift?: "ignore" | "enforce";
   readonly template: string;
   readonly templateName?: string;
   readonly secretsExcluded?: true;

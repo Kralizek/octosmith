@@ -5,8 +5,39 @@ import {
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryStateSource,
+  GitHubRequestError,
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
+
+Deno.test("repository history distinguishes empty repositories from API failures", async () => {
+  for (
+    const [status, message, empty] of [
+      [409, "Git Repository is empty.", true],
+      [409, "Git Repository is empty", true],
+      [409, "Conflict", false],
+      [404, "Not Found", false],
+      [403, "Resource not accessible by integration", false],
+    ] as const
+  ) {
+    const client = new FetchGitHubClient({
+      token: "test",
+      fetch: () =>
+        Promise.resolve(new Response(JSON.stringify({ message }), { status })),
+    });
+    const source = new GitHubRepositoryStateSource(client, "acme");
+    if (empty) {
+      assertEquals(await source.getRepositoryHistory("sample", "main"), {
+        initialized: false,
+      });
+    } else {
+      await assertRejects(
+        () => source.getRepositoryHistory("sample", "main"),
+        GitHubRequestError,
+        message,
+      );
+    }
+  }
+});
 
 class PagingClient implements GitHubClient {
   readonly requests: string[] = [];

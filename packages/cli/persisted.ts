@@ -271,10 +271,15 @@ async function inspectResource(
 
   try {
     const current = await runtime.read(desired, resource.operations);
-    if (current.filesBaseSha !== undefined) {
+    if (
+      current.filesBaseSha !== undefined ||
+      current.history?.initialized === false
+    ) {
       const expected = {
         branch: current.filesBranch ?? current.settings.defaultBranch,
-        baseSha: current.filesBaseSha,
+        ...(current.history?.initialized === false
+          ? { uninitialized: true }
+          : { baseSha: current.filesBaseSha }),
         files: [...(desired.files ?? [])].sort((left, right) =>
           left.path < right.path ? -1 : left.path > right.path ? 1 : 0
         ),

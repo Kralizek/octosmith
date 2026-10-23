@@ -91,10 +91,9 @@ Octosmith must not infer an enforceable branch name from the bootstrap fallback.
 An explicitly declared default branch may be reconciled according to the
 configured drift policy.
 
-Normalization, planning, and persisted plans must retain the distinction
-between an absent declaration and an explicit value. Never turn an implicit
-bootstrap fallback into a managed property by materializing it into desired
-state.
+Normalization, planning, and persisted plans must retain the distinction between
+an absent declaration and an explicit value. Never turn an implicit bootstrap
+fallback into a managed property by materializing it into desired state.
 
 ## Secret policy
 
@@ -135,6 +134,31 @@ The GitHub layer is split around interfaces:
 - mutation sinks translate operations into GitHub API calls
 
 This keeps the planner testable without GitHub.
+
+### Repository bootstrap
+
+The state source probes repository history separately from the managed-file
+branch. Only GitHub's specific empty-repository response is mapped to an
+uninitialized domain state; missing branches and other API failures remain
+errors. The planner emits `initialize-repository` first, ahead of settings,
+ruleset creation or updates, environments, and file delivery. Initialized
+repositories retain their existing operation order.
+
+`RepositoryBootstrap` is a reusable library boundary, independent of CLI
+commands and repository creation. `GitHubRepositoryBootstrap` checks GitHub
+preconditions, uses an isolated local Git push, and verifies GitHub's result.
+GitHub's Git Data API cannot create the first reference in an empty repository,
+even when a root commit object exists, so bootstrap alone uses local Git.
+
+Direct delivery consumes file-create operations in the root commit and verifies
+them at the resulting commit. PR delivery creates an empty root commit and
+replaces the tagged uninitialized file snapshot with the authoritative GitHub
+base SHA before calling the existing PR reconciler. Preparation still resolves
+runtime dependencies before mutation, and bootstrap failure blocks dependent
+operations. Persisted plans include history in the operation's state contract;
+they never replay initialization against changed history. The configuration and
+artifact versions remain unchanged; older consumers reject the new operation or
+snapshot variant rather than executing it incorrectly.
 
 ## Persisted executable plans
 

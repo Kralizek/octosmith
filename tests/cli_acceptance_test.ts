@@ -2954,6 +2954,8 @@ async function fileConfigurationDirectory(
       "version: 1",
       "organization: acme",
       "repositories:",
+      "  settings:",
+      "    default_branch_drift: enforce",
       "  scope:",
       "    include:",
       "      names:",

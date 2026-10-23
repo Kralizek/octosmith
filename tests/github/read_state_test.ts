@@ -183,6 +183,7 @@ Deno.test("file reads use the desired execution branch and saved operations over
   const desired: DesiredState = {
     repository: "sample",
     template: "code",
+    defaultBranchDrift: "enforce",
     settings: { defaultBranch: "release" },
     files: [{ path: "exists.txt", ensure: "exists", content: "seed" }],
   };

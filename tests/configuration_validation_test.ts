@@ -20,6 +20,47 @@ const template = {
   repository: {},
 };
 
+Deno.test("default branch drift validates ignore and enforce and preserves omitted desired branch", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "templates/default.yml"),
+      JSON.stringify(template),
+    );
+    for (const policy of [undefined, "ignore", "enforce", "rename", true]) {
+      await Deno.writeTextFile(
+        join(root, "octosmith.yml"),
+        JSON.stringify({
+          ...configuration,
+          repositories: {
+            ...configuration.repositories,
+            settings: policy === undefined
+              ? {}
+              : { default_branch_drift: policy },
+          },
+        }),
+      );
+      if (policy === "rename" || policy === true) {
+        await assertRejects(
+          () => loadConfigurationDirectory(root),
+          Error,
+          "default_branch_drift",
+        );
+      } else {
+        assertEquals(await validateConfigurationDirectory(root), []);
+        const loaded = await loadConfigurationDirectory(root);
+        assertEquals(
+          loaded.configuration.repositories.settings?.defaultBranchDrift,
+          policy,
+        );
+      }
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("effective selector intersection matches candidates with exclusions", () => {
   const intersection = effectiveRepositorySelectorIntersection(
     {

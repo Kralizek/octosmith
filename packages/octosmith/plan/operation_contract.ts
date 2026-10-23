@@ -44,6 +44,8 @@ export function persistedOperationContract(
 
   for (const operation of operations) {
     switch (operation.type) {
+      case "initialize-repository":
+        break;
       case "update-repository-settings":
       case "set-custom-property":
       case "set-team-permission":
@@ -281,6 +283,11 @@ export function persistedOperationContract(
   }
 
   const state: Record<string, unknown> = {};
+  if (
+    operations.some((operation) => operation.type === "initialize-repository")
+  ) {
+    state.history = current.history;
+  }
 
   if (Object.keys(actions).length > 0) {
     state.actions = actions;
@@ -319,7 +326,9 @@ export function fileExecutionBranch(
   let branch = defaultBranch;
   let filesBranch: string | undefined;
   for (const operation of operations) {
-    if (operation.type === "update-repository-settings") {
+    if (operation.type === "initialize-repository") {
+      branch = operation.branch;
+    } else if (operation.type === "update-repository-settings") {
       branch = operation.settings.defaultBranch ?? branch;
     } else if (
       operation.type === "create-file" || operation.type === "update-file" ||
@@ -340,8 +349,33 @@ export function fileExecutionBranch(
 export function assertPersistedOperationsExecutable(
   operations: readonly Operation[],
 ): void {
+  const initializations = operations.filter((operation) =>
+    operation.type === "initialize-repository"
+  );
+  if (
+    initializations.length > 1 ||
+    (initializations.length === 1 &&
+      operations[0].type !== "initialize-repository")
+  ) {
+    throw new Error(
+      "Repository initialization must be the first and only bootstrap operation",
+    );
+  }
+  if (
+    initializations.length > 0 &&
+    operations.some((operation) =>
+      operation.type === "update-file" || operation.type === "delete-file"
+    )
+  ) {
+    throw new Error(
+      "Uninitialized repositories cannot have file update or delete operations",
+    );
+  }
   for (const operation of operations) {
     switch (operation.type) {
+      case "initialize-repository":
+        requireNonEmpty(operation.branch, "initial branch");
+        break;
       case "update-repository-settings":
       case "update-actions-settings":
       case "update-actions-oidc":
@@ -460,6 +494,7 @@ export function persistedOperationSecretSources(
         }
         break;
 
+      case "initialize-repository":
       case "update-repository-settings":
       case "set-custom-property":
       case "update-actions-settings":

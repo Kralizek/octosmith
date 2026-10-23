@@ -31,6 +31,81 @@ import { apply } from "../packages/cli/apply.ts";
 import { executeExecutableResources } from "../packages/cli/execution.ts";
 import { main } from "../packages/cli/mod.ts";
 
+Deno.test("bootstrap persisted plans round trip and reject concurrent initialization", async () => {
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: "all" },
+        fileChanges: { mode: "direct" },
+      },
+    },
+    templates: {
+      "repository:code": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: {},
+      },
+    },
+  };
+  const metadata = { name: "sample", teams: [], properties: {} };
+  const desired = await resolveDesiredState(loaded, metadata, () => "unused");
+  const current = currentState({
+    history: { initialized: false },
+    filesBranch: "main",
+  });
+  const plan = buildPlan(current, desired);
+  const artifact = parsePersistedPlanArtifact(
+    JSON.parse(
+      JSON.stringify(
+        await createPersistedPlanArtifact(loaded, [{
+          desired,
+          current,
+          plan,
+          evaluations: buildApplyEvaluations(desired, plan.operations, current),
+        }]),
+      ),
+    ),
+  );
+  assertEquals(artifact.resources[0].managedFiles, {
+    branch: "main",
+    uninitialized: true,
+    files: [],
+  });
+  let changed = false;
+  let preparations = 0;
+  let applications = 0;
+  const runtime = {
+    discover: () => Promise.resolve({ repositories: [metadata], failures: [] }),
+    read: () =>
+      Promise.resolve(
+        changed ? { ...current, history: { initialized: true } } : current,
+      ),
+    prepare() {
+      preparations++;
+    },
+    recheck() {},
+    apply() {
+      applications++;
+      return Promise.resolve({ repository: "sample", operations: [] });
+    },
+  };
+  await applyPersistedPlan(runtime, loaded, artifact, () => {});
+  assertEquals(applications, 1);
+  changed = true;
+  preparations = 0;
+  await assertRejects(
+    () => applyPersistedPlan(runtime, loaded, artifact, () => {}),
+    Error,
+    "stale",
+  );
+  assertEquals(preparations, 0);
+  assertEquals(applications, 1);
+});
+
 function legacyFixtureConfiguration(
   secrets?: "automatic" | "manual",
 ): LoadedConfiguration {

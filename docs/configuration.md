@@ -60,6 +60,7 @@ repositories:
   settings:
     collection_management: explicit
     unmatched_repositories: ignore
+    default_branch_drift: ignore
 ```
 
 Repository scope may use names, teams, visibility, and custom properties. Name
@@ -116,6 +117,59 @@ repository:
 
 Templates can manage repository settings, teams, custom properties, Actions
 settings and values, Dependabot secrets, rulesets, environments, and files.
+
+### Default branch and automatic initialization
+
+`repository.settings.default_branch` remains an optional string:
+
+```yaml
+repository:
+  settings:
+    default_branch: develop
+```
+
+`plan` detects repositories without Git history and reports an initialization
+operation without changing GitHub. `apply` initializes them automatically,
+including repositories whose effective template has no managed files. The
+initial branch is the explicitly declared branch, or `main` when omitted. That
+fallback is used only for initialization and never becomes managed desired
+state.
+
+The root policy `repositories.settings.default_branch_drift` defaults to
+`ignore`. On initialized repositories, `ignore` preserves the current default
+branch even when the template declares a different branch. `enforce` corrects
+drift only when the effective template explicitly declares `default_branch`. The
+target branch must already exist; Octosmith never creates, renames, or deletes
+branches to reconcile an initialized repository. Managed files use the preserved
+default branch under `ignore`, or the explicitly enforced target under
+`enforce`.
+
+Bootstrap requires local Git on `PATH` and HTTPS Git access with the configured
+GitHub credential. It uses an isolated temporary repository, a deterministic
+Octosmith commit identity, and a single root commit. No global Git settings or
+placeholder files are created. Temporary state is removed on success or failure.
+
+With `repositories.file_changes.mode: direct`, all effective managed files are
+included in that initial commit and are not committed again by normal delivery.
+With `pull_request` (the CLI default), the root commit is empty and managed
+files continue through the normal owned PR workflow. GitHub's resulting branch,
+default branch, and file snapshot are checked before continuing.
+
+Bootstrap precedes all planned ruleset creates and updates. Existing repository
+and inherited organization policies remain active; Octosmith neither disables
+them nor requests a bypass. If they reject the initial push, the error includes
+the Git restriction. An administrator must arrange a policy-compliant initial
+commit or adjust policy through an authorized process. In particular, bootstrap
+does not sign commits or bypass required signatures.
+
+Saved executable plans record an explicit uninitialized-state precondition and
+are rejected if another actor initializes the repository. Pushes also protect
+the initial ref against overwrites and check for concurrent refs afterward. Git
+has no transaction asserting that every other ref remains absent: a simultaneous
+first push to a different branch can leave both branches present. Octosmith
+reports that race for inspection and a fresh plan, without deleting or
+overwriting either branch. A fresh apply after a later partial failure observes
+the existing history and does not bootstrap again.
 
 ### Squash merge commit settings
 

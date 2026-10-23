@@ -302,6 +302,8 @@ function describeItem(item: ApplyItemReport): string {
   const details = item.details;
 
   switch (item.type) {
+    case "repository-initialization":
+      return "Initialize repository - branch: " + String(details.branch);
     case "repository-settings":
       return "Repository settings" +
         settingsSuffix(item, details.settings);

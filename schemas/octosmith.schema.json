@@ -115,6 +115,11 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "default_branch_drift": {
+          "type": "string",
+          "enum": ["ignore", "enforce"],
+          "default": "ignore"
+        },
         "secrets": {
           "type": "string",
           "enum": ["automatic", "manual"],

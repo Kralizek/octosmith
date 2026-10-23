@@ -5,6 +5,8 @@ version: 1
 organization: example-org
 
 repositories:
+  settings:
+    default_branch_drift: ignore
   file_changes:
     mode: pull_request
     pull_request:

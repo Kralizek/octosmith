@@ -105,6 +105,11 @@ export async function reconcileFilePullRequest(options: {
   readonly onPullRequest: (result: PullRequestResult) => void | Promise<void>;
 }): Promise<void> {
   const { client, owner, repository, snapshot, settings } = options;
+  if (snapshot.baseSha === undefined) {
+    throw new Error(
+      "Repository must be initialized before pull-request delivery",
+    );
+  }
   const fullName = owner + "/" + repository;
   const repo = "/repos/" + encodeURIComponent(owner) + "/" +
     encodeURIComponent(repository);

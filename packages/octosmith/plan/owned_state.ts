@@ -42,9 +42,12 @@ export function projectOwnedCurrentState(
   };
 
   if (desired.settings !== undefined) {
+    const { defaultBranch, ...otherSettings } = desired.settings;
     const settings = projectShape(
       current.settings,
-      desired.settings,
+      desired.defaultBranchDrift === "enforce"
+        ? { ...otherSettings, defaultBranch }
+        : otherSettings,
     ) as Record<string, unknown>;
 
     if (desired.settings.topics !== undefined) {

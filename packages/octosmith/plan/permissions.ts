@@ -112,6 +112,9 @@ const organization = (
 });
 
 const operationPermissions = {
+  "initialize-repository": [
+    repository("contents", "write"),
+  ],
   "update-repository-settings": [
     repository("administration", "write"),
   ],

@@ -58,9 +58,10 @@ export async function applyPlan(
   preparedSink.onPullRequest = options.onPullRequest;
   const results: ApplyOperationResult[] = [];
   let failed = false;
+  let bootstrapFailed = false;
 
   for (const operation of plan.operations) {
-    if (failed && !options.continueOnError) {
+    if (bootstrapFailed || (failed && !options.continueOnError)) {
       results.push({
         operation,
         status: "skipped",
@@ -76,6 +77,7 @@ export async function applyPlan(
       });
     } catch (error) {
       failed = true;
+      bootstrapFailed = operation.type === "initialize-repository";
       results.push({
         operation,
         status: "failed",

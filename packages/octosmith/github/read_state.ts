@@ -5,6 +5,7 @@ import {
   type Operation,
 } from "../mod.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
+import { GitHubRequestError } from "./client.ts";
 
 /** Read the current GitHub state needed for the supplied desired state. */
 export async function readCurrentState(
@@ -59,9 +60,32 @@ export async function readCurrentState(
       : Promise.resolve([]),
   ]);
 
+  const history = await source.getRepositoryHistory?.(
+    repository,
+    settings.defaultBranch,
+  );
+  const empty = history?.initialized === false;
+  const desiredBranch = empty || desired.defaultBranchDrift === "enforce"
+    ? desired.settings?.defaultBranch ??
+      (empty ? "main" : settings.defaultBranch)
+    : settings.defaultBranch;
   const filesBranch = operations === undefined
-    ? desired.settings?.defaultBranch ?? settings.defaultBranch
+    ? desiredBranch
     : fileExecutionBranch(settings.defaultBranch, operations);
+  if (!empty && desiredBranch !== settings.defaultBranch) {
+    try {
+      await source.getBranchHead(repository, desiredBranch);
+    } catch (error) {
+      if (!(error instanceof GitHubRequestError) || error.status !== 404) {
+        throw error;
+      }
+      throw new Error(
+        "Cannot enforce default branch " + desiredBranch +
+          ". Ensure the branch exists and is accessible before applying; Octosmith does not create branches on initialized repositories.",
+        { cause: error },
+      );
+    }
+  }
   const paths = [
     ...new Set([
       ...(desired.files ?? []).map((file) => file.path),
@@ -78,10 +102,10 @@ export async function readCurrentState(
       }),
     ]),
   ];
-  const filesBaseSha = options.authoritativeFiles
+  const filesBaseSha = options.authoritativeFiles && !empty
     ? await source.getBranchHead(repository, filesBranch)
     : undefined;
-  const files = await readOwnedFiles(
+  const files = empty ? [] : await readOwnedFiles(
     source,
     repository,
     paths,
@@ -91,6 +115,8 @@ export async function readCurrentState(
 
   return {
     repository,
+    ...(history !== undefined &&
+      { history: { initialized: history.initialized } }),
     settings,
     customProperties: desired.customProperties === undefined
       ? {}
@@ -145,7 +171,8 @@ export async function readCurrentState(
       : strict
       ? environments
       : filterSparseEnvironments(environments, desired.environments),
-    ...((paths.length > 0 || filesBaseSha !== undefined) && { filesBranch }),
+    ...((empty || paths.length > 0 || filesBaseSha !== undefined) &&
+      { filesBranch }),
     ...(filesBaseSha !== undefined && { filesBaseSha }),
     files,
   };
