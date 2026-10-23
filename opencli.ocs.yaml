@@ -167,7 +167,7 @@ commands:
 
   octosmith resource create:
     kind: action
-    summary: Create a resource from a template.
+    summary: Preflight repository creation from a template without GitHub mutations.
     args:
       - name: template
         type: string
@@ -176,7 +176,14 @@ commands:
     flags:
       - name: name
         type: string
-        summary: Name for the new resource.
+        summary: Explicit name; otherwise a unique effective selector pattern is used.
+      - name: visibility
+        type: string
+        choices:
+          - value: public
+          - value: private
+          - value: internal
+        summary: Explicit visibility when selector constraints leave multiple choices.
       - name: path
         aliases: [p]
         type: string
@@ -192,7 +199,7 @@ commands:
     examples:
       - title: Create a resource from a template
         content: |
-          $ octosmith resource create teams/backend --name api-service
+          $ octosmith resource create teams/backend --visibility private
 
   octosmith template:
     kind: group

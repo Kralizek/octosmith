@@ -14,6 +14,7 @@ model directly. For day-to-day command-line usage, use
 import {
   buildPlan,
   loadConfigurationDirectory,
+  preflightRepositoryCreation,
   validateConfigurationDirectory,
 } from "jsr:@octosmith/octosmith@0";
 ```
@@ -22,6 +23,16 @@ For example, validate a configuration directory without accessing GitHub:
 
 ```ts
 await validateConfigurationDirectory("./configuration");
+```
+
+Prepare a repository creation without GitHub access or mutations:
+
+```ts
+const loaded = await loadConfigurationDirectory("./configuration");
+const specification = await preflightRepositoryCreation(loaded, {
+  template: "services",
+  name: "api-service",
+});
 ```
 
 For deeper guidance, see the repository documentation for
