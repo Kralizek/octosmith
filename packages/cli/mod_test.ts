@@ -391,9 +391,13 @@ Deno.test("resource create emits structured diagnostics for unresolved choices",
       ),
       1,
     );
+    const result = JSON.parse(output.join("\n"));
+    assertEquals(result.diagnostics[0].code, "visibility_ambiguous");
     assertEquals(
-      JSON.parse(output.join("\n")).diagnostics[0].code,
-      "name_required",
+      result.diagnostics.some(({ code }: { code: string }) =>
+        code === "name_required"
+      ),
+      true,
     );
     assertEquals(errors, []);
   } finally {

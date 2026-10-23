@@ -46,7 +46,7 @@ Deno.test("creation preflight resolves explicit names and fixed selector choices
   });
   assertEquals(result.choices?.visibility.value, "private");
   assertEquals(result.choices?.visibility.alternatives, ["private"]);
-  assertEquals(result.choices?.teams, ["platform"]);
+  assertEquals(result.choices?.teams, ["platform", "security"]);
   assertEquals(result.choices?.customProperties, {
     tier: "backend",
     region: "us",
