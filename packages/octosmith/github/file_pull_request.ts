@@ -322,6 +322,7 @@ export async function reconcileFilePullRequest(options: {
   }
   const metadata = await client.get<{ node_id: string }>(repo);
   const updateRefs = async (
+    stage: string,
     refUpdates: readonly {
       name: string;
       beforeOid: string;
@@ -329,8 +330,17 @@ export async function reconcileFilePullRequest(options: {
       force: boolean;
     }[],
   ) => {
+    const context = "Atomic reconciliation branch update rejected for " +
+      fullName + " during " + stage;
     const response = await client.request<
-      { data?: { updateRefs: unknown }; errors?: readonly unknown[] }
+      {
+        data?: { updateRefs: unknown };
+        errors?: readonly {
+          message?: string;
+          type?: string;
+          extensions?: { code?: string };
+        }[];
+      }
     >(
       "POST",
       "/graphql",
@@ -341,10 +351,40 @@ export async function reconcileFilePullRequest(options: {
           variables: { input: { repositoryId: metadata.node_id, refUpdates } },
         },
       },
-    );
+    ).catch((error) => {
+      if (error instanceof GitHubRequestError) {
+        throw new Error(
+          context + " (HTTP " + error.status + "): " +
+            (error.details?.message ?? "GitHub API request failed"),
+        );
+      }
+      throw error;
+    });
     if (response.errors?.length || !response.data?.updateRefs) {
+      const details = response.errors?.map((error) => {
+        const code = error.extensions?.code ?? error.type;
+        return (code ? "[" + code + "] " : "") +
+          (error.message ?? "Unspecified GraphQL error");
+      }).join("; ") ?? "Missing updateRefs result";
+      const conflicts: string[] = [];
+      for (const ref of refUpdates) {
+        try {
+          const current = await source.getBranchHead(
+            repository,
+            ref.name.slice("refs/heads/".length),
+          );
+          if ((current ?? ZERO_OID) !== ref.beforeOid) {
+            conflicts.push(ref.name);
+          }
+        } catch {
+          continue;
+        }
+      }
       throw new Error(
-        "Atomic reconciliation branch update rejected; target, reserved branch, or lock may have changed",
+        context + ": " + details +
+          (conflicts.length
+            ? ". Observed reference conflict: " + conflicts.join(", ")
+            : ""),
       );
     }
   };
@@ -387,13 +427,8 @@ export async function reconcileFilePullRequest(options: {
   if (lock === "refs/heads/" + snapshot.branch) {
     throw new Error("Managed file lock branch must not match target branch");
   }
-  await updateRefs([
-    {
-      name: "refs/heads/" + snapshot.branch,
-      beforeOid: snapshot.baseSha,
-      afterOid: snapshot.baseSha,
-      force: false,
-    },
+  await assertTarget();
+  await updateRefs("branch transaction", [
     {
       name: "refs/heads/" + branch,
       beforeOid: head ?? ZERO_OID,
@@ -485,7 +520,7 @@ export async function reconcileFilePullRequest(options: {
     reconciliationError = error;
   }
   try {
-    await updateRefs([{
+    await updateRefs("lock cleanup", [{
       name: lock,
       beforeOid: nextHead,
       afterOid: ZERO_OID,
@@ -501,7 +536,13 @@ export async function reconcileFilePullRequest(options: {
     throw new Error(
       (reconciliationFailed ? original + ". " : "") +
         "Reconciliation lock cleanup failed; inspect " + branch +
-        "-lock before retrying",
+        "-lock before retrying: " +
+        (cleanupError instanceof GitHubRequestError
+          ? "GitHub API rejected lock cleanup for " + fullName + " (HTTP " +
+            cleanupError.status + ")"
+          : cleanupError instanceof Error
+          ? cleanupError.message
+          : "Unknown cleanup error"),
       { cause: cleanupError },
     );
   }
