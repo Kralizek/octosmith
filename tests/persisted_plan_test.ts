@@ -257,6 +257,84 @@ Deno.test("pre-revision bootstrap plans without internal cleanup require regener
   );
 });
 
+Deno.test("persisted artifact parsing rejects cleanup reordered across protections and other mutations", async () => {
+  const loaded = legacyFixtureConfiguration();
+  const current = currentState({
+    history: { initialized: true },
+    filesBranch: "main",
+    filesBaseSha: "root",
+    bootstrapFile: {
+      path: BOOTSTRAP_FILE_PATH,
+      content: BOOTSTRAP_FILE_CONTENT,
+      sha: "owned",
+    },
+  });
+  const desired = await resolveDesiredState(loaded, {
+    name: "sample",
+    teams: [],
+    properties: {},
+  }, () => "unused");
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    current,
+    desired,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }]);
+  assertEquals(parsePersistedPlanArtifact(structuredClone(artifact)), artifact);
+  for (
+    const mutation of [
+      "create-protection",
+      "update-protection",
+      "settings-before-cleanup",
+      "files-after-cleanup",
+      "branch-after-cleanup",
+    ]
+  ) {
+    const changed = structuredClone(artifact);
+    const operations = changed.resources[0].operations as Operation[];
+    if (mutation === "create-protection") {
+      operations.unshift({
+        type: "create-ruleset",
+        ruleset: {
+          name: "protect",
+          target: "push",
+          enforcement: "active",
+          rules: [],
+          bypassActors: [],
+        },
+      });
+    }
+    if (mutation === "update-protection") {
+      operations.unshift({
+        type: "update-ruleset",
+        id: 1,
+        changes: { name: "protect", enforcement: "active" },
+      });
+    }
+    if (mutation === "settings-before-cleanup") {
+      operations.splice(1, 0, operations.shift()!);
+    }
+    if (mutation === "files-after-cleanup") {
+      operations.splice(1, 0, {
+        type: "create-file",
+        file: { path: "managed.txt", ensure: "exact", content: "managed" },
+      });
+    }
+    if (mutation === "branch-after-cleanup") {
+      operations.push({
+        type: "update-repository-settings",
+        settings: { defaultBranch: "develop" },
+      });
+    }
+    assertThrows(
+      () => parsePersistedPlanArtifact(changed),
+      Error,
+      "Bootstrap cleanup",
+    );
+  }
+});
+
 function legacyFixtureConfiguration(
   secrets?: "automatic" | "manual",
 ): LoadedConfiguration {

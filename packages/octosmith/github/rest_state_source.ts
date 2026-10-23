@@ -336,7 +336,15 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
             readonly commit: { readonly sha: string };
           }[]
         >(this.repo(repository) + "/branches", { per_page: 100 });
-        if (branches.length > 0) {
+        if (branches.length > 1) {
+          throw new Error(
+            "Cannot recover repository initialization: configured default branch " +
+              defaultBranch + " is missing and multiple branches exist. " +
+              "Set the intended default branch in GitHub, inspect the bootstrap state, and create a fresh plan.",
+            { cause: error },
+          );
+        }
+        if (branches.length === 1) {
           return {
             initialized: true,
             branch: branches[0].name,

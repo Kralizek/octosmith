@@ -157,7 +157,10 @@ versioned ownership markers are centralized in the state model. Templates cannot
 declare it. Current bootstrap ownership is separate from user files, and cleanup
 is an explicit internal operation with its own immutable SHA precondition. Both
 file executors materialize that operation as a deletion only after recognizing
-the ownership markers; explanatory wording is not the ownership signature.
+the ownership markers; explanatory wording is not the ownership signature. Those
+markers claim the whole file as disposable lifecycle state, including arbitrary
+edited interior text. They are not authentication or proof of origin; the
+reviewed content and SHA separately provide concurrency preconditions.
 
 Direct mode batches desired files and bootstrap deletion into one subsequent Git
 Data commit. PR mode adds the deletion to the authoritative file delta,
@@ -171,7 +174,10 @@ Initialization and initial file delivery precede managed protections. Direct
 cleanup completes before rulesets; PR mode defers all managed ruleset changes
 until cleanup is absent from the target branch. Ordinary initialized
 repositories without bootstrap state retain their existing operation order.
-Existing policies are never disabled or bypassed.
+Executable plans enforce that ordering before preparation. An enforced branch
+switch alone may precede cleanup and file delivery; other settings stay after
+cleanup, and direct delivery targets the immutable snapshot branch. Existing
+policies are never disabled or bypassed.
 
 Preparation and exact replay share the existing executable-resource boundary.
 Saved plans hash history, bootstrap ownership, commit and cleanup dependencies;

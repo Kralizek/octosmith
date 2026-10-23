@@ -15,6 +15,8 @@ import type {
 import {
   applyPlan,
   BOOTSTRAP_FILE_CONTENT,
+  BOOTSTRAP_FILE_END_MARKER,
+  BOOTSTRAP_FILE_MARKER,
   BOOTSTRAP_FILE_PATH,
   buildPlan,
   GitHubRepositoryMutationSink,
@@ -136,6 +138,18 @@ Deno.test("PR cleanup preserves unrecognized reserved content and performs no mu
     client.requests.filter((request) => request.method !== "GET"),
     [],
   );
+});
+
+Deno.test("PR cleanup honors whole-file marker ownership after all interior text changes", async () => {
+  const content = BOOTSTRAP_FILE_MARKER +
+    "\nCompletely replaced interior text.\n" + BOOTSTRAP_FILE_END_MARKER + "\n";
+  const client = new ReconciliationClient({
+    [BOOTSTRAP_FILE_PATH]: content,
+    "user.txt": "preserved",
+  });
+  await client.reconcile([]);
+  assertEquals(client.files(), { "user.txt": "preserved" });
+  assertEquals(client.files("main")[BOOTSTRAP_FILE_PATH], content);
 });
 
 Deno.test("cleanup-only PR preserves unrelated target files", async () => {

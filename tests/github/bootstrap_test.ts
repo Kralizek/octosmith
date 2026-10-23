@@ -8,19 +8,24 @@ import {
   BOOTSTRAP_FILE_PATH,
   buildApplyEvaluations,
   buildPlan,
+  createPersistedPlanArtifact,
   type DesiredFile,
   type DesiredState,
+  fileExecutionBranch,
   type GitHubClient,
   GitHubRepositoryBootstrap,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
   GitHubRequestError,
   type GitHubRequestOptions,
+  type LoadedConfiguration,
+  type Operation,
   projectOwnedCurrentState,
   readCurrentState,
   resolveDesiredState,
 } from "@octosmith/octosmith";
 import { createGitHubRuntime, main } from "../../packages/cli/mod.ts";
+import { applyPersistedPlan } from "../../packages/cli/persisted.ts";
 import { currentRepositorySettings, currentState } from "../plan/fixtures.ts";
 
 type Tree = Record<string, string>;
@@ -316,6 +321,58 @@ Deno.test("reserved ownership is explicit and survives explanatory wording chang
   }
 });
 
+Deno.test("retaining both ownership markers makes completely replaced interior text disposable", async () => {
+  const content = BOOTSTRAP_FILE_MARKER +
+    "\nCompletely repurposed human notes.\n" + BOOTSTRAP_FILE_END_MARKER + "\n";
+  assertBootstrapFileOwned({
+    path: BOOTSTRAP_FILE_PATH,
+    content,
+    sha: "reviewed",
+  });
+  const client = new BootstrapClient();
+  client.defaultBranch = "main";
+  client.root("main", {
+    [BOOTSTRAP_FILE_PATH]: content,
+    "user.txt": "preserved",
+  });
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    fileDelivery: "direct",
+  };
+  const result = await applyPlan(
+    sink(client),
+    buildPlan(await readCurrentState(source(client), desired), desired),
+  );
+  assert(result.operations.every((item) => item.status === "applied"));
+  assertEquals(client.files(), { "user.txt": "preserved" });
+});
+
+for (const marker of [BOOTSTRAP_FILE_MARKER, BOOTSTRAP_FILE_END_MARKER]) {
+  Deno.test(`removing ownership boundary ${marker} preserves repurposed content`, async () => {
+    const content =
+      (BOOTSTRAP_FILE_MARKER + "\nUser notes\n" + BOOTSTRAP_FILE_END_MARKER +
+        "\n").replace(marker, "");
+    const client = new BootstrapClient();
+    client.defaultBranch = "main";
+    client.root("main", { [BOOTSTRAP_FILE_PATH]: content });
+    await assertRejects(
+      () =>
+        readCurrentState(source(client), {
+          repository: "sample",
+          template: "code",
+        }),
+      Error,
+      "conflict",
+    );
+    assertEquals(client.files()[BOOTSTRAP_FILE_PATH], content);
+    assertEquals(
+      client.requests.filter((request) => request.method !== "GET"),
+      [],
+    );
+  });
+}
+
 Deno.test("templates cannot declare the reserved path even for deletion", async () => {
   const desired = {
     repository: "sample",
@@ -442,6 +499,243 @@ for (const files of [[], desiredFiles]) {
     );
   });
 }
+
+for (const sharedHead of [false, true]) {
+  Deno.test(`standalone direct cleanup uses its snapshot branch instead of metadata (shared head: ${sharedHead})`, async () => {
+    const client = new BootstrapClient();
+    client.defaultBranch = "main";
+    const targetHead = client.root("develop", {
+      [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+      "user.txt": "preserved",
+    });
+    const defaultHead = sharedHead ? targetHead : client.root("main", {
+      [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+      "default.txt": "untouched",
+    });
+    client.refs.set("main", defaultHead);
+    const current = currentState({
+      settings: currentRepositorySettings({ defaultBranch: "develop" }),
+      filesBranch: "develop",
+      filesBaseSha: targetHead,
+      bootstrapFile: {
+        path: BOOTSTRAP_FILE_PATH,
+        content: BOOTSTRAP_FILE_CONTENT,
+        sha: "blob:" + BOOTSTRAP_FILE_CONTENT,
+      },
+    });
+    const desired: DesiredState = {
+      repository: "sample",
+      template: "code",
+      fileDelivery: "direct",
+    };
+    const result = await applyPlan(sink(client), buildPlan(current, desired));
+    assert(result.operations.every((item) => item.status === "applied"));
+    assertEquals(client.refs.get("main"), defaultHead);
+    assertEquals(client.defaultBranch, "main");
+    assertEquals(client.files("develop"), { "user.txt": "preserved" });
+    assertEquals(
+      client.requests.filter((request) =>
+        request.method === "PATCH" && request.path.includes("/git/refs/")
+      ).map((request) => request.path),
+      ["/repos/acme/sample/git/refs/heads/develop"],
+    );
+  });
+}
+
+for (const files of [[], desiredFiles]) {
+  Deno.test(`enforced default branch switches before bootstrap file delivery and replay (${files.length} files)`, async () => {
+    const client = new BootstrapClient();
+    client.defaultBranch = "main";
+    const oldHead = client.root("main", { "old.txt": "preserved" });
+    client.root("develop", { [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT });
+    const desired: DesiredState = {
+      repository: "sample",
+      template: "code",
+      fileDelivery: "direct",
+      defaultBranchDrift: "enforce",
+      settings: { defaultBranch: "develop", hasIssues: true },
+      files,
+    };
+    const current = await readCurrentState(source(client), desired);
+    const plan = buildPlan(current, desired);
+    assertEquals(plan.operations[0], {
+      type: "update-repository-settings",
+      settings: { defaultBranch: "develop" },
+    });
+    assertEquals(plan.operations.at(-1), {
+      type: "update-repository-settings",
+      settings: { hasIssues: true },
+    });
+    assertEquals(fileExecutionBranch("main", plan.operations), "develop");
+    const rechecked = await readCurrentState(
+      source(client),
+      desired,
+      plan.operations,
+    );
+    assertEquals(rechecked.filesBranch, "develop");
+    assertEquals(
+      projectOwnedCurrentState(rechecked, desired, plan.operations),
+      projectOwnedCurrentState(current, desired, plan.operations),
+    );
+    const result = await applyPlan(sink(client), plan);
+    assert(result.operations.every((item) => item.status === "applied"));
+    assertEquals(client.defaultBranch, "develop");
+    assertEquals(client.refs.get("main"), oldHead);
+    assertEquals(
+      client.files("develop"),
+      files.length ? { "managed.txt": "managed", "seed.txt": "seed" } : {},
+    );
+  });
+}
+
+Deno.test("saved cleanup plan enforces its branch through the real CLI preparation and recheck boundary", async () => {
+  const client = new BootstrapClient();
+  client.defaultBranch = "main";
+  const oldHead = client.root("main", { "old.txt": "preserved" });
+  client.root("develop", { [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT });
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: "all" },
+        settings: { defaultBranchDrift: "enforce" },
+        fileChanges: { mode: "direct" },
+      },
+    },
+    templates: {
+      "repository:code": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: { settings: { defaultBranch: "develop", hasIssues: true } },
+      },
+    },
+  };
+  const desired = await resolveDesiredState(loaded, {
+    name: "sample",
+    teams: [],
+    properties: {},
+  }, () => "unused");
+  const current = await readCurrentState(source(client), desired);
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    desired,
+    current,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }]);
+  const runtime = createGitHubRuntime({
+    token: "test",
+    fetch: async (input, options) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/orgs/acme/repos") {
+        return Response.json([{ name: "sample", visibility: "private" }]);
+      }
+      try {
+        const result = await client.request(
+          options?.method ?? "GET",
+          url.pathname,
+          {
+            query: Object.fromEntries(url.searchParams),
+            ...(options?.body && { body: JSON.parse(String(options.body)) }),
+          },
+        );
+        return result === undefined
+          ? Response.json({ message: "Not Found" }, { status: 404 })
+          : Response.json(result);
+      } catch (error) {
+        if (error instanceof GitHubRequestError) {
+          return new Response(error.body, { status: error.status });
+        }
+        throw error;
+      }
+    },
+  });
+  const reports: { status: string }[] = [];
+  await applyPersistedPlan(runtime, loaded, artifact, (report) => {
+    reports.push(report);
+  });
+  assertEquals(reports.map((report) => report.status), ["applied"]);
+  assertEquals(client.defaultBranch, "develop");
+  assertEquals(client.refs.get("main"), oldHead);
+  assertEquals(client.files("develop"), {});
+});
+
+Deno.test("executable bootstrap cleanup ordering rejects mutations before preparation", async () => {
+  const file: Operation = {
+    type: "create-file",
+    file: { path: "managed.txt", ensure: "exact", content: "managed" },
+  };
+  const cleanup: Operation = {
+    type: "cleanup-repository-bootstrap",
+    sha: "owned",
+  };
+  const settings: Operation = {
+    type: "update-repository-settings",
+    settings: { hasIssues: false },
+  };
+  const branch: Operation = {
+    type: "update-repository-settings",
+    settings: { defaultBranch: "develop" },
+  };
+  const createRuleset: Operation = {
+    type: "create-ruleset",
+    ruleset: {
+      name: "protect",
+      target: "push",
+      enforcement: "active",
+      bypassActors: [],
+      rules: [],
+    },
+  };
+  const updateRuleset: Operation = {
+    type: "update-ruleset",
+    id: 1,
+    changes: { name: "protect", enforcement: "active" },
+  };
+  for (
+    const operations of [
+      [createRuleset, file, cleanup],
+      [file, createRuleset, cleanup],
+      [updateRuleset, file, cleanup],
+      [file, updateRuleset, cleanup],
+      [file, settings, cleanup],
+      [cleanup, file],
+      [file, cleanup, branch],
+      [file, branch, cleanup],
+      [branch, branch, file, cleanup],
+    ]
+  ) {
+    const calls: string[] = [];
+    await assertRejects(
+      () =>
+        applyPlan({
+          prepare() {
+            calls.push("prepare");
+            throw new Error("must not prepare");
+          },
+          apply() {
+            calls.push("apply");
+            throw new Error("must not mutate");
+          },
+        }, {
+          repository: "sample",
+          operations,
+          managedFiles: {
+            branch: "main",
+            baseSha: "root",
+            files: [file.file],
+            bootstrapCleanup: { sha: "owned" },
+          },
+        }),
+      Error,
+      "Bootstrap cleanup",
+    );
+    assertEquals(calls, []);
+  }
+});
 
 Deno.test("lost direct cleanup response is recovered by fresh planning without duplicate commits", async () => {
   const client = new BootstrapClient();

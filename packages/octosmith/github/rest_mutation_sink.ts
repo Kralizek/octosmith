@@ -730,7 +730,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     >(
       repositoryPath,
     );
-    const defaultBranch = this.#bootstrapSnapshot?.branch ?? this.#fileBranch ??
+    const defaultBranch = snapshot?.branch ?? this.#fileBranch ??
       metadata.default_branch;
     const baseRef = await this.#client.get<{
       readonly object: { readonly sha: string };

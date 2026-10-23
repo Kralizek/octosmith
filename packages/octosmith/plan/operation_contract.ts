@@ -401,6 +401,47 @@ export function assertPersistedOperationsExecutable(
       "Deferred bootstrap cleanup requires an uninitialized-state operation",
     );
   }
+  const cleanupIndex = operations.findIndex((operation) =>
+    operation.type === "cleanup-repository-bootstrap"
+  );
+  if (cleanupIndex !== -1) {
+    let fileDeliveryStarted = false;
+    let branchSwitched = false;
+    for (const operation of operations.slice(0, cleanupIndex)) {
+      if (operation.type === "initialize-repository") continue;
+      if (
+        operation.type === "create-file" || operation.type === "update-file" ||
+        operation.type === "delete-file"
+      ) {
+        fileDeliveryStarted = true;
+        continue;
+      }
+      if (
+        operation.type === "update-repository-settings" &&
+        operation.settings.defaultBranch !== undefined &&
+        Object.keys(operation.settings).length === 1 && !fileDeliveryStarted &&
+        !branchSwitched && initializations.length === 0
+      ) {
+        branchSwitched = true;
+        continue;
+      }
+      throw new Error(
+        "Bootstrap cleanup must precede protections and other mutations; only initialization, one initial branch-only switch, and managed files may precede cleanup",
+      );
+    }
+    if (
+      operations.slice(cleanupIndex + 1).some((operation) =>
+        operation.type === "create-file" ||
+        operation.type === "update-file" || operation.type === "delete-file" ||
+        (operation.type === "update-repository-settings" &&
+          operation.settings.defaultBranch !== undefined)
+      )
+    ) {
+      throw new Error(
+        "Bootstrap cleanup must follow all managed-file operations and any default-branch switch",
+      );
+    }
+  }
   for (const operation of operations) {
     switch (operation.type) {
       case "initialize-repository":

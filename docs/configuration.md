@@ -151,6 +151,16 @@ and contains stable, versioned Octosmith ownership markers. Templates, including
 fragments, cannot manage this path, even with `ensure: absent`. Unrecognized
 contents produce an actionable conflict and are never overwritten or deleted.
 
+Both boundary markers are the permanent ownership contract for the entire file,
+not proof of who created it. Keeping both markers makes all enclosed content
+eligible for cleanup, even if it has been edited or completely repurposed.
+Octosmith deliberately does not match the explanatory prose, so legitimate
+wording changes remain compatible across upgrades. Do not store user data inside
+those markers. To repurpose the contents, move them outside the reserved path;
+removing either marker instead causes a conflict and prevents automatic
+deletion. Edits after planning still invalidate the reviewed SHA and saved-state
+checks.
+
 GitHub supports an explicitly selected initial branch through the Contents API,
 but may retain its previously configured default branch in metadata. Octosmith
 verifies the new root commit and owned file, updates the default through the

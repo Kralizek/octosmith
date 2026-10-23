@@ -84,6 +84,34 @@ export function buildPlan(
       "Managed file snapshot does not match the execution branch",
     );
   }
+  const settingsOperations: Operation[] = [];
+  planRepositorySettings(
+    current,
+    desired,
+    settingsOperations,
+    options.offlineValidation ?? false,
+  );
+  const settingsAfterCleanup: Operation[] = [];
+  for (const operation of settingsOperations) {
+    if (
+      lifecycle && operation.type === "update-repository-settings" &&
+      operation.settings.defaultBranch !== undefined
+    ) {
+      const { defaultBranch, ...settings } = operation.settings;
+      operations.push({
+        type: "update-repository-settings",
+        settings: { defaultBranch },
+      });
+      if (Object.keys(settings).length > 0) {
+        settingsAfterCleanup.push({
+          type: "update-repository-settings",
+          settings,
+        });
+      }
+    } else {
+      settingsAfterCleanup.push(operation);
+    }
+  }
   if (lifecycle) {
     planFiles(current, desired, operations);
     operations.push({
@@ -91,13 +119,7 @@ export function buildPlan(
       ...(current.bootstrapFile && { sha: current.bootstrapFile.sha }),
     });
   }
-
-  planRepositorySettings(
-    current,
-    desired,
-    operations,
-    options.offlineValidation ?? false,
-  );
+  operations.push(...settingsAfterCleanup);
   planCustomProperties(current, desired, operations, collections);
   planActions(
     current,

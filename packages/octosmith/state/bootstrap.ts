@@ -30,7 +30,10 @@ Until then, it is safe to leave in place.
 ${BOOTSTRAP_FILE_END_MARKER}
 `;
 
-/** Refuse to treat unrecognized user content as Octosmith-owned bootstrap state. */
+/**
+ * Recognize the marker-delimited ownership claim for the entire reserved file.
+ * Interior text is disposable, even when edited; markers are not proof of origin.
+ */
 export function assertBootstrapFileOwned(file: CurrentFile): void {
   const content = file.content.replace(/\r\n?/g, "\n");
   if (
