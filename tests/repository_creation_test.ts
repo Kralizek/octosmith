@@ -527,6 +527,28 @@ Deno.test("creation preflight rejects custom property choices that conflict with
     result.diagnostics.some(({ code }) => code === "property_conflict"),
     true,
   );
+
+  const desiredConflict = configuration(
+    { include: { properties: { tier: "backend" } } },
+    {
+      "repository:backend": {
+        ...repositoryTemplate({ include: "all" }),
+        repository: { customProperties: { tier: "frontend" } },
+      },
+    },
+  );
+  const incompatible = await preflightRepositoryCreation(desiredConflict, {
+    template: "backend",
+    name: "api",
+    visibility: "private",
+  });
+  assertEquals(incompatible.ready, false);
+  assertEquals(
+    incompatible.diagnostics.some(({ code }) =>
+      code === "incompatible_constraints"
+    ),
+    true,
+  );
 });
 
 Deno.test("creation preflight validates templates composed from fragments", async () => {

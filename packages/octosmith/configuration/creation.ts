@@ -199,6 +199,42 @@ export async function preflightRepositoryCreation(
     ...effective.requiredProperties,
   };
   let propertiesValid = true;
+  for (
+    const [property, desired] of Object.entries(
+      template.repository.customProperties ?? {},
+    )
+  ) {
+    const required = effective.requiredProperties[property];
+    if (desired === null) {
+      if (required !== undefined) {
+        propertiesValid = false;
+        diagnostics.push({
+          code: "incompatible_constraints",
+          message: "Template-managed custom property " + property +
+            " removes a value required by the effective selector constraints",
+          template: resolvedIdentity,
+          path: "repository.customProperties." + property,
+        });
+      } else {
+        delete properties[property];
+      }
+      continue;
+    }
+    if (
+      required !== undefined &&
+      !propertyValuesEqual(required, desired)
+    ) {
+      propertiesValid = false;
+      diagnostics.push({
+        code: "incompatible_constraints",
+        message: "Template-managed custom property " + property +
+          " conflicts with the effective selector requirement",
+        template: resolvedIdentity,
+        path: "repository.customProperties." + property,
+      });
+    }
+    properties[property] = desired;
+  }
   for (const [property, value] of Object.entries(input.properties ?? {})) {
     const required = effective.requiredProperties[property];
     if (required !== undefined && !propertyValuesEqual(required, value)) {
@@ -212,11 +248,30 @@ export async function preflightRepositoryCreation(
       });
       continue;
     }
+    const desired = template.repository.customProperties?.[property];
+    if (
+      desired !== undefined &&
+      (desired === null || !propertyValuesEqual(desired, value))
+    ) {
+      propertiesValid = false;
+      diagnostics.push({
+        code: "property_conflict",
+        message: "Property " + property +
+          " conflicts with the template-managed custom property",
+        template: resolvedIdentity,
+        path: "properties." + property,
+      });
+      continue;
+    }
     properties[property] = value;
   }
 
   const teams = [
-    ...new Set([...effective.requiredTeams, ...(input.teams ?? [])]),
+    ...new Set([
+      ...effective.requiredTeams,
+      ...(template.repository.teams ?? []).map(({ name }) => name),
+      ...(input.teams ?? []),
+    ]),
   ].sort();
   const desiredVisibility = template.repository.settings?.visibility;
   let constructibleVisibilities = [...effective.visibility];
