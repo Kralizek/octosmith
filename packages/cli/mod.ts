@@ -486,6 +486,10 @@ function createCli(
           .description("Preflight repository creation from a template.")
           .arguments("<template:string>")
           .option("--name <name:string>", "Name for the new resource.")
+          .option(
+            "--visibility <visibility:string>",
+            "Visibility: public, private, or internal.",
+          )
           .option("-p, --path <path:string>", "Configuration directory.", {
             default: ".",
           })
@@ -501,6 +505,9 @@ function createCli(
               template,
               ...(commandOptions.name !== undefined && {
                 name: commandOptions.name,
+              }),
+              ...(commandOptions.visibility !== undefined && {
+                visibility: commandOptions.visibility,
               }),
             });
             const rendered = renderOutput(
@@ -872,21 +879,9 @@ function renderValidationResult(
 function renderRepositoryCreationPreflight(
   specification: RepositoryCreationSpecification,
 ): string {
-  const choices = specification.choices;
-  const details = choices === undefined ? [] : [
-    "Allowed names: " +
-    (choices.names.choices?.join(", ") ??
-      (choices.names.includePatterns.flatMap(({ patterns }) => patterns)
-        .join(", ") ||
-        "any name satisfying the constraints")),
-    "Allowed visibility: " + choices.visibility.join(", "),
-    "Required teams: " +
-    (choices.requiredTeams.join(", ") || "none"),
-    "Required custom properties: " +
-    (Object.keys(choices.requiredProperties).length === 0
-      ? "none"
-      : JSON.stringify(choices.requiredProperties)),
-  ];
+  const { choices } = specification;
+  const nameChoice = choices.name;
+  const visibilityChoice = choices.visibility;
   const diagnostics = specification.diagnostics.map((diagnostic) =>
     "Error [" + diagnostic.code + "] " +
     (diagnostic.path === undefined ? "" : diagnostic.path + ": ") +
@@ -897,8 +892,18 @@ function renderRepositoryCreationPreflight(
     "Repository creation preflight: " +
     (specification.ready ? "ready" : "incomplete"),
     "Template: " + specification.template,
-    "Name: " + (specification.repository?.name ?? "not selected"),
-    ...details,
+    "Name: " +
+    (nameChoice.value ??
+      (nameChoice.alternatives.map(({ pattern }) => pattern).join(" OR ") ||
+        "requires --name")),
+    "Visibility: " +
+    (visibilityChoice.value ??
+      (visibilityChoice.alternatives.join(", ") || "unavailable")),
+    "Required teams: " + (choices.teams.join(", ") || "none"),
+    "Required custom properties: " +
+    (Object.keys(choices.customProperties).length === 0
+      ? "none"
+      : JSON.stringify(choices.customProperties)),
     ...diagnostics,
     "No repository was created.",
   ].join("\n");

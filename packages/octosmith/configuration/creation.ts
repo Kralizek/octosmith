@@ -8,20 +8,33 @@ import {
 import {
   type ConfigurationValidationIssue,
   type ConfigurationValidationIssueCode,
-  type EffectiveRepositorySelectorChoices,
   type EffectiveRepositorySelectorConstraints,
   effectiveRepositorySelectorIntersection,
   matchesEffectiveRepositorySelectorIntersection,
   validateLoadedConfigurationDetailed,
 } from "./validate.ts";
 
+const REPOSITORY_VISIBILITIES = ["public", "private", "internal"] as const;
+const RANDOM_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
+const DEFAULT_NAME_ATTEMPTS = 64;
+const MAX_NAME_STRATEGIES = 256;
+
 /** Explicit metadata supplied when preparing a repository creation. */
 export interface RepositoryCreationInput {
   readonly template: string;
   readonly name?: string;
-  readonly visibility?: RepositoryVisibility;
+  readonly visibility?: string;
   readonly teams?: readonly string[];
   readonly properties?: Readonly<Record<string, PropertyValue>>;
+}
+
+/** Random byte source for secure, deterministic-testable name generation. */
+export type RepositoryCreationRandomSource = (length: number) => Uint8Array;
+
+/** Options for repository creation preflight. */
+export interface RepositoryCreationOptions {
+  readonly randomBytes?: RepositoryCreationRandomSource;
+  readonly maxNameAttempts?: number;
 }
 
 /** A structured issue found while preparing a repository creation. */
@@ -38,12 +51,44 @@ export interface RepositoryCreationDiagnostic {
 export type RepositoryCreationIssueCode =
   | "invalid_name"
   | "name_required"
-  | "name_outside_intersection"
-  | "visibility_required"
-  | "visibility_not_allowed"
+  | "ambiguous_name_strategy"
+  | "name_generation_failed"
+  | "metadata_outside_intersection"
+  | "invalid_visibility"
+  | "visibility_ambiguous"
+  | "incompatible_constraints"
   | "property_conflict"
   | "template_mismatch"
   | "template_overlap";
+
+/** Structured name choice available to an assisted creation flow. */
+export interface RepositoryCreationNameChoice {
+  readonly status:
+    | "explicit"
+    | "generated"
+    | "invalid"
+    | "required"
+    | "ambiguous"
+    | "generation_failed"
+    | "unresolved";
+  readonly alternatives: readonly { readonly pattern: string }[];
+  readonly value?: string;
+}
+
+/** Structured visibility choice available to an assisted creation flow. */
+export interface RepositoryCreationVisibilityChoice {
+  readonly status: "explicit" | "resolved" | "ambiguous" | "invalid";
+  readonly alternatives: readonly RepositoryVisibility[];
+  readonly value?: RepositoryVisibility;
+}
+
+/** All effective choices relevant to constructing a repository. */
+export interface RepositoryCreationChoices {
+  readonly name: RepositoryCreationNameChoice;
+  readonly visibility: RepositoryCreationVisibilityChoice;
+  readonly teams: readonly string[];
+  readonly customProperties: Readonly<Record<string, PropertyValue>>;
+}
 
 /** Semantic validation details without synthetic witnesses. */
 export type RepositoryCreationValidation = Pick<
@@ -55,8 +100,9 @@ export type RepositoryCreationValidation = Pick<
 export interface RepositoryCreationSpecification {
   readonly template: string;
   readonly ready: boolean;
+  readonly inputs: RepositoryCreationInput;
   readonly constraints?: EffectiveRepositorySelectorConstraints;
-  readonly choices?: EffectiveRepositorySelectorChoices;
+  readonly choices: RepositoryCreationChoices;
   readonly repository?: RepositoryMetadata;
   readonly diagnostics: readonly RepositoryCreationDiagnostic[];
   readonly validation: RepositoryCreationValidation;
@@ -66,6 +112,7 @@ export interface RepositoryCreationSpecification {
 export async function preflightRepositoryCreation(
   loaded: LoadedConfiguration,
   input: RepositoryCreationInput,
+  options: RepositoryCreationOptions = {},
 ): Promise<RepositoryCreationSpecification> {
   const identity = input.template.startsWith("repository:")
     ? input.template
@@ -82,12 +129,24 @@ export async function preflightRepositoryCreation(
     (issue) => ({
       code: issue.code,
       message: issue.message,
-      template: identity,
+      template: issue.template ?? identity,
       ...(issue.templates !== undefined && { templates: issue.templates }),
       ...(issue.path !== undefined && { path: issue.path }),
       validationIssue: issue,
     }),
   );
+  const emptyChoices: RepositoryCreationChoices = {
+    name: {
+      status: "unresolved",
+      alternatives: [],
+    },
+    visibility: {
+      status: "invalid",
+      alternatives: [],
+    },
+    teams: [],
+    customProperties: {},
+  };
 
   let resolvedIdentity: string;
   try {
@@ -103,6 +162,8 @@ export async function preflightRepositoryCreation(
     return {
       template: identity,
       ready: false,
+      inputs: sanitizeCreationInput(input),
+      choices: emptyChoices,
       diagnostics,
       validation: semanticValidation,
     };
@@ -118,37 +179,28 @@ export async function preflightRepositoryCreation(
     return {
       template: resolvedIdentity,
       ready: false,
+      inputs: sanitizeCreationInput(input),
       constraints: intersection.constraints,
+      choices: emptyChoices,
       diagnostics,
       validation: semanticValidation,
     };
   }
 
-  const choices = intersection.effective;
-  let name = input.name;
-  if (name === undefined) {
-    diagnostics.push({
-      code: "name_required",
-      message: "A repository name must be provided explicitly",
-      template: resolvedIdentity,
-    });
-  } else {
-    const nameError = validateRepositoryName(name);
-    if (nameError !== undefined) {
-      diagnostics.push({
-        code: "invalid_name",
-        message: nameError,
-        template: resolvedIdentity,
-        path: "name",
-      });
-      name = undefined;
-    }
-  }
-
-  const properties = { ...choices.requiredProperties };
+  const effective = intersection.effective;
+  const nameGroups = intersection.constraints.include.map(({ selector }) =>
+    selector.names
+  ).filter((names): names is readonly string[] => names !== undefined);
+  const hasNameConstraints = nameGroups.length > 0;
+  const nameStrategyAnalysis = effectiveNameStrategies(nameGroups);
+  const nameStrategies = nameStrategyAnalysis.patterns;
+  const nameAlternatives = nameStrategies.map((pattern) => ({ pattern }));
+  const properties: Record<string, PropertyValue> = {
+    ...effective.requiredProperties,
+  };
   let propertiesValid = true;
   for (const [property, value] of Object.entries(input.properties ?? {})) {
-    const required = choices.requiredProperties[property];
+    const required = effective.requiredProperties[property];
     if (required !== undefined && !propertyValuesEqual(required, value)) {
       propertiesValid = false;
       diagnostics.push({
@@ -164,85 +216,280 @@ export async function preflightRepositoryCreation(
   }
 
   const teams = [
-    ...new Set([...choices.requiredTeams, ...(input.teams ?? [])]),
+    ...new Set([...effective.requiredTeams, ...(input.teams ?? [])]),
   ].sort();
-  const visibilityChoices = choices.visibility;
-  const constructibleVisibilities = name === undefined || !propertiesValid
-    ? visibilityChoices
-    : visibilityChoices.filter((candidateVisibility) =>
-      matchesEffectiveRepositorySelectorIntersection(intersection, {
-        name,
-        teams,
-        visibility: candidateVisibility,
-        properties,
-      })
-    );
-  let visibility = input.visibility;
+  const desiredVisibility = template.repository.settings?.visibility;
+  let constructibleVisibilities = [...effective.visibility];
+  if (desiredVisibility !== undefined) {
+    if (!constructibleVisibilities.includes(desiredVisibility)) {
+      diagnostics.push({
+        code: "incompatible_constraints",
+        message: "Template-managed visibility " + desiredVisibility +
+          " conflicts with the effective selector constraints",
+        template: resolvedIdentity,
+        path: "repository.settings.visibility",
+      });
+      constructibleVisibilities = [];
+    } else {
+      constructibleVisibilities = [desiredVisibility];
+    }
+  }
+
+  let visibility: RepositoryCreationVisibilityChoice;
   if (
-    visibility !== undefined &&
-    !constructibleVisibilities.includes(visibility)
+    input.visibility !== undefined &&
+    !isRepositoryVisibility(input.visibility)
   ) {
     diagnostics.push({
-      code: visibilityChoices.includes(visibility)
-        ? "name_outside_intersection"
-        : "visibility_not_allowed",
-      message: visibilityChoices.includes(visibility)
-        ? "Repository metadata does not satisfy all effective include and " +
-          "exclude constraints"
-        : "Visibility " + visibility +
+      code: "invalid_visibility",
+      message: "Visibility must be public, private, or internal",
+      template: resolvedIdentity,
+      path: "visibility",
+    });
+    visibility = {
+      status: "invalid",
+      alternatives: constructibleVisibilities,
+    };
+  } else if (
+    input.visibility !== undefined &&
+    !constructibleVisibilities.includes(input.visibility)
+  ) {
+    const code = desiredVisibility !== undefined &&
+        input.visibility !== desiredVisibility
+      ? "incompatible_constraints"
+      : "invalid_visibility";
+    diagnostics.push({
+      code,
+      message: code === "incompatible_constraints"
+        ? "Explicit visibility conflicts with template-managed visibility " +
+          desiredVisibility
+        : "Visibility " + input.visibility +
           " does not satisfy the effective selector constraints",
       template: resolvedIdentity,
       path: "visibility",
     });
-    visibility = undefined;
-  } else if (
-    visibility === undefined && constructibleVisibilities.length === 1
-  ) {
-    visibility = constructibleVisibilities[0];
-  } else if (
-    visibility === undefined && constructibleVisibilities.length > 1
-  ) {
+    visibility = {
+      status: "invalid",
+      alternatives: constructibleVisibilities,
+    };
+  } else if (input.visibility !== undefined) {
+    visibility = {
+      status: "explicit",
+      alternatives: constructibleVisibilities,
+      value: input.visibility,
+    };
+  } else if (constructibleVisibilities.length === 1) {
+    visibility = {
+      status: "resolved",
+      alternatives: constructibleVisibilities,
+      value: constructibleVisibilities[0],
+    };
+  } else if (constructibleVisibilities.length > 1) {
     diagnostics.push({
-      code: "visibility_required",
-      message: "Choose a visibility from the allowed values: " +
-        constructibleVisibilities.join(", "),
+      code: "visibility_ambiguous",
+      message: "Choose a visibility with --visibility <" +
+        constructibleVisibilities.join("|") +
+        "> or use future assisted creation",
       template: resolvedIdentity,
       path: "visibility",
     });
+    visibility = {
+      status: "ambiguous",
+      alternatives: constructibleVisibilities,
+    };
+  } else {
+    if (
+      !diagnostics.some((issue) => issue.code === "incompatible_constraints")
+    ) {
+      diagnostics.push({
+        code: "incompatible_constraints",
+        message: "No visibility satisfies the effective selector constraints",
+        template: resolvedIdentity,
+        path: "visibility",
+      });
+    }
+    visibility = { status: "invalid", alternatives: [] };
+  }
+
+  let nameChoice: RepositoryCreationNameChoice;
+  if (input.name !== undefined) {
+    const nameError = validateRepositoryName(input.name);
+    if (nameError !== undefined) {
+      diagnostics.push({
+        code: "invalid_name",
+        message: nameError,
+        template: resolvedIdentity,
+        path: "name",
+      });
+      nameChoice = { status: "invalid", alternatives: nameAlternatives };
+    } else {
+      nameChoice = {
+        status: "explicit",
+        alternatives: nameAlternatives,
+        value: input.name,
+      };
+    }
   } else if (
-    visibility === undefined && name !== undefined && propertiesValid
+    nameStrategies.length === 0 &&
+    !hasNameConstraints
   ) {
     diagnostics.push({
-      code: "name_outside_intersection",
-      message: "Repository metadata does not satisfy all effective include " +
-        "and exclude constraints",
+      code: "name_required",
+      message: "A repository name is required because the effective selector " +
+        "does not define a naming pattern",
       template: resolvedIdentity,
+      path: "name",
     });
+    nameChoice = { status: "required", alternatives: [] };
+  } else if (
+    nameStrategies.length !== 1 || !nameStrategyAnalysis.complete
+  ) {
+    const patterns = new Set([
+      ...nameStrategies,
+      ...(!nameStrategyAnalysis.complete || nameStrategies.length === 0
+        ? nameGroups.flat()
+        : []),
+    ]);
+    const alternatives = [...patterns].sort().map((pattern) => ({ pattern }));
+    diagnostics.push({
+      code: "ambiguous_name_strategy",
+      message:
+        "Choose a name pattern with --name or use future assisted creation",
+      template: resolvedIdentity,
+      path: "name",
+    });
+    nameChoice = { status: "ambiguous", alternatives };
+  } else {
+    nameChoice = { status: "unresolved", alternatives: nameAlternatives };
   }
 
   let repository: RepositoryMetadata | undefined;
-  if (name !== undefined && propertiesValid && visibility !== undefined) {
+  const hasPriorAmbiguity = diagnostics.length > 0;
+  if (
+    input.name !== undefined &&
+    nameChoice.status === "explicit" &&
+    visibility.value !== undefined
+  ) {
+    repository = validateCandidate(input.name);
+  } else if (
+    input.name === undefined &&
+    nameStrategies.length === 1 &&
+    !hasPriorAmbiguity
+  ) {
+    const maxAttempts = options.maxNameAttempts ?? DEFAULT_NAME_ATTEMPTS;
+    if (!Number.isInteger(maxAttempts) || maxAttempts < 1) {
+      throw new Error("maxNameAttempts must be a positive integer");
+    }
+    try {
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        const candidateName = generatePatternName(
+          nameStrategies[0],
+          options.randomBytes ?? secureRandomBytes,
+        );
+        if (validateRepositoryName(candidateName) !== undefined) continue;
+        repository = validateCandidate(candidateName, false);
+        if (repository !== undefined) {
+          nameChoice = {
+            status: "generated",
+            alternatives: nameAlternatives,
+            value: candidateName,
+          };
+          break;
+        }
+      }
+    } catch {
+      repository = undefined;
+    }
+    if (repository === undefined) {
+      diagnostics.push({
+        code: "name_generation_failed",
+        message: "Could not generate a valid name from pattern " +
+          nameStrategies[0] + " after " + maxAttempts +
+          " attempts; provide --name or adjust the selector constraints",
+        template: resolvedIdentity,
+        path: "name",
+      });
+      nameChoice = {
+        status: "generation_failed",
+        alternatives: nameAlternatives,
+      };
+    }
+  }
+
+  const choices: RepositoryCreationChoices = {
+    name: nameChoice,
+    visibility,
+    teams,
+    customProperties: properties,
+  };
+
+  return {
+    template: resolvedIdentity,
+    ready: repository !== undefined && diagnostics.length === 0,
+    inputs: sanitizeCreationInput(input),
+    constraints: intersection.constraints,
+    choices,
+    ...(repository !== undefined && { repository }),
+    diagnostics,
+    validation: semanticValidation,
+  };
+
+  function validateCandidate(
+    name: string,
+    reportFailure = true,
+  ): RepositoryMetadata | undefined {
+    const candidateVisibility = visibility.value;
+    if (candidateVisibility === undefined || !propertiesValid) return undefined;
     const candidate: RepositoryMetadata = {
       name,
       teams,
-      visibility,
+      visibility: candidateVisibility,
       properties,
     };
     if (
-      matchesEffectiveRepositorySelectorIntersection(intersection, candidate)
+      !matchesEffectiveRepositorySelectorIntersection(intersection, candidate)
     ) {
-      const classification = classifyResource(loaded, candidate);
-      if (classification.status === "invalid") {
+      if (
+        reportFailure &&
+        !diagnostics.some((issue) =>
+          issue.code === "metadata_outside_intersection"
+        )
+      ) {
+        diagnostics.push({
+          code: "metadata_outside_intersection",
+          message: "Repository metadata does not satisfy all effective " +
+            "include and exclude constraints",
+          template: resolvedIdentity,
+          path: "metadata",
+        });
+      }
+      return undefined;
+    }
+
+    const classification = classifyResource(loaded, candidate);
+    if (classification.status === "invalid") {
+      if (
+        reportFailure &&
+        !diagnostics.some((issue) => issue.code === "template_overlap")
+      ) {
         diagnostics.push({
           code: "template_overlap",
           message: "Repository metadata matches multiple templates: " +
             classification.templates.join(", "),
           template: resolvedIdentity,
           templates: classification.templates,
+          path: "name",
         });
-      } else if (
-        classification.status !== "matched" ||
-        classification.template !== resolvedIdentity
+      }
+      return undefined;
+    }
+    if (
+      classification.status !== "matched" ||
+      classification.template !== resolvedIdentity
+    ) {
+      if (
+        reportFailure &&
+        !diagnostics.some((issue) => issue.code === "template_mismatch")
       ) {
         diagnostics.push({
           code: "template_mismatch",
@@ -252,22 +499,169 @@ export async function preflightRepositoryCreation(
           ...(classification.status === "matched" && {
             templates: [classification.template],
           }),
+          path: "name",
         });
-      } else {
-        repository = candidate;
+      }
+      return undefined;
+    }
+    return candidate;
+  }
+}
+
+function sanitizeCreationInput(
+  input: RepositoryCreationInput,
+): RepositoryCreationInput {
+  return {
+    template: input.template,
+    ...(input.name !== undefined && { name: input.name }),
+    ...(input.visibility !== undefined && { visibility: input.visibility }),
+    ...(input.teams !== undefined && { teams: input.teams }),
+    ...(input.properties !== undefined && { properties: input.properties }),
+  };
+}
+
+function effectiveNameStrategies(
+  groups: readonly (readonly string[])[],
+): { readonly patterns: readonly string[]; readonly complete: boolean } {
+  if (groups.length === 0) return { patterns: [], complete: true };
+  const results = new Set<string>();
+  let combinations = 0;
+  let complete = true;
+  const selected: string[] = [];
+
+  const visit = (index: number): void => {
+    if (results.size >= MAX_NAME_STRATEGIES) {
+      complete = false;
+      return;
+    }
+    if (index === groups.length) {
+      combinations++;
+      if (combinations > MAX_NAME_STRATEGIES) {
+        complete = false;
+        return;
+      }
+      for (const candidate of selected) {
+        if (
+          selected.every((pattern) => globLanguageSubset(candidate, pattern))
+        ) {
+          results.add(candidate);
+        }
+      }
+      return;
+    }
+    for (const pattern of groups[index]) {
+      selected.push(pattern);
+      visit(index + 1);
+      selected.pop();
+      if (combinations > MAX_NAME_STRATEGIES) {
+        complete = false;
+        return;
       }
     }
-  }
-
-  return {
-    template: resolvedIdentity,
-    ready: repository !== undefined && diagnostics.length === 0,
-    constraints: intersection.constraints,
-    choices,
-    ...(repository !== undefined && { repository }),
-    diagnostics,
-    validation: semanticValidation,
   };
+
+  visit(0);
+  return { patterns: [...results].sort(), complete };
+}
+
+function globLanguageSubset(left: string, right: string): boolean {
+  const alphabet = new Set<string>();
+  for (const character of left + right) {
+    if (character !== "*" && character !== "?") alphabet.add(character);
+  }
+  let sentinel = "\u0000";
+  while (alphabet.has(sentinel)) sentinel += "\u0000";
+  alphabet.add(sentinel);
+
+  const startLeft = globClosure(left, [0]);
+  const startRight = globClosure(right, [0]);
+  const queue: Array<{ left: readonly number[]; right: readonly number[] }> = [
+    { left: startLeft, right: startRight },
+  ];
+  const visited = new Set<string>();
+
+  for (let index = 0; index < queue.length; index++) {
+    const state = queue[index];
+    const key = state.left.join(",") + "|" + state.right.join(",");
+    if (visited.has(key)) continue;
+    visited.add(key);
+    if (
+      state.left.includes(left.length) &&
+      !state.right.includes(right.length)
+    ) return false;
+
+    for (const character of alphabet) {
+      queue.push({
+        left: globStep(left, state.left, character),
+        right: globStep(right, state.right, character),
+      });
+    }
+  }
+  return true;
+}
+
+function globClosure(pattern: string, positions: readonly number[]): number[] {
+  const result = new Set(positions);
+  const queue = [...positions];
+  while (queue.length > 0) {
+    const position = queue.pop()!;
+    if (pattern[position] === "*" && !result.has(position + 1)) {
+      result.add(position + 1);
+      queue.push(position + 1);
+    }
+  }
+  return [...result].sort((left, right) => left - right);
+}
+
+function globStep(
+  pattern: string,
+  positions: readonly number[],
+  character: string,
+): number[] {
+  const next = new Set<number>();
+  for (const position of positions) {
+    const token = pattern[position];
+    if (token === "*") next.add(position);
+    else if (token === "?" || token === character) next.add(position + 1);
+  }
+  return globClosure(pattern, [...next]);
+}
+
+function generatePatternName(
+  pattern: string,
+  randomBytes: RepositoryCreationRandomSource,
+): string {
+  return pattern.replace(
+    /[*?]/g,
+    (token) =>
+      token === "*"
+        ? randomCharacters(6, randomBytes)
+        : randomCharacters(1, randomBytes),
+  );
+}
+
+function randomCharacters(
+  length: number,
+  randomBytes: RepositoryCreationRandomSource,
+): string {
+  let value = "";
+  while (value.length < length) {
+    const requested = length - value.length;
+    const bytes = randomBytes(requested);
+    if (!(bytes instanceof Uint8Array) || bytes.length < requested) {
+      throw new Error("Random byte source returned too few bytes");
+    }
+    for (const byte of bytes) {
+      if (byte >= 252) continue;
+      value += RANDOM_ALPHABET[byte % RANDOM_ALPHABET.length];
+      if (value.length === length) break;
+    }
+  }
+  return value;
+}
+
+function secureRandomBytes(length: number): Uint8Array {
+  return globalThis.crypto.getRandomValues(new Uint8Array(length));
 }
 
 function validateRepositoryName(name: string): string | undefined {
@@ -286,6 +680,10 @@ function validateRepositoryName(name: string): string | undefined {
       "characters";
   }
   return undefined;
+}
+
+function isRepositoryVisibility(value: string): value is RepositoryVisibility {
+  return REPOSITORY_VISIBILITIES.includes(value as RepositoryVisibility);
 }
 
 function propertyValuesEqual(

@@ -182,17 +182,22 @@ discovered resources are still reported.
 ### resource create
 
 ```sh
-octosmith resource create services --name api-service --path ./configuration
+octosmith resource create services --path ./configuration
+octosmith resource create services --name api-service --visibility private --path ./configuration
 octosmith resource create services --format json --path ./configuration
 ```
 
 Creation currently performs an offline preflight only; it does not create a
 GitHub repository. The reusable library specification resolves the template,
 validates it with the same semantic checks as `template validate`, and reports
-the effective name, visibility, team, and custom-property constraints. Supply
-`--name` to validate an explicit repository name. Unresolved choices and
-configuration errors are returned as diagnostics, including in JSON output, and
-the command exits unsuccessfully until the specification is ready.
+the effective name, visibility, team, and custom-property constraints. If
+scope/template intersection yields one constructible naming pattern, an omitted
+name is generated from it; patterns with no `*` or `?` use their literal name.
+Use `--name` to override generation, or to select among multiple patterns.
+Visibility is inferred when uniquely constrained; use `--visibility` when
+multiple valid values remain. Ambiguities and configuration errors are returned
+as structured diagnostics (including in JSON output) and exit unsuccessfully. No
+prompt, credential lookup, GitHub access, or remote mutation occurs.
 
 ### plan
 
