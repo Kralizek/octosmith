@@ -2,16 +2,16 @@ import type { PropertyValue, RepositoryVisibility } from "../types.ts";
 import type { LoadedConfiguration } from "./load.ts";
 import {
   classifyResource,
-  resolveTemplateIdentity,
   type RepositoryMetadata,
+  resolveTemplateIdentity,
 } from "./resolve.ts";
 import {
-  effectiveRepositorySelectorIntersection,
-  matchesEffectiveRepositorySelectorIntersection,
   type ConfigurationValidationIssue,
   type ConfigurationValidationIssueCode,
   type EffectiveRepositorySelectorChoices,
   type EffectiveRepositorySelectorConstraints,
+  effectiveRepositorySelectorIntersection,
+  matchesEffectiveRepositorySelectorIntersection,
   validateLoadedConfigurationDetailed,
 } from "./validate.ts";
 

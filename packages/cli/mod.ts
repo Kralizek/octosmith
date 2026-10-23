@@ -21,10 +21,10 @@ import {
   parsePersistedPlanArtifact,
   preflightRepositoryCreation,
   renderReport,
-  type RepositoryCreationSpecification,
   renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
   type Report,
+  type RepositoryCreationSpecification,
   type RepositoryReport,
   requiredPermissionsForConfiguration,
   type ResourceInspection,
@@ -873,22 +873,20 @@ function renderRepositoryCreationPreflight(
   specification: RepositoryCreationSpecification,
 ): string {
   const choices = specification.choices;
-  const details = choices === undefined
-    ? []
-    : [
-      "Allowed names: " +
-      (choices.names.choices?.join(", ") ??
-        (choices.names.includePatterns.flatMap(({ patterns }) => patterns)
-            .join(", ") ||
-          "any name satisfying the constraints")),
-      "Allowed visibility: " + choices.visibility.join(", "),
-      "Required teams: " +
-      (choices.requiredTeams.join(", ") || "none"),
-      "Required custom properties: " +
-      (Object.keys(choices.requiredProperties).length === 0
-        ? "none"
-        : JSON.stringify(choices.requiredProperties)),
-    ];
+  const details = choices === undefined ? [] : [
+    "Allowed names: " +
+    (choices.names.choices?.join(", ") ??
+      (choices.names.includePatterns.flatMap(({ patterns }) => patterns)
+        .join(", ") ||
+        "any name satisfying the constraints")),
+    "Allowed visibility: " + choices.visibility.join(", "),
+    "Required teams: " +
+    (choices.requiredTeams.join(", ") || "none"),
+    "Required custom properties: " +
+    (Object.keys(choices.requiredProperties).length === 0
+      ? "none"
+      : JSON.stringify(choices.requiredProperties)),
+  ];
   const diagnostics = specification.diagnostics.map((diagnostic) =>
     "Error [" + diagnostic.code + "] " +
     (diagnostic.path === undefined ? "" : diagnostic.path + ": ") +

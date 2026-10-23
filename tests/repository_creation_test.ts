@@ -2,11 +2,11 @@ import { assertEquals } from "@std/assert";
 import { join } from "@std/path";
 import {
   loadConfigurationDirectory,
-  preflightRepositoryCreation,
   type LoadedConfiguration,
+  preflightRepositoryCreation,
+  type RepositorySelector,
   type RepositoryTemplate,
   type Scope,
-  type RepositorySelector,
 } from "../packages/octosmith/mod.ts";
 import { main } from "../packages/cli/mod.ts";
 

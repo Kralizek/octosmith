@@ -52,15 +52,15 @@ and preserved. See the
 [configuration guide](../../docs/configuration.md#default-branch-and-automatic-initialization)
 for protection, concurrency, and retry limitations.
 
-| Command                           | GitHub access | Mutates GitHub | Purpose                                                              |
-| --------------------------------- | ------------- | -------------- | -------------------------------------------------------------------- |
-| `template print <template>`       | No            | No             | Print a synthesized repository template                              |
-| `template validate`               | No            | No             | Validate configuration and static planner invariants                 |
-| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates      |
-| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                     |
-| `resource create <template>`      | No            | No             | Preflight a repository creation specification                        |
-| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                      |
-| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                     |
+| Command                           | GitHub access | Mutates GitHub | Purpose                                                         |
+| --------------------------------- | ------------- | -------------- | --------------------------------------------------------------- |
+| `template print <template>`       | No            | No             | Print a synthesized repository template                         |
+| `template validate`               | No            | No             | Validate configuration and static planner invariants            |
+| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates |
+| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                |
+| `resource create <template>`      | No            | No             | Preflight a repository creation specification                   |
+| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                 |
+| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                |
 
 ### template print
 
