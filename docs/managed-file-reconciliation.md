@@ -2,29 +2,24 @@
 
 ## Confirmed cause
 
-The failure in
-[run 39959044280](https://github.com/tobii-dynavox/cst-shared-infrastructure/actions/runs/39959044280)
-was a protected-target ruleset rejection, not evidence of concurrent writers or
-unsupported reference creation.
+The investigated failure was a protected-target ruleset rejection, not evidence
+of concurrent writers or unsupported reference creation. Identifying operational
+details are omitted from this public report.
 
 Read-only GitHub rule-suite records identify the rejected operation:
 
-- Repository: `tobii-dynavox/cstk-durable-operations`.
-- Rule suite `4685742920`, at `2026-10-23T13:10:59Z`, matching the failed run.
-- Actor: `repository-orchestration[bot]`.
-- Ref: `refs/heads/master`.
-- Both before and after SHA: `b62720e49ad272396f055333942412ef6e3705ec`.
-- Result: `fail`; active ruleset `protect-default-branch` (`25552808`).
+- The automation App attempted a same-SHA update to the protected target.
+- The failed evaluation timestamp matched the failed reconciliation run.
+- The active target-branch ruleset rejected the operation.
 - Failed rule: `pull_request`, with the detail "Changes must be made through a
   pull request."
-- The earlier attempt, suite `4685501657` at `2026-10-23T12:57:48Z`, failed the
-  same rule. Non-fast-forward and deletion rules passed in both suites.
+- An earlier attempt failed the same rule. Non-fast-forward and deletion rules
+  passed in both evaluations.
 
 These records can be inspected without modifying the repository:
 
 ```sh
-gh api repos/tobii-dynavox/cstk-durable-operations/rulesets/rule-suites/4685742920
-gh api repos/tobii-dynavox/cstk-durable-operations/rulesets/rule-suites/4685501657
+gh api "repos/$OWNER/$REPOSITORY/rulesets/rule-suites/$RULE_SUITE_ID"
 ```
 
 The old transaction submitted an update to the target with identical before and
@@ -33,12 +28,11 @@ protected-branch update. Because the mutation is atomic, the rejected target
 entry also prevented creation of both reserved references. Repeating the same
 plan could not resolve this policy rejection.
 
-The workflow's non-secret App client ID matches the installed
-`repository-orchestration` App, which has Contents, Pull Requests, and Workflows
-write permissions. The ruleset bypass list includes repository administrators,
-not that App. No permission expansion or protection bypass is needed for this
-fix. Successful secret updates alone would not have established file
-permissions.
+The workflow's App client ID matches the installed automation App, which has
+Contents, Pull Requests, and Workflows write permissions. The ruleset bypass
+list includes repository administrators, not that App. No permission expansion
+or protection bypass is needed for this fix. Successful secret updates alone
+would not have established file permissions.
 
 ## GitHub API behavior
 
@@ -56,9 +50,9 @@ Octosmith's `X-GitHub-Api-Version: 2026-03-10` header. Repeating creation with
 the refs occupied returned an opaque GraphQL error containing a GitHub support
 correlation ID, not a reliable structured concurrency code.
 
-The previous PR, number 1, was merged on October 21 and its reserved branch is
-absent. This is an ordinary bootstrap case, not a reason to adopt or manually
-recreate a branch. It does not explain the protected-target rejection.
+The previous managed-file PR was merged and its reserved branch is absent. This
+is an ordinary bootstrap case, not a reason to adopt or manually recreate a
+branch. It does not explain the protected-target rejection.
 
 ## Implementation and safety
 
@@ -110,11 +104,11 @@ bodies, request payloads, credentials, or headers.
 - No production repository writes, configuration changes, or PR actions were
   performed. The protected-target cause was established from production rule
   history, not by experimenting with production protections or App credentials.
-- The disposable repo was `Kralizek/octosmith-ref-probe-20261023-1586031e`. All
-  experimental refs were conditionally deleted; only its initial `master`
-  remains. Repository deletion returned HTTP 403 with the available credential,
-  so the empty-of-experiments private repository needs owner cleanup through
-  GitHub Settings. No PRs were created there.
+- All experimental refs in the disposable private repository were conditionally
+  deleted; only its initial default branch remains. Repository deletion returned
+  HTTP 403 with the available credential, so the empty-of-experiments private
+  repository needs owner cleanup through GitHub Settings. No PRs were created
+  there.
 
 ## Safe retry
 
@@ -127,18 +121,18 @@ minting mechanism. Do not print the token. Keep the control repository unchanged
 and substitute its existing checkout path below:
 
 ```sh
-CONTROL_REPO=/path/to/cst-shared-infrastructure
-PLAN=/tmp/cstk-durable-operations.octosmith-plan.json
-deno run -A /workspaces/Octosmith/packages/cli/mod.ts plan cstk-durable-operations \
+CONTROL_REPO=/path/to/control-repository
+REPOSITORY=example-repository
+PLAN=/tmp/managed-files.octosmith-plan.json
+deno run -A /workspaces/Octosmith/packages/cli/mod.ts plan "$REPOSITORY" \
   --path "$CONTROL_REPO/github" --include-secrets=false --out "$PLAN"
 ```
 
-Review the fresh plan before applying it. It must target only
-`cstk-durable-operations` and contain only the expected managed-file change to
-`.github/workflows/copilot-setup-steps.yml`. Stop if repository configuration or
-other unexpected operations appear. Confirm that no other reconciliation is
-running and that `octosmith/reconcile-lock` is absent. Do not manually remove a
-lock if one appears; establish its owner first.
+Review the fresh plan before applying it. It must target only the intended
+repository and contain only the expected managed-file change. Stop if repository
+configuration or other unexpected operations appear. Confirm that no other
+reconciliation is running and that `octosmith/reconcile-lock` is absent. Do not
+manually remove a lock if one appears; establish its owner first.
 
 After explicit authorization for the reviewed file-only apply:
 
@@ -150,7 +144,7 @@ deno run -A /workspaces/Octosmith/packages/cli/mod.ts apply \
 Saved plans use their recorded secret policy, so excluding secrets must happen
 when creating the plan, not merely on the saved-plan apply command. A stale
 target requires a fresh plan, not a force retry. After success, verify one open
-Octosmith PR targeting `master`, the intended file diff, an unchanged target
-SHA, and no lock ref. Leave the PR open for review; do not merge or close it as
-part of this retry. These retry commands were not executed during the
+Octosmith PR targeting the planned branch, the intended file diff, an unchanged
+target SHA, and no lock ref. Leave the PR open for review; do not merge or close
+it as part of this retry. These retry commands were not executed during the
 investigation.
