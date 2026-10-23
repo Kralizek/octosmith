@@ -167,7 +167,7 @@ commands:
 
   octosmith resource create:
     kind: action
-    summary: Create a resource from a template.
+    summary: Preflight repository creation from a template without GitHub mutations.
     args:
       - name: template
         type: string

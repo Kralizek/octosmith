@@ -368,28 +368,35 @@ Deno.test("version is available from grouped commands without a short alias", as
   }
 });
 
-for (
-  const [name, args, message] of [
-    [
-      "resource create",
-      ["resource", "create", "teams/backend", "--name", "api-service"],
-      "resource create is not implemented yet",
-    ],
-  ] as const
-) {
-  Deno.test(`canonical CLI form parses: ${name}`, async () => {
+Deno.test("resource create emits structured diagnostics for unresolved choices", async () => {
+  const root = await authenticationConfiguration();
+  try {
+    const output: string[] = [];
     const errors: string[] = [];
-    const originalError = console.error;
-
-    try {
-      console.error = (...values: unknown[]) => {
-        errors.push(values.map(String).join(" "));
-      };
-
-      assertEquals(await main([...args]), 1);
-      assertStringIncludes(errors.join("\n"), message);
-    } finally {
-      console.error = originalError;
-    }
-  });
-}
+    assertEquals(
+      await main(
+        ["resource", "create", "sample", "--path", root, "--format", "json"],
+        {
+          credentials: {
+            getEnv: () => {
+              throw new Error("preflight must not read credentials");
+            },
+            runGhAuthToken: () => {
+              throw new Error("preflight must not invoke gh");
+            },
+          },
+          write: (value) => output.push(value),
+          writeError: (value) => errors.push(value),
+        },
+      ),
+      1,
+    );
+    assertEquals(
+      JSON.parse(output.join("\n")).diagnostics[0].code,
+      "name_required",
+    );
+    assertEquals(errors, []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});

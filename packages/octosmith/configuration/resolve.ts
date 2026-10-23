@@ -64,6 +64,24 @@ export function classifyResource(
   return { status: "invalid", templates };
 }
 
+/** Resolve a short or canonical template name to its canonical identity. */
+export function resolveTemplateIdentity(
+  loaded: LoadedConfiguration,
+  template: string,
+): string {
+  if (template.length === 0) {
+    throw new Error("Template filter must not be empty");
+  }
+
+  const identity = template.startsWith("repository:")
+    ? template
+    : "repository:" + template;
+  if (loaded.templates[identity] === undefined) {
+    throw new Error("Unknown template: " + template);
+  }
+  return identity;
+}
+
 const MAX_CONFIGURATION_SOURCE_SIZE = 10 * 1024 * 1024;
 const MAX_CONFIGURATION_SOURCE_TOTAL_SIZE = 50 * 1024 * 1024;
 

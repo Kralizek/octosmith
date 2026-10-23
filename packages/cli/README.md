@@ -58,7 +58,7 @@ for protection, concurrency, and retry limitations.
 | `template validate`               | No            | No             | Validate configuration and static planner invariants                 |
 | `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates      |
 | `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                     |
-| `resource create <template>`      | No            | No             | Reserved command; currently reports that creation is not implemented |
+| `resource create <template>`      | No            | No             | Preflight a repository creation specification                        |
 | `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                      |
 | `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                     |
 
@@ -178,6 +178,21 @@ allows success while retaining `template: null` and `status: "unmatched"`.
 Multiple template matches remain an error, not an inspection status. Discovery
 failures also fail the command and are diagnosed on stderr; successfully
 discovered resources are still reported.
+
+### resource create
+
+```sh
+octosmith resource create services --name api-service --path ./configuration
+octosmith resource create services --format json --path ./configuration
+```
+
+Creation currently performs an offline preflight only; it does not create a
+GitHub repository. The reusable library specification resolves the template,
+validates it with the same semantic checks as `template validate`, and reports
+the effective name, visibility, team, and custom-property constraints. Supply
+`--name` to validate an explicit repository name. Unresolved choices and
+configuration errors are returned as diagnostics, including in JSON output, and
+the command exits unsuccessfully until the specification is ready.
 
 ### plan
 
