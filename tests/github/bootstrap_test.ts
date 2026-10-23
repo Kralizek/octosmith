@@ -1,11 +1,12 @@
-import {
-  assert,
-  assertEquals,
-  assertRejects,
-  assertStringIncludes,
-} from "@std/assert";
+import { assert, assertEquals, assertRejects, assertThrows } from "@std/assert";
 import {
   applyPlan,
+  assertBootstrapFileOwned,
+  BOOTSTRAP_FILE_CONTENT,
+  BOOTSTRAP_FILE_END_MARKER,
+  BOOTSTRAP_FILE_MARKER,
+  BOOTSTRAP_FILE_PATH,
+  buildApplyEvaluations,
   buildPlan,
   type DesiredFile,
   type DesiredState,
@@ -14,31 +15,700 @@ import {
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
   GitHubRequestError,
-  initializeGitRepository,
+  type GitHubRequestOptions,
   projectOwnedCurrentState,
   readCurrentState,
+  resolveDesiredState,
 } from "@octosmith/octosmith";
-import { currentRepositorySettings, currentState } from "../plan/fixtures.ts";
 import { createGitHubRuntime, main } from "../../packages/cli/mod.ts";
+import { currentRepositorySettings, currentState } from "../plan/fixtures.ts";
 
-Deno.test("GitHub bootstrap rejects concurrent initialization before invoking Git", async () => {
-  const client = new BootstrapClient();
-  client.initialized = true;
-  await assertRejects(
-    () =>
-      new GitHubRepositoryBootstrap(client, "acme", "test").initialize(
-        "sample",
-        "main",
-        [],
-      ),
-    Error,
-    "acquired Git history",
+type Tree = Record<string, string>;
+interface Commit {
+  sha: string;
+  tree: { sha: string };
+  parents: { sha: string }[];
+}
+
+class BootstrapClient implements GitHubClient {
+  defaultBranch = "master";
+  readonly refs = new Map<string, string>();
+  readonly trees = new Map<string, Tree>();
+  readonly commits = new Map<string, Commit>();
+  readonly blobs = new Map<string, string>();
+  readonly requests: {
+    method: string;
+    path: string;
+    body: Record<string, unknown>;
+  }[] = [];
+  failDefault = false;
+  loseContentsResponse = false;
+  loseRefResponse = false;
+  rejectContents = false;
+  ignoreDefault = false;
+  beforeContents?: () => void;
+  next = 1;
+
+  root(branch: string, files: Tree): string {
+    const commit = this.commit(files, []);
+    this.refs.set(branch, commit.sha);
+    return commit.sha;
+  }
+  commit(files: Tree, parents: { sha: string }[]): Commit {
+    const sha = "commit-" + this.next++;
+    const tree = "tree-" + this.next++;
+    this.trees.set(tree, { ...files });
+    const commit = { sha, tree: { sha: tree }, parents };
+    this.commits.set(sha, commit);
+    return commit;
+  }
+  files(ref = this.defaultBranch): Tree {
+    const sha = this.refs.get(ref) ?? ref;
+    return this.trees.get(this.commits.get(sha)!.tree.sha)!;
+  }
+  get<T>(path: string, query?: GitHubRequestOptions["query"]): Promise<T> {
+    return this.request("GET", path, { query });
+  }
+  request<T>(
+    method: string,
+    path: string,
+    options: GitHubRequestOptions = {},
+  ): Promise<T> {
+    const body = (options.body ?? {}) as Record<string, unknown>;
+    this.requests.push({ method, path, body });
+    const result = this.respond(method, path, options, body);
+    return Promise.resolve(structuredClone(result) as T);
+  }
+  respond(
+    method: string,
+    path: string,
+    options: GitHubRequestOptions,
+    body: Record<string, unknown>,
+  ): unknown {
+    const repo = "/repos/acme/sample";
+    if (method === "GET") {
+      if (path === repo) {
+        return {
+          name: "sample",
+          default_branch: this.defaultBranch,
+          visibility: "private",
+        };
+      }
+      if (path === repo + "/branches") {
+        return [...this.refs].map(([name, sha]) => ({ name, commit: { sha } }));
+      }
+      if (path.includes("/git/ref/heads/")) {
+        const branch = path.split("/git/ref/heads/")[1].split("/").map(
+          decodeURIComponent,
+        ).join("/");
+        if (this.refs.size === 0) {
+          throw new GitHubRequestError(
+            409,
+            "Conflict",
+            JSON.stringify({ message: "Git Repository is empty." }),
+          );
+        }
+        const sha = this.refs.get(branch);
+        if (!sha && !options.allowNotFound) {
+          throw new GitHubRequestError(404, "Not Found", "Not Found");
+        }
+        return sha ? { object: { sha } } : undefined;
+      }
+      if (path.includes("/contents/")) {
+        const name = decodeURIComponent(path.split("/contents/")[1]);
+        const content =
+          this.files(String(options.query?.ref ?? this.defaultBranch))[name];
+        return content === undefined ? undefined : {
+          type: "file",
+          encoding: "base64",
+          content: btoa(content),
+          sha: "blob:" + content,
+        };
+      }
+      if (path.includes("/git/commits/")) {
+        return this.commits.get(path.split("/git/commits/")[1]);
+      }
+      if (path.includes("/git/trees/")) {
+        const files = this.trees.get(path.split("/git/trees/")[1])!;
+        return {
+          truncated: false,
+          tree: Object.keys(files).map((name) => ({
+            path: name,
+            type: "blob",
+          })),
+        };
+      }
+      if (path.endsWith("/rulesets")) return [];
+      if (path.endsWith("/rulesets/1")) {
+        return {
+          name: "protect",
+          target: "push",
+          enforcement: "disabled",
+          rules: [],
+          bypass_actors: [],
+        };
+      }
+    }
+    if (
+      method === "PUT" && path === repo + "/contents/" + BOOTSTRAP_FILE_PATH
+    ) {
+      if (this.rejectContents) {
+        throw new GitHubRequestError(
+          403,
+          "Forbidden",
+          "GH013: inherited policy blocks initialization",
+        );
+      }
+      this.beforeContents?.();
+      const branch = String(body.branch);
+      if (this.refs.size && !this.refs.has(branch)) {
+        throw new GitHubRequestError(404, "Not Found", "Branch not found");
+      }
+      const previous = this.refs.get(branch);
+      const files = previous ? this.files(branch) : {};
+      if (files[BOOTSTRAP_FILE_PATH] !== undefined) {
+        throw new GitHubRequestError(
+          422,
+          "Unprocessable Entity",
+          "sha was not supplied",
+        );
+      }
+      const commit = this.commit({
+        ...files,
+        [BOOTSTRAP_FILE_PATH]: atob(String(body.content)),
+      }, previous ? [{ sha: previous }] : []);
+      this.refs.set(branch, commit.sha);
+      if (this.loseContentsResponse) {
+        this.loseContentsResponse = false;
+        throw new Error("lost Contents response");
+      }
+      return { content: { path: BOOTSTRAP_FILE_PATH }, commit };
+    }
+    if (method === "PATCH" && path === repo) {
+      if (this.failDefault) {
+        throw new GitHubRequestError(
+          403,
+          "Forbidden",
+          "Default branch update denied",
+        );
+      }
+      if (body.default_branch && !this.ignoreDefault) {
+        this.defaultBranch = String(body.default_branch);
+      }
+      return { default_branch: this.defaultBranch };
+    }
+    if (method === "POST" && path.endsWith("/git/blobs")) {
+      const sha = "blob:" + String(body.content);
+      this.blobs.set(sha, String(body.content));
+      return { sha };
+    }
+    if (method === "POST" && path.endsWith("/git/trees")) {
+      const files = { ...this.trees.get(String(body.base_tree)) };
+      for (const entry of body.tree as { path: string; sha: string | null }[]) {
+        if (entry.sha === null) delete files[entry.path];
+        else files[entry.path] = this.blobs.get(entry.sha)!;
+      }
+      const sha = "tree-" + this.next++;
+      this.trees.set(sha, files);
+      return { sha };
+    }
+    if (method === "POST" && path.endsWith("/git/commits")) {
+      return this.commit(
+        this.trees.get(String(body.tree))!,
+        (body.parents as string[]).map((sha) => ({ sha })),
+      );
+    }
+    if (method === "PATCH" && path.includes("/git/refs/heads/")) {
+      this.refs.set(path.split("/git/refs/heads/")[1], String(body.sha));
+      if (this.loseRefResponse) {
+        this.loseRefResponse = false;
+        throw new Error("lost commit response");
+      }
+      return { object: { sha: body.sha } };
+    }
+    if ((method === "POST" || method === "PUT") && path.includes("/rulesets")) {
+      return { id: 1 };
+    }
+    throw new Error("Unexpected API request: " + method + " " + path);
+  }
+}
+
+const desiredFiles: readonly DesiredFile[] = [
+  { path: "managed.txt", ensure: "exact", content: "managed" },
+  { path: "seed.txt", ensure: "exists", content: "seed" },
+  { path: "absent.txt", ensure: "absent" },
+];
+function sink(client: BootstrapClient) {
+  return new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+    fileChanges: { mode: "direct" },
+    bootstrap: new GitHubRepositoryBootstrap(client, "acme"),
+  });
+}
+function source(client: BootstrapClient) {
+  return new GitHubRepositoryStateSource(client, "acme");
+}
+function contentsWrites(client: BootstrapClient) {
+  return client.requests.filter((request) =>
+    request.method === "PUT" && request.path.includes("/contents/")
   );
-  assertEquals(client.mutations, []);
+}
+
+for (const branch of ["main", "develop", "feature/initial"]) {
+  Deno.test(`Contents API creates the first commit directly on ${branch} and completes default selection`, async () => {
+    const client = new BootstrapClient();
+    await new GitHubRepositoryBootstrap(client, "acme").initialize(
+      "sample",
+      branch,
+    );
+    assertEquals(contentsWrites(client).map((request) => request.body), [{
+      message: "Octosmith: initialize repository",
+      branch,
+      content: btoa(BOOTSTRAP_FILE_CONTENT),
+    }]);
+    assertEquals(client.files(branch), {
+      [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+    });
+    assertEquals(client.defaultBranch, branch);
+    assertEquals(client.commits.size, 1);
+    assertEquals([...client.commits.values()][0].parents, []);
+    assert(
+      !client.requests.some((request) => request.path.endsWith("/git/refs")),
+    );
+    await assertRejects(
+      () =>
+        new GitHubRepositoryBootstrap(client, "acme").initialize(
+          "sample",
+          branch,
+        ),
+      Error,
+      "acquired Git history",
+    );
+  });
+}
+
+Deno.test("reserved ownership is explicit and survives explanatory wording changes", () => {
+  assertEquals(BOOTSTRAP_FILE_PATH, ".github/.octosmith-bootstrap");
+  const file = {
+    path: BOOTSTRAP_FILE_PATH,
+    sha: "test",
+    content: BOOTSTRAP_FILE_CONTENT.replace(
+      "Until then, it is safe to leave in place.",
+      "Updated explanatory wording.",
+    ),
+  };
+  assertBootstrapFileOwned(file);
+  for (
+    const content of [
+      "user content",
+      BOOTSTRAP_FILE_MARKER,
+      BOOTSTRAP_FILE_CONTENT.replace(BOOTSTRAP_FILE_END_MARKER, ""),
+      "prefix\n" + BOOTSTRAP_FILE_CONTENT,
+    ]
+  ) {
+    assertThrows(
+      () => assertBootstrapFileOwned({ ...file, content }),
+      Error,
+      "conflict",
+    );
+  }
 });
 
+Deno.test("templates cannot declare the reserved path even for deletion", async () => {
+  const desired = {
+    repository: "sample",
+    template: "code",
+    files: [{ path: BOOTSTRAP_FILE_PATH, ensure: "absent" as const }],
+  };
+  assertThrows(
+    () => buildPlan(currentState(), desired),
+    Error,
+    "managed exclusively",
+  );
+  await assertRejects(
+    () =>
+      resolveDesiredState(
+        {
+          root: ".",
+          configuration: {
+            version: 1,
+            organization: "acme",
+            repositories: { scope: { include: "all" } },
+          },
+          templates: {
+            code: {
+              version: 1,
+              kind: "repository",
+              match: { include: "all" },
+              repository: {
+                files: { [BOOTSTRAP_FILE_PATH]: { ensure: "absent" } },
+              },
+            },
+          },
+        },
+        { name: "sample", teams: [], properties: {} },
+        () => "unused",
+      ),
+    Error,
+    "managed exclusively",
+  );
+});
+
+for (const failure of ["failDefault", "loseContentsResponse"] as const) {
+  Deno.test(`retry completes partial API bootstrap after ${failure} without another initial commit`, async () => {
+    const client = new BootstrapClient();
+    client[failure] = true;
+    await assertRejects(() =>
+      new GitHubRepositoryBootstrap(client, "acme").initialize("sample", "main")
+    );
+    client[failure] = false;
+    const desired: DesiredState = {
+      repository: "sample",
+      template: "code",
+      fileDelivery: "direct",
+    };
+    const current = await readCurrentState(source(client), desired);
+    assert(current.bootstrapBranchPending);
+    const plan = buildPlan(current, desired);
+    assertEquals(plan.operations[0], {
+      type: "initialize-repository",
+      branch: "main",
+      expectedHead: client.refs.get("main"),
+    });
+    const result = await applyPlan(sink(client), plan);
+    assert(result.operations.every((item) => item.status === "applied"));
+    assertEquals(contentsWrites(client).length, 1);
+    assertEquals(client.defaultBranch, "main");
+    assertEquals(client.files(), {});
+    assertEquals(
+      buildPlan(await readCurrentState(source(client), desired), desired)
+        .operations,
+      [],
+    );
+  });
+}
+
+for (const files of [[], desiredFiles]) {
+  Deno.test(`direct mode cleans bootstrap and delivers all files in one subsequent commit (${files.length})`, async () => {
+    const client = new BootstrapClient();
+    const desired: DesiredState = {
+      repository: "sample",
+      template: "code",
+      fileDelivery: "direct",
+      files,
+    };
+    const before = await readCurrentState(source(client), desired);
+    const plan = buildPlan(before, desired);
+    const result = await applyPlan(sink(client), plan);
+    assert(result.operations.every((item) => item.status === "applied"));
+    assertEquals(client.commits.size, 2);
+    assertEquals(
+      client.files(),
+      files.length ? { "managed.txt": "managed", "seed.txt": "seed" } : {},
+    );
+    assertEquals(contentsWrites(client).length, 1);
+    const treeWrite = client.requests.find((request) =>
+      request.method === "POST" && request.path.endsWith("/git/trees")
+    )!;
+    if (files.length) {
+      assertEquals((treeWrite.body.tree as unknown[]).length, 3);
+    } else {
+      assertEquals(treeWrite, undefined);
+      assertEquals(
+        client.requests.find((request) =>
+          request.method === "POST" && request.path.endsWith("/git/commits")
+        )?.body.tree,
+        "4b825dc642cb6eb9a060e54bf8d69288fbee4904",
+      );
+    }
+    assertEquals(
+      buildPlan(await readCurrentState(source(client), desired), desired)
+        .operations,
+      [],
+    );
+    assert(
+      JSON.stringify(
+        projectOwnedCurrentState(before, desired, plan.operations),
+      ) !==
+        JSON.stringify(
+          projectOwnedCurrentState(
+            await readCurrentState(source(client), desired),
+            desired,
+            plan.operations,
+          ),
+        ),
+    );
+  });
+}
+
+Deno.test("lost direct cleanup response is recovered by fresh planning without duplicate commits", async () => {
+  const client = new BootstrapClient();
+  client.loseRefResponse = true;
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    fileDelivery: "direct",
+    files: desiredFiles,
+  };
+  const result = await applyPlan(
+    sink(client),
+    buildPlan(await readCurrentState(source(client), desired), desired),
+  );
+  assert(result.operations.some((item) => item.status === "failed"));
+  assertEquals(client.files(), {
+    "managed.txt": "managed",
+    "seed.txt": "seed",
+  });
+  assertEquals(
+    buildPlan(await readCurrentState(source(client), desired), desired)
+      .operations,
+    [],
+  );
+  assertEquals(client.commits.size, 2);
+});
+
+Deno.test("unrecognized reserved content is preserved and reported", async () => {
+  const client = new BootstrapClient();
+  client.defaultBranch = "main";
+  client.root("main", { [BOOTSTRAP_FILE_PATH]: "user content" });
+  await assertRejects(
+    () =>
+      readCurrentState(source(client), {
+        repository: "sample",
+        template: "code",
+      }),
+    Error,
+    "conflict",
+  );
+  assertEquals(client.files()[BOOTSTRAP_FILE_PATH], "user content");
+  assertEquals(
+    client.requests.filter((request) => request.method !== "GET"),
+    [],
+  );
+});
+
+Deno.test("cleanup rejects changed ownership and saved SHAs without writing", async () => {
+  const client = new BootstrapClient();
+  client.defaultBranch = "main";
+  client.root("main", { [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT });
+  const desired: DesiredState = {
+    repository: "sample",
+    template: "code",
+    fileDelivery: "direct",
+  };
+  const plan = buildPlan(
+    await readCurrentState(source(client), desired),
+    desired,
+  );
+  client.root("main", { [BOOTSTRAP_FILE_PATH]: "user replacement" });
+  const result = await applyPlan(sink(client), plan);
+  assertEquals(result.operations[0].status, "failed");
+  assertEquals(client.files()[BOOTSTRAP_FILE_PATH], "user replacement");
+  assertEquals(
+    client.requests.filter((request) => request.method !== "GET"),
+    [],
+  );
+});
+
+Deno.test("concurrent initialization never overwrites user content or configures protections", async () => {
+  const client = new BootstrapClient();
+  client.beforeContents = () =>
+    client.root("main", { [BOOTSTRAP_FILE_PATH]: "user content" });
+  await assertRejects(
+    () =>
+      new GitHubRepositoryBootstrap(client, "acme").initialize(
+        "sample",
+        "main",
+      ),
+    GitHubRequestError,
+    "sha was not supplied",
+  );
+  assertEquals(client.files("main")[BOOTSTRAP_FILE_PATH], "user content");
+  assert(!client.requests.some((request) => request.method === "PATCH"));
+});
+
+Deno.test("a concurrent non-root Contents commit fails bootstrap verification", async () => {
+  const client = new BootstrapClient();
+  client.beforeContents = () =>
+    client.root("main", { "user.txt": "preserved" });
+  await assertRejects(
+    () =>
+      new GitHubRepositoryBootstrap(client, "acme").initialize(
+        "sample",
+        "main",
+      ),
+    Error,
+    "initialized concurrently",
+  );
+  assertEquals(client.files("main")["user.txt"], "preserved");
+  assert(!client.requests.some((request) => request.method === "PATCH"));
+});
+
+Deno.test("existing inherited policies and unsupported branch initialization are not bypassed", async () => {
+  const client = new BootstrapClient();
+  client.rejectContents = true;
+  await assertRejects(
+    () =>
+      new GitHubRepositoryBootstrap(client, "acme").initialize(
+        "sample",
+        "main",
+      ),
+    GitHubRequestError,
+    "inherited policy",
+  );
+  assertEquals(client.commits.size, 0);
+  assertEquals(
+    client.requests.filter((request) => request.method !== "GET").length,
+    1,
+  );
+  const unsupported: GitHubClient = {
+    get: client.get.bind(client),
+    request: () =>
+      Promise.reject(
+        new GitHubRequestError(
+          404,
+          "Not Found",
+          "Requested initial branch is not supported",
+        ),
+      ),
+  };
+  client.rejectContents = false;
+  await assertRejects(
+    () =>
+      new GitHubRepositoryBootstrap(unsupported, "acme").initialize(
+        "sample",
+        "develop",
+      ),
+    GitHubRequestError,
+    "not supported",
+  );
+  assertEquals(client.commits.size, 0);
+});
+
+Deno.test("incorrect final default branch is not reported as successful initialization", async () => {
+  const client = new BootstrapClient();
+  client.ignoreDefault = true;
+  await assertRejects(
+    () =>
+      new GitHubRepositoryBootstrap(client, "acme").initialize(
+        "sample",
+        "develop",
+      ),
+    Error,
+    "intended default branch",
+  );
+});
+
+for (const type of ["create-ruleset", "update-ruleset"] as const) {
+  Deno.test(`direct cleanup precedes managed protection ${type}`, async () => {
+    const client = new BootstrapClient();
+    client.defaultBranch = "main";
+    const head = client.root("main", {
+      [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+    });
+    const rule = {
+      name: "protect",
+      target: "push" as const,
+      enforcement: "active" as const,
+      bypassActors: [],
+      rules: [],
+    };
+    const current = currentState({
+      history: { initialized: true },
+      bootstrapFile: {
+        path: BOOTSTRAP_FILE_PATH,
+        content: BOOTSTRAP_FILE_CONTENT,
+        sha: "blob:" + BOOTSTRAP_FILE_CONTENT,
+      },
+      filesBaseSha: head,
+      rulesets: type === "update-ruleset"
+        ? [{ ...rule, id: 1, enforcement: "disabled" }]
+        : [],
+    });
+    const desired: DesiredState = {
+      repository: "sample",
+      template: "code",
+      fileDelivery: "direct",
+      rulesets: [rule],
+    };
+    const plan = buildPlan(current, desired);
+    assertEquals(plan.operations.map((operation) => operation.type), [
+      "cleanup-repository-bootstrap",
+      type,
+    ]);
+    const result = await applyPlan(sink(client), plan);
+    assert(result.operations.every((item) => item.status === "applied"));
+    const mutations = client.requests.filter((request) =>
+      request.method !== "GET"
+    );
+    assert(
+      mutations.findIndex((request) => request.path.includes("/git/refs/")) <
+        mutations.findIndex((request) => request.path.includes("/rulesets")),
+    );
+    const prDesired = { ...desired, fileDelivery: "pull_request" as const };
+    const prPlan = buildPlan(current, prDesired);
+    assertEquals(prPlan.operations.map((operation) => operation.type), [
+      "cleanup-repository-bootstrap",
+    ]);
+    assertEquals(
+      buildApplyEvaluations(prDesired, prPlan.operations, current).find((
+        evaluation,
+      ) => evaluation.type === "ruleset")?.details.deferred,
+      true,
+    );
+    assertEquals(
+      buildPlan({ ...current, bootstrapFile: undefined }, prDesired).operations
+        .map((operation) => operation.type),
+      [type],
+    );
+  });
+}
+
+for (const existing of ["main", "develop"]) {
+  for (const declared of [undefined, "develop"]) {
+    for (const policy of ["ignore", "enforce"] as const) {
+      Deno.test(`default branch matrix: ${existing}, ${declared}, ${policy}`, () => {
+        const desired: DesiredState = {
+          repository: "sample",
+          template: "code",
+          defaultBranchDrift: policy,
+          settings: declared ? { defaultBranch: declared } : {},
+        };
+        assertEquals(
+          buildPlan(
+            currentState({
+              settings: currentRepositorySettings({ defaultBranch: existing }),
+            }),
+            desired,
+          ).operations,
+          policy === "enforce" && declared && declared !== existing
+            ? [{
+              type: "update-repository-settings",
+              settings: { defaultBranch: declared },
+            }]
+            : [],
+        );
+        assertEquals(
+          buildPlan(
+            currentState({
+              history: { initialized: false },
+              filesBranch: declared ?? "main",
+            }),
+            desired,
+          ).operations,
+          [{ type: "initialize-repository", branch: declared ?? "main" }, {
+            type: "cleanup-repository-bootstrap",
+          }],
+        );
+      });
+    }
+  }
+}
+
 for (const mode of ["direct", "pull_request"]) {
-  Deno.test(`CLI plans and saves empty repositories without mutation (${mode})`, async () => {
+  Deno.test(`CLI plans and saves API-only empty bootstrap without mutation (${mode})`, async () => {
     const root = await Deno.makeTempDir();
     const client = new BootstrapClient();
     try {
@@ -60,7 +730,6 @@ for (const mode of ["direct", "pull_request"]) {
           repository: {},
         }),
       );
-      const output: string[] = [];
       const runtime = createGitHubRuntime({
         token: "test",
         fetch: async (input, options) => {
@@ -88,377 +757,26 @@ for (const mode of ["direct", "pull_request"]) {
           "--format=json",
           "--out",
           root + "/plan.json",
-        ], { runtime, write: (value) => output.push(value) }),
+        ], { runtime, write: () => {} }),
         0,
       );
       const saved = JSON.parse(await Deno.readTextFile(root + "/plan.json"));
       assertEquals(saved.resources[0].operations, [{
         type: "initialize-repository",
         branch: "main",
-      }]);
+      }, { type: "cleanup-repository-bootstrap" }]);
       assertEquals(saved.resources[0].managedFiles, {
         branch: "main",
         uninitialized: true,
         files: [],
+        bootstrapCleanup: { afterInitialization: true },
       });
-      const report = JSON.parse(output.join("\n"));
       assertEquals(
-        report.repositories[0].items[0].type,
-        "repository-initialization",
+        client.requests.filter((request) => request.method !== "GET"),
+        [],
       );
-      assertEquals(client.mutations, []);
     } finally {
       await Deno.remove(root, { recursive: true });
     }
   });
 }
-
-const managed: readonly DesiredFile[] = [
-  { path: "nested/file.txt", ensure: "exact", content: "managed\n" },
-  { path: "seed.txt", ensure: "exists", content: "seed\n" },
-  { path: "absent.txt", ensure: "absent" },
-];
-
-async function git(args: string[]): Promise<string> {
-  const result = await new Deno.Command("git", {
-    args,
-    stdout: "piped",
-    stderr: "piped",
-  }).output();
-  assert(result.success, new TextDecoder().decode(result.stderr));
-  return new TextDecoder().decode(result.stdout).trim();
-}
-
-for (const branch of ["main", "develop"]) {
-  for (const files of [[], managed]) {
-    Deno.test(`real Git bootstrap creates one root commit on ${branch} with ${files.length} file declarations`, async () => {
-      const root = await Deno.makeTempDir();
-      const remoteUrl = root + "/remote.git";
-      try {
-        await git(["init", "--bare", "--initial-branch=" + branch, remoteUrl]);
-        await initializeGitRepository({ remoteUrl, branch, files });
-        assertEquals(
-          await git(["--git-dir=" + remoteUrl, "rev-list", "--count", branch]),
-          "1",
-        );
-        const commit = await git([
-          "--git-dir=" + remoteUrl,
-          "cat-file",
-          "-p",
-          branch,
-        ]);
-        assert(!commit.includes("\nparent "));
-        assertStringIncludes(
-          commit,
-          "Octosmith <octosmith@users.noreply.github.com>",
-        );
-        assertEquals(
-          await git([
-            "--git-dir=" + remoteUrl,
-            "ls-tree",
-            "-r",
-            "--name-only",
-            branch,
-          ]),
-          files.length ? "nested/file.txt\nseed.txt" : "",
-        );
-        if (files.length) {
-          assertEquals(
-            await git([
-              "--git-dir=" + remoteUrl,
-              "show",
-              branch + ":nested/file.txt",
-            ]),
-            "managed",
-          );
-        }
-        await assertRejects(
-          () => initializeGitRepository({ remoteUrl, branch, files }),
-          Error,
-          "acquired Git history",
-        );
-        assertEquals(
-          await git(["--git-dir=" + remoteUrl, "rev-list", "--count", branch]),
-          "1",
-        );
-      } finally {
-        await Deno.remove(root, { recursive: true });
-      }
-    });
-  }
-}
-
-Deno.test("real Git bootstrap respects server protections without bypassing hooks", async () => {
-  const root = await Deno.makeTempDir();
-  const remoteUrl = root + "/remote.git";
-  try {
-    await git(["init", "--bare", "--initial-branch=main", remoteUrl]);
-    await Deno.writeTextFile(
-      remoteUrl + "/hooks/pre-receive",
-      "#!/bin/sh\necho 'GH013: inherited policy requires signed commits' >&2\nexit 1\n",
-    );
-    await Deno.chmod(remoteUrl + "/hooks/pre-receive", 0o755);
-    await assertRejects(
-      () => initializeGitRepository({ remoteUrl, branch: "main", files: [] }),
-      Error,
-      "inherited policy requires signed commits",
-    );
-    assertEquals(await git(["ls-remote", "--refs", remoteUrl]), "");
-  } finally {
-    await Deno.remove(root, { recursive: true });
-  }
-});
-
-class BootstrapClient implements GitHubClient {
-  initialized = false;
-  branch = "main";
-  files: readonly DesiredFile[] = [];
-  readonly mutations: string[] = [];
-  failRules = false;
-
-  get<T>(path: string): Promise<T> {
-    return this.request("GET", path);
-  }
-  request<T>(method: string, path: string): Promise<T> {
-    if (method !== "GET") {
-      this.mutations.push(path);
-      if (this.failRules) throw new Error("policy rejected");
-      return Promise.resolve({} as T);
-    }
-    if (path === "/repos/acme/sample") {
-      return Promise.resolve(
-        {
-          name: "sample",
-          default_branch: this.branch,
-          visibility: "private",
-        } as T,
-      );
-    }
-    if (path.includes("/git/ref/heads/")) {
-      if (!this.initialized) {
-        throw new GitHubRequestError(
-          409,
-          "Conflict",
-          JSON.stringify({ message: "Git Repository is empty." }),
-        );
-      }
-      if (!path.endsWith("/" + this.branch)) {
-        throw new GitHubRequestError(404, "Not Found", "");
-      }
-      return Promise.resolve({ object: { sha: "real-head" } } as T);
-    }
-    if (path.includes("/contents/")) {
-      const file = this.files.find((file) =>
-        file.path === path.split("/contents/")[1]
-      );
-      return Promise.resolve(
-        file && file.ensure !== "absent"
-          ? {
-            type: "file",
-            encoding: "base64",
-            sha: "blob",
-            content: btoa(file.content),
-          } as T
-          : undefined as T,
-      );
-    }
-    throw new Error("Unexpected request: " + path);
-  }
-}
-
-for (const existing of ["main", "develop"]) {
-  for (const declared of [undefined, "develop"]) {
-    for (const policy of ["ignore", "enforce"] as const) {
-      Deno.test(`branch matrix: ${existing}, declared ${declared}, ${policy}`, () => {
-        const desired: DesiredState = {
-          repository: "sample",
-          template: "code",
-          defaultBranchDrift: policy,
-          settings: declared ? { defaultBranch: declared } : {},
-        };
-        const initialized = buildPlan(
-          currentState({
-            settings: currentRepositorySettings({ defaultBranch: existing }),
-          }),
-          desired,
-        );
-        assertEquals(
-          initialized.operations,
-          policy === "enforce" && declared && declared !== existing
-            ? [{
-              type: "update-repository-settings",
-              settings: { defaultBranch: declared },
-            }]
-            : [],
-        );
-        const empty = buildPlan(
-          currentState({
-            history: { initialized: false },
-            filesBranch: declared ?? "main",
-          }),
-          desired,
-        );
-        assertEquals(empty.operations, [{
-          type: "initialize-repository",
-          branch: declared ?? "main",
-        }]);
-      });
-    }
-  }
-}
-
-Deno.test("empty state works without files and branch enforcement never creates a missing target", async () => {
-  const client = new BootstrapClient();
-  const source = new GitHubRepositoryStateSource(client, "acme");
-  const desired: DesiredState = { repository: "sample", template: "code" };
-  const empty = await readCurrentState(source, desired, undefined, {
-    authoritativeFiles: true,
-  });
-  assertEquals(empty.history, { initialized: false });
-  assertEquals(empty.filesBaseSha, undefined);
-  assertEquals(buildPlan(empty, desired).operations, [{
-    type: "initialize-repository",
-    branch: "main",
-  }]);
-  client.initialized = true;
-  await assertRejects(
-    () =>
-      readCurrentState(source, {
-        ...desired,
-        defaultBranchDrift: "enforce",
-        settings: { defaultBranch: "develop" },
-      }),
-    Error,
-    "Ensure the branch exists",
-  );
-  const ignored = await readCurrentState(source, {
-    ...desired,
-    settings: { defaultBranch: "develop" },
-    files: managed,
-  });
-  assertEquals(ignored.filesBranch, "main");
-  assertEquals(client.mutations, []);
-});
-
-for (const files of [[], managed]) {
-  Deno.test(`direct bootstrap consumes files and retry does not bootstrap again (${files.length})`, async () => {
-    const client = new BootstrapClient();
-    const desired: DesiredState = {
-      repository: "sample",
-      template: "code",
-      files,
-    };
-    const source = new GitHubRepositoryStateSource(client, "acme");
-    const current = await readCurrentState(source, desired);
-    const plan = buildPlan(current, desired);
-    let initializations = 0;
-    const sink = new GitHubRepositoryMutationSink({
-      client,
-      owner: "acme",
-      secretValue: () => "unused",
-      fileChanges: { mode: "direct" },
-      bootstrap: {
-        initialize(_repository, branch, initialFiles) {
-          initializations++;
-          client.initialized = true;
-          client.branch = branch;
-          client.files = initialFiles;
-          return Promise.resolve();
-        },
-      },
-    });
-    const result = await applyPlan(sink, plan);
-    assert(result.operations.every((item) => item.status === "applied"));
-    assertEquals(initializations, 1);
-    assertEquals(
-      client.files,
-      files.filter((file) => file.ensure !== "absent"),
-    );
-    assertEquals(client.mutations, []);
-    const after = await readCurrentState(source, desired);
-    assertEquals(buildPlan(after, desired).operations, []);
-    assert(
-      JSON.stringify(
-        projectOwnedCurrentState(current, desired, plan.operations),
-      ) !==
-        JSON.stringify(
-          projectOwnedCurrentState(after, desired, plan.operations),
-        ),
-    );
-  });
-}
-
-Deno.test("bootstrap precedes both protection creates and updates and survives later failure", async () => {
-  for (const type of ["create-ruleset", "update-ruleset"] as const) {
-    const client = new BootstrapClient();
-    client.failRules = true;
-    const ruleset = {
-      name: "protect",
-      target: "push" as const,
-      enforcement: "active" as const,
-      bypassActors: [],
-      rules: [],
-    };
-    const desired = {
-      repository: "sample",
-      template: "code",
-      rulesets: [ruleset],
-    };
-    const before = currentState({
-      history: { initialized: false },
-      rulesets: type === "update-ruleset"
-        ? [{ ...ruleset, id: 1, enforcement: "disabled" }]
-        : [],
-    });
-    const plan = buildPlan(before, desired);
-    assertEquals(plan.operations.map((item) => item.type), [
-      "initialize-repository",
-      type,
-    ]);
-    const result = await applyPlan(
-      new GitHubRepositoryMutationSink({
-        client,
-        owner: "acme",
-        secretValue: () => "unused",
-        bootstrap: {
-          initialize() {
-            assertEquals(client.mutations, []);
-            client.initialized = true;
-            return Promise.resolve();
-          },
-        },
-      }),
-      plan,
-    );
-    assertEquals(result.operations.map((item) => item.status), [
-      "applied",
-      "failed",
-    ]);
-    assertEquals(
-      buildPlan({ ...before, history: { initialized: true } }, desired)
-        .operations.map((item) => item.type),
-      [type],
-    );
-  }
-});
-
-Deno.test("failed bootstrap blocks protection even with continueOnError", async () => {
-  const calls: string[] = [];
-  const result = await applyPlan({
-    apply(_repository, operation) {
-      calls.push(operation.type);
-      throw new Error("concurrently initialized or protected");
-    },
-  }, {
-    repository: "sample",
-    operations: [{ type: "initialize-repository", branch: "main" }, {
-      type: "update-repository-settings",
-      settings: { hasIssues: true },
-    }],
-  }, { continueOnError: true });
-  assertEquals(calls, ["initialize-repository"]);
-  assertEquals(result.operations.map((item) => item.status), [
-    "failed",
-    "skipped",
-  ]);
-});

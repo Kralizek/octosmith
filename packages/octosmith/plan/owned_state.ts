@@ -40,6 +40,12 @@ export function projectOwnedCurrentState(
   const projected: Record<string, unknown> = {
     repository: current.repository,
   };
+  if (current.bootstrapFile !== undefined) {
+    projected.bootstrapFile = current.bootstrapFile;
+  }
+  if (current.bootstrapBranchPending !== undefined) {
+    projected.bootstrapBranchPending = current.bootstrapBranchPending;
+  }
 
   if (desired.settings !== undefined) {
     const { defaultBranch, ...otherSettings } = desired.settings;

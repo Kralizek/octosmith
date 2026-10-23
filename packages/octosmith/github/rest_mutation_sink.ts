@@ -18,6 +18,12 @@ import type { PullRequestResult } from "../report/types.ts";
 import { reconcileFilePullRequest } from "./file_pull_request.ts";
 import type { RepositoryBootstrap } from "./bootstrap.ts";
 import { GitHubRepositoryStateSource } from "./rest_state_source.ts";
+import { createManagedFileTree } from "./file_tree.ts";
+import {
+  assertBootstrapFileOwned,
+  assertNoBootstrapFileDeclarations,
+  BOOTSTRAP_FILE_PATH,
+} from "../state/bootstrap.ts";
 
 /** Describes secret value provider. */
 export type SecretValueProvider = (name: string) => string;
@@ -41,10 +47,14 @@ type FileOperation = Extract<
 >;
 
 interface PreparedFileChanges {
-  readonly operations: readonly FileOperation[];
+  readonly operations: readonly PlannedFileOperation[];
   applied: boolean;
   error?: unknown;
 }
+
+type PlannedFileOperation =
+  | FileOperation
+  | Extract<Operation, { readonly type: "cleanup-repository-bootstrap" }>;
 
 type EffectiveFileChanges =
   | {
@@ -73,7 +83,6 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #managedFiles?: ManagedFileSnapshot;
   readonly #allowClosure: boolean;
   readonly #bootstrap?: RepositoryBootstrap;
-  #bootstrapped = false;
   #bootstrapSnapshot?: ManagedFileSnapshot;
   #filesReconciled = false;
 
@@ -110,6 +119,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     const fileOperations = operations.filter(isFileOperation);
+    if (managedFiles) assertNoBootstrapFileDeclarations(managedFiles.files);
     const initialization = operations.find((operation) =>
       operation.type === "initialize-repository"
     );
@@ -159,12 +169,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         if (!this.#bootstrap) {
           throw new Error("Repository bootstrap service is not configured");
         }
-        const files = this.#fileChanges.mode === "direct"
-          ? (this.#preparedFileChanges?.operations ?? []).flatMap((item) =>
-            item.type === "create-file" ? [item.file] : []
-          )
-          : [];
-        await this.#bootstrap.initialize(repository, operation.branch, files);
+        await this.#bootstrap.initialize(
+          repository,
+          operation.branch,
+          operation.expectedHead,
+        );
         const source = new GitHubRepositoryStateSource(
           this.#client,
           this.#owner,
@@ -179,25 +188,24 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           repository,
           operation.branch,
         );
-        if (this.#fileChanges.mode === "direct") {
-          for (const file of files) {
-            const actual = await source.getFile(repository, file.path, baseSha);
-            if (actual?.content !== file.content) {
-              throw new Error(
-                "Bootstrap file verification failed: " + file.path,
-              );
-            }
-          }
+        const bootstrapFile = await source.getFile(
+          repository,
+          BOOTSTRAP_FILE_PATH,
+          baseSha,
+        );
+        if (!bootstrapFile) {
+          throw new Error("Bootstrap file is missing after initialization");
         }
+        assertBootstrapFileOwned(bootstrapFile);
         this.#bootstrapSnapshot = {
           branch: operation.branch,
           baseSha,
+          bootstrapCleanup: { sha: bootstrapFile.sha },
           files: this.#managedFiles?.files ??
             (this.#preparedFileChanges?.operations ?? []).flatMap((item) =>
               item.type === "create-file" ? [item.file] : []
             ),
         };
-        this.#bootstrapped = true;
         return;
       }
       case "update-repository-settings":
@@ -335,7 +343,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       case "create-file":
       case "update-file":
       case "delete-file":
-        if (this.#bootstrapped && this.#fileChanges.mode === "direct") return;
+      case "cleanup-repository-bootstrap":
         if (this.#preparedFileChanges !== undefined) {
           if (this.#preparedFileChanges.error !== undefined) {
             throw this.#preparedFileChanges.error;
@@ -634,10 +642,54 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 
   async applyFileChanges(
     repository: string,
-    operations: readonly FileOperation[],
+    plannedOperations: readonly PlannedFileOperation[],
   ): Promise<void> {
+    const snapshot = this.#bootstrapSnapshot ?? this.#managedFiles;
+    const operations: FileOperation[] = [];
+    for (const operation of plannedOperations) {
+      if (operation.type !== "cleanup-repository-bootstrap") {
+        const path = operation.type === "delete-file"
+          ? operation.path
+          : operation.file.path;
+        if (path === BOOTSTRAP_FILE_PATH) {
+          throw new Error(
+            "Reserved bootstrap path requires an internal cleanup operation",
+          );
+        }
+        operations.push(operation);
+        continue;
+      }
+      const expected = snapshot?.bootstrapCleanup;
+      const expectedSha = expected && "sha" in expected
+        ? expected.sha
+        : operation.sha;
+      if (expectedSha === undefined || snapshot?.baseSha === undefined) {
+        throw new Error(
+          "Bootstrap cleanup requires a verified initialized file snapshot",
+        );
+      }
+      if (operation.sha !== undefined && operation.sha !== expectedSha) {
+        throw new Error("Bootstrap cleanup SHA changed since planning");
+      }
+      const source = new GitHubRepositoryStateSource(this.#client, this.#owner);
+      const file = await source.getFile(
+        repository,
+        BOOTSTRAP_FILE_PATH,
+        snapshot.baseSha,
+      );
+      if (!file || file.sha !== expectedSha) {
+        throw new Error(
+          "Bootstrap file changed since planning; build a fresh plan",
+        );
+      }
+      assertBootstrapFileOwned(file);
+      operations.push({
+        type: "delete-file",
+        path: BOOTSTRAP_FILE_PATH,
+        sha: file.sha,
+      });
+    }
     if (this.#fileChanges.mode === "pull_request") {
-      const snapshot = this.#bootstrapSnapshot ?? this.#managedFiles;
       if (snapshot === undefined) {
         throw new Error(
           "Pull-request delivery requires a complete managed-file snapshot",
@@ -678,13 +730,23 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     >(
       repositoryPath,
     );
-    const defaultBranch = this.#fileBranch ?? metadata.default_branch;
+    const defaultBranch = this.#bootstrapSnapshot?.branch ?? this.#fileBranch ??
+      metadata.default_branch;
     const baseRef = await this.#client.get<{
       readonly object: { readonly sha: string };
     }>(
       repositoryPath + "/git/ref/heads/" + encodePath(defaultBranch),
     );
     const baseSha = baseRef.object.sha;
+    if (
+      plannedOperations.some((operation) =>
+        operation.type === "cleanup-repository-bootstrap"
+      ) && snapshot?.baseSha !== baseSha
+    ) {
+      throw new Error(
+        "Bootstrap cleanup target changed since planning; build a fresh plan",
+      );
+    }
     const baseCommit = await this.#client.get<{
       readonly tree: { readonly sha: string };
     }>(repositoryPath + "/git/commits/" + baseSha);
@@ -697,7 +759,9 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       );
     }
 
-    const tree: Array<Record<string, unknown>> = [];
+    const tree: Array<
+      { path: string; mode: string; type: string; sha: string | null }
+    > = [];
     for (const operation of operations) {
       if (operation.type === "delete-file") {
         tree.push({
@@ -727,15 +791,14 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       });
     }
 
-    const nextTree = await this.#client.request<{ readonly sha: string }>(
-      "POST",
-      repositoryPath + "/git/trees",
-      {
-        body: {
-          base_tree: baseCommit.tree.sha,
-          tree,
-        },
-      },
+    const nextTree = await createManagedFileTree(
+      this.#client,
+      repositoryPath,
+      baseCommit.tree.sha,
+      tree,
+      plannedOperations.some((operation) =>
+        operation.type === "cleanup-repository-bootstrap"
+      ),
     );
     const message = renderFileChangeText(
       this.#fileChanges.commitMessage,
@@ -1185,10 +1248,13 @@ function pascal(value: string): string {
     .join("");
 }
 
-function isFileOperation(operation: Operation): operation is FileOperation {
+function isFileOperation(
+  operation: Operation,
+): operation is PlannedFileOperation {
   return operation.type === "create-file" ||
     operation.type === "update-file" ||
-    operation.type === "delete-file";
+    operation.type === "delete-file" ||
+    operation.type === "cleanup-repository-bootstrap";
 }
 
 function normalizeFileChanges(

@@ -27,6 +27,7 @@ import type {
   DesiredState,
 } from "../state/types.ts";
 import type { LoadedConfiguration } from "./load.ts";
+import { assertNoBootstrapFileDeclarations } from "../state/bootstrap.ts";
 
 /** Describes repository metadata. */
 export interface RepositoryMetadata {
@@ -113,6 +114,12 @@ export async function resolveDesiredState(
 
   const templateName = classification.template;
   const template = loaded.templates[templateName];
+  assertNoBootstrapFileDeclarations(
+    Object.keys(template.repository.files ?? {}).map((path) => ({
+      path,
+      ensure: "absent",
+    })),
+  );
   const includeSecrets = options.includeSecrets ??
     shouldIncludeSecrets(loaded.configuration);
   const readSource = createConfigurationSourceReader(loaded.root);
@@ -125,6 +132,8 @@ export async function resolveDesiredState(
   return {
     repository: repository.name,
     template: templateName,
+    ...(loaded.configuration.repositories.fileChanges?.mode === "direct" &&
+      { fileDelivery: "direct" as const }),
     ...(loaded.configuration.repositories.settings?.defaultBranchDrift ===
         "enforce" && { defaultBranchDrift: "enforce" as const }),
     ...(!includeSecrets && { secretsExcluded: true as const }),

@@ -1,5 +1,6 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
+import { BOOTSTRAP_FILE_PATH } from "../packages/octosmith/mod.ts";
 import {
   effectiveRepositorySelectorIntersection,
   loadConfigurationDirectory,
@@ -56,6 +57,31 @@ Deno.test("default branch drift validates ignore and enforce and preserves omitt
         );
       }
     }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("offline template validation rejects the internal bootstrap path", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      JSON.stringify(configuration),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates/default.yml"),
+      JSON.stringify({
+        ...template,
+        repository: { files: { [BOOTSTRAP_FILE_PATH]: { ensure: "absent" } } },
+      }),
+    );
+    await assertRejects(
+      () => validateConfigurationDirectory(root),
+      Error,
+      "managed exclusively",
+    );
   } finally {
     await Deno.remove(root, { recursive: true });
   }

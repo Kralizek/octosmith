@@ -302,6 +302,8 @@ function describeItem(item: ApplyItemReport): string {
   const details = item.details;
 
   switch (item.type) {
+    case "bootstrap-cleanup":
+      return "Remove repository bootstrap file";
     case "repository-initialization":
       return "Initialize repository - branch: " + String(details.branch);
     case "repository-settings":
@@ -347,7 +349,10 @@ function describeItem(item: ApplyItemReport): string {
       return "Team " + String(details.team) + permission;
     }
     case "ruleset":
-      return "Ruleset " + String(details.name) + actionSuffix(details);
+      return "Ruleset " + String(details.name) +
+        (details.deferred === true
+          ? " - deferred until bootstrap cleanup is merged"
+          : actionSuffix(details));
     case "environment":
       return "Environment " + String(details.name) + actionSuffix(details);
     case "file":

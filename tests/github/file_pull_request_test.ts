@@ -14,6 +14,8 @@ import type {
 } from "@octosmith/octosmith";
 import {
   applyPlan,
+  BOOTSTRAP_FILE_CONTENT,
+  BOOTSTRAP_FILE_PATH,
   buildPlan,
   GitHubRepositoryMutationSink,
   GitHubRequestError,
@@ -44,11 +46,12 @@ for (
         secretValue: () => "unused",
         fileChanges: { mode: "pull_request" },
         bootstrap: {
-          initialize(_repository, branch, initialFiles) {
-            assertEquals(initialFiles, []);
+          initialize(_repository, branch) {
             assertEquals(branch, "main");
             bootstraps++;
-            client.advanceTarget({});
+            client.advanceTarget({
+              [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+            });
             return Promise.resolve();
           },
         },
@@ -58,13 +61,23 @@ for (
     assertEquals(result.error, undefined);
     assert(result.operations.every((item) => item.status === "applied"));
     assertEquals(bootstraps, 1);
-    assertEquals(client.files("main"), {});
-    assertEquals(client.pulls.length, files.length);
+    assertEquals(client.files("main"), {
+      [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+    });
+    assertEquals(client.pulls.length, 1);
     if (files.length) {
       assertEquals(client.files(), { "managed.txt": "managed" });
     }
     await client.reconcile(files);
-    assertEquals(client.pulls.length, files.length);
+    assertEquals(client.pulls.length, 1);
+    assertEquals(
+      client.files("main")[BOOTSTRAP_FILE_PATH],
+      BOOTSTRAP_FILE_CONTENT,
+    );
+    assertEquals(client.files()[BOOTSTRAP_FILE_PATH], undefined);
+    client.pulls[0].state = "closed";
+    await client.reconcile(files);
+    assertEquals(client.pulls.length, 2);
     assertEquals(bootstraps, 1);
   });
 }
@@ -90,7 +103,9 @@ Deno.test("PR delivery can retry after successful bootstrap and failed PR creati
       fileChanges: { mode: "pull_request" },
       bootstrap: {
         initialize() {
-          client.advanceTarget({});
+          client.advanceTarget({
+            [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+          });
           return Promise.resolve();
         },
       },
@@ -100,14 +115,42 @@ Deno.test("PR delivery can retry after successful bootstrap and failed PR creati
   assertEquals(result.operations.map((item) => item.status), [
     "applied",
     "failed",
+    "skipped",
   ]);
-  assertEquals(client.files("main"), {});
+  assertEquals(client.files("main"), {
+    [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+  });
   client.failCreate = false;
   await client.reconcile(files);
   assertEquals(client.files(), { "managed.txt": "managed" });
 });
 
 type Tree = Record<string, string>;
+Deno.test("PR cleanup preserves unrecognized reserved content and performs no mutations", async () => {
+  const client = new ReconciliationClient({
+    [BOOTSTRAP_FILE_PATH]: "user content",
+  });
+  await assertRejects(() => client.reconcile([]), Error, "conflict");
+  assertEquals(client.files("main")[BOOTSTRAP_FILE_PATH], "user content");
+  assertEquals(
+    client.requests.filter((request) => request.method !== "GET"),
+    [],
+  );
+});
+
+Deno.test("cleanup-only PR preserves unrelated target files", async () => {
+  const client = new ReconciliationClient({
+    [BOOTSTRAP_FILE_PATH]: BOOTSTRAP_FILE_CONTENT,
+    "user.txt": "unmanaged",
+  });
+  await client.reconcile([]);
+  assertEquals(client.files(), { "user.txt": "unmanaged" });
+  assertEquals(
+    client.files("main")[BOOTSTRAP_FILE_PATH],
+    BOOTSTRAP_FILE_CONTENT,
+  );
+});
+
 interface Commit {
   sha: string;
   message: string;
@@ -177,11 +220,24 @@ class ReconciliationClient implements GitHubClient {
 
   files(ref = "octosmith/reconcile"): Tree {
     const sha = this.refs.get(ref) ?? ref;
-    return this.trees.get(this.commits.get(sha)!.tree.sha)!;
+    const tree = this.commits.get(sha)!.tree.sha;
+    return tree === "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+      ? {}
+      : this.trees.get(tree)!;
   }
 
   snapshot(files: readonly DesiredFile[]) {
-    return { branch: "main", baseSha: this.refs.get("main")!, files };
+    return {
+      branch: "main",
+      baseSha: this.refs.get("main")!,
+      files,
+      ...(this.files("main")[BOOTSTRAP_FILE_PATH] !== undefined &&
+        {
+          bootstrapCleanup: {
+            sha: "blob:" + this.files("main")[BOOTSTRAP_FILE_PATH],
+          },
+        }),
+    };
   }
 
   operations(files: readonly DesiredFile[]) {
@@ -215,7 +271,15 @@ class ReconciliationClient implements GitHubClient {
       {
         repository: "sample",
         managedFiles: this.snapshot(files),
-        operations: this.operations(files),
+        operations: [
+          ...this.operations(files),
+          ...(this.files("main")[BOOTSTRAP_FILE_PATH] !== undefined
+            ? [{
+              type: "cleanup-repository-bootstrap" as const,
+              sha: "blob:" + this.files("main")[BOOTSTRAP_FILE_PATH],
+            }]
+            : []),
+        ],
       },
       {
         onPullRequest: (outcome) => {
@@ -274,6 +338,14 @@ class ReconciliationClient implements GitHubClient {
       }
       if (path.includes("/git/commits/")) {
         return this.commits.get(path.split("/git/commits/")[1]);
+      }
+      if (path.includes("/git/trees/")) {
+        return {
+          truncated: false,
+          tree: Object.keys(this.trees.get(path.split("/git/trees/")[1])!).map((
+            path,
+          ) => ({ path, type: "blob" })),
+        };
       }
       if (path.includes("/contents/")) {
         const name = decodeURIComponent(path.split("/contents/")[1]);

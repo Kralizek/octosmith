@@ -329,6 +329,21 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
       ) {
         return { initialized: false };
       }
+      if (error instanceof GitHubRequestError && error.status === 404) {
+        const branches = await this.client.get<
+          readonly {
+            readonly name: string;
+            readonly commit: { readonly sha: string };
+          }[]
+        >(this.repo(repository) + "/branches", { per_page: 100 });
+        if (branches.length > 0) {
+          return {
+            initialized: true,
+            branch: branches[0].name,
+            head: branches[0].commit.sha,
+          };
+        }
+      }
       throw error;
     }
   }

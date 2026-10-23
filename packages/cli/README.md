@@ -34,16 +34,21 @@ octosmith apply -p .
 
 For in-scope repositories matching a template, `apply` automatically initializes
 missing Git history before installing managed rulesets, even without managed
-files. Local Git is required only for bootstrap. `plan` reports initialization
-without mutating the repository. The initial branch is the declared
-`repository.settings.default_branch`, or bootstrap-only `main` when omitted.
-Initialized repositories preserve their default branch unless the root
+files. Initialization is API-only; Git is not a local dependency. `plan` reports
+initialization without mutating the repository. The initial branch is the
+declared `repository.settings.default_branch`, or bootstrap-only `main` when
+omitted. Initialized repositories preserve their default branch unless the root
 `repositories.settings.default_branch_drift: enforce` policy is set and the
 template explicitly declares a branch that already exists.
 
-Direct delivery includes managed files in the root commit; PR delivery starts
-with an empty commit and delivers files through the normal PR workflow. Existing
-and inherited policies are never bypassed. See the
+The first commit contains the reserved, recognizable
+`.github/.octosmith-bootstrap` file. Direct delivery adds desired files and
+removes it in one subsequent commit. PR delivery removes it in the managed-file
+PR, or a cleanup-only PR when no files are declared. Managed rulesets are
+deferred until that cleanup PR merges. Existing and inherited policies are never
+bypassed. Recognized partial bootstrap state is recovered by a fresh plan
+without another initial commit; unexpected reserved-file contents are reported
+and preserved. See the
 [configuration guide](../../docs/configuration.md#default-branch-and-automatic-initialization)
 for protection, concurrency, and retry limitations.
 

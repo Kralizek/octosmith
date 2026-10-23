@@ -280,6 +280,11 @@ async function inspectResource(
         ...(current.history?.initialized === false
           ? { uninitialized: true }
           : { baseSha: current.filesBaseSha }),
+        ...(current.bootstrapFile
+          ? { bootstrapCleanup: { sha: current.bootstrapFile.sha } }
+          : current.history?.initialized === false
+          ? { bootstrapCleanup: { afterInitialization: true } }
+          : {}),
         files: [...(desired.files ?? [])].sort((left, right) =>
           left.path < right.path ? -1 : left.path > right.path ? 1 : 0
         ),

@@ -33,6 +33,10 @@ import type {
 } from "../state/types.ts";
 import type { RuntimeReference } from "../configuration/runtime_references.ts";
 import type { ApplyEvaluation, Operation, Plan } from "./types.ts";
+import {
+  assertBootstrapFileOwned,
+  assertNoBootstrapFileDeclarations,
+} from "../state/bootstrap.ts";
 
 /** Build the operations required to move current state to desired state. */
 export function buildPlan(
@@ -54,13 +58,21 @@ export function buildPlan(
   const collections = desired.collections ?? "explicit";
   const skipped = options.skippedRuntimeReferences ?? [];
   const empty = current.history?.initialized === false;
-  const branch = empty || desired.defaultBranchDrift === "enforce"
+  assertNoBootstrapFileDeclarations(desired.files ?? []);
+  if (current.bootstrapFile) assertBootstrapFileOwned(current.bootstrapFile);
+  const lifecycle = empty || current.bootstrapFile !== undefined;
+  const pending = current.bootstrapBranchPending;
+  const branch = empty || pending || desired.defaultBranchDrift === "enforce"
     ? desired.settings?.defaultBranch ??
-      (empty ? "main" : current.settings.defaultBranch)
+      (empty || pending ? "main" : current.settings.defaultBranch)
     : current.settings.defaultBranch;
 
-  if (empty) {
-    operations.push({ type: "initialize-repository", branch });
+  if (empty || pending) {
+    operations.push({
+      type: "initialize-repository",
+      branch,
+      ...(pending && { expectedHead: pending.head }),
+    });
   }
 
   if (
@@ -72,7 +84,13 @@ export function buildPlan(
       "Managed file snapshot does not match the execution branch",
     );
   }
-  if (empty) planFiles(current, desired, operations);
+  if (lifecycle) {
+    planFiles(current, desired, operations);
+    operations.push({
+      type: "cleanup-repository-bootstrap",
+      ...(current.bootstrapFile && { sha: current.bootstrapFile.sha }),
+    });
+  }
 
   planRepositorySettings(
     current,
@@ -100,7 +118,9 @@ export function buildPlan(
     ),
   );
   planTeams(current, desired, operations, collections);
-  planRulesets(current, desired, operations, collections);
+  if (!lifecycle || desired.fileDelivery === "direct") {
+    planRulesets(current, desired, operations, collections);
+  }
   planEnvironments(
     current,
     desired,
@@ -108,12 +128,12 @@ export function buildPlan(
     collections,
     skipped.filter((reference) => reference.scope === "environment"),
   );
-  if (!empty) planFiles(current, desired, operations);
+  if (!lifecycle) planFiles(current, desired, operations);
 
   return {
     repository: desired.repository,
     operations,
-    ...((empty || current.filesBaseSha !== undefined) && {
+    ...((lifecycle || current.filesBaseSha !== undefined) && {
       managedFiles: {
         branch: empty
           ? branch
@@ -121,6 +141,12 @@ export function buildPlan(
         ...(empty
           ? { uninitialized: true as const }
           : { baseSha: current.filesBaseSha! }),
+        ...(lifecycle &&
+          {
+            bootstrapCleanup: current.bootstrapFile
+              ? { sha: current.bootstrapFile.sha }
+              : { afterInitialization: true as const },
+          }),
         files: [...(desired.files ?? [])].sort((left, right) =>
           left.path < right.path ? -1 : left.path > right.path ? 1 : 0
         ),
@@ -144,6 +170,7 @@ function planRepositorySettings(
     {
       ...desired.settings,
       defaultBranch: current.history?.initialized !== false &&
+          !current.bootstrapBranchPending &&
           desired.defaultBranchDrift === "enforce"
         ? desired.settings.defaultBranch
         : undefined,
@@ -795,7 +822,12 @@ export function buildApplyEvaluations(
     ) {
       evaluations.push({
         type: "ruleset",
-        details: { name: ruleset.name },
+        details: {
+          name: ruleset.name,
+          ...((current?.history?.initialized === false ||
+            current?.bootstrapFile !== undefined) &&
+            desired.fileDelivery !== "direct" && { deferred: true }),
+        },
       });
     }
   }
@@ -840,6 +872,12 @@ function operationEvaluation(
   current?: CurrentState,
 ): ApplyEvaluation {
   switch (operation.type) {
+    case "cleanup-repository-bootstrap":
+      return {
+        type: "bootstrap-cleanup",
+        details: { action: "remove" },
+        operation,
+      };
     case "initialize-repository":
       return {
         type: "repository-initialization",

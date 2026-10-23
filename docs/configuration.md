@@ -144,32 +144,57 @@ branches to reconcile an initialized repository. Managed files use the preserved
 default branch under `ignore`, or the explicitly enforced target under
 `enforce`.
 
-Bootstrap requires local Git on `PATH` and HTTPS Git access with the configured
-GitHub credential. It uses an isolated temporary repository, a deterministic
-Octosmith commit identity, and a single root commit. No global Git settings or
-placeholder files are created. Temporary state is removed on success or failure.
+Bootstrap uses only GitHub APIs and does not require Git to be installed. The
+Contents API creates `.github/.octosmith-bootstrap` in the first commit on the
+selected branch. No README is created. The reserved file explains its purpose
+and contains stable, versioned Octosmith ownership markers. Templates, including
+fragments, cannot manage this path, even with `ensure: absent`. Unrecognized
+contents produce an actionable conflict and are never overwritten or deleted.
 
-With `repositories.file_changes.mode: direct`, all effective managed files are
-included in that initial commit and are not committed again by normal delivery.
-With `pull_request` (the CLI default), the root commit is empty and managed
-files continue through the normal owned PR workflow. GitHub's resulting branch,
-default branch, and file snapshot are checked before continuing.
+GitHub supports an explicitly selected initial branch through the Contents API,
+but may retain its previously configured default branch in metadata. Octosmith
+verifies the new root commit and owned file, updates the default through the
+repository API when required, and verifies the final state. It never creates an
+extra branch as a fallback. The credential needs Contents write and, when the
+default needs completion, Administration write. API failures, including servers
+that cannot establish the requested branch, are reported rather than bypassed.
 
-Bootstrap precedes all planned ruleset creates and updates. Existing repository
-and inherited organization policies remain active; Octosmith neither disables
-them nor requests a bypass. If they reject the initial push, the error includes
-the Git restriction. An administrator must arrange a policy-compliant initial
-commit or adjust policy through an authorized process. In particular, bootstrap
-does not sign commits or bypass required signatures.
+With `repositories.file_changes.mode: direct`, the existing Git Data file
+executor adds all desired files and deletes the bootstrap file in one subsequent
+commit. Even a fileless template gets a cleanup commit, leaving an empty tree.
+With `pull_request` (the CLI default), the initial commit contains only the
+bootstrap file; the first managed-file PR removes it alongside desired changes.
+A fileless template gets a cleanup-only PR. The file stays on the target branch
+until the PR is merged. Repeated applies reuse the owned PR, and a PR closed
+without merging can be recreated normally.
 
-Saved executable plans record an explicit uninitialized-state precondition and
-are rejected if another actor initializes the repository. Pushes also protect
-the initial ref against overwrites and check for concurrent refs afterward. Git
-has no transaction asserting that every other ref remains absent: a simultaneous
-first push to a different branch can leave both branches present. Octosmith
-reports that race for inspection and a fresh plan, without deleting or
-overwriting either branch. A fresh apply after a later partial failure observes
-the existing history and does not bootstrap again.
+Bootstrap and initial file reconciliation precede Octosmith-managed protections.
+Direct cleanup finishes before ruleset creates or updates. In PR mode, managed
+ruleset changes are explicitly deferred until cleanup has merged; a later apply
+installs them. This also applies to already initialized repositories still
+containing the owned file. Unrelated initialized repositories keep normal order.
+Existing repository and inherited organization policies remain active
+throughout. If they block initialization or cleanup, their actual restriction is
+reported. An administrator must provide policy-compliant intervention; no bypass
+or temporary disabling is attempted.
+
+Saved plans record explicit initialization, ownership and cleanup preconditions
+and reject changed history, contents or commit SHAs. A saved empty-state plan
+cannot initialize a repository another actor initialized. Regenerate a plan
+after partial application: recognized bootstrap state resumes cleanup without
+another first commit. If the first commit succeeded but default selection
+failed, recovery verifies the same owned root commit and sole branch before
+completing that selection. If cleanup succeeded but its response was lost, fresh
+planning observes the completed state and does not repeat it. Pre-revision
+bootstrap plans without a cleanup contract must also be regenerated; ordinary
+legacy plans remain compatible.
+
+GitHub's Contents API has no conditional "repository still has no history"
+transaction. A concurrent first commit may cause a conflict or leave an
+additional owned bootstrap commit; Octosmith detects non-root or changed-branch
+results, does not overwrite user content, and stops before default changes or
+protections. Inspect such races and create a fresh plan. There is no Git
+subprocess fallback.
 
 ### Squash merge commit settings
 

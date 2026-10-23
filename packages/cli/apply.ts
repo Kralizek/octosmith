@@ -114,7 +114,6 @@ export function createGitHubRuntime(
         bootstrap: new GitHubRepositoryBootstrap(
           client,
           loaded.configuration.organization,
-          options.token,
         ),
         client,
         owner: loaded.configuration.organization,
@@ -151,6 +150,11 @@ export function createGitHubRuntime(
           ...(resource.current.history?.initialized === false
             ? { uninitialized: true }
             : { baseSha: resource.current.filesBaseSha }),
+          ...(resource.current.bootstrapFile
+            ? { bootstrapCleanup: { sha: resource.current.bootstrapFile.sha } }
+            : resource.current.history?.initialized === false
+            ? { bootstrapCleanup: { afterInitialization: true } }
+            : {}),
           files: [...(resource.desired.files ?? [])].sort((left, right) =>
             left.path < right.path ? -1 : left.path > right.path ? 1 : 0
           ),
@@ -455,7 +459,8 @@ function validateFileDeliveryPreconditions(
   const hasFileOperations = resource.plan.operations.some((operation) =>
     operation.type === "create-file" ||
     operation.type === "update-file" ||
-    operation.type === "delete-file"
+    operation.type === "delete-file" ||
+    operation.type === "cleanup-repository-bootstrap"
   );
   if (!hasFileOperations) {
     return;

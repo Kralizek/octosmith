@@ -204,6 +204,7 @@ Deno.test("strict empty collections can remove resources; explicit cannot", asyn
       "second",
     );
     assertEquals(sparse, [
+      { scope: "repository", permission: "administration", access: "write" },
       { scope: "repository", permission: "contents", access: "write" },
       { scope: "repository", permission: "pull_requests", access: "write" },
     ]);
@@ -228,7 +229,7 @@ Deno.test("strict empty collections can remove resources; explicit cannot", asyn
   }
 });
 
-Deno.test("empty nested repository settings do not imply administration access", async () => {
+Deno.test("bootstrap default-branch completion requires administration even for empty settings", async () => {
   const root = await configuration();
   try {
     assertEquals(
@@ -237,6 +238,7 @@ Deno.test("empty nested repository settings do not imply administration access",
         "fourth",
       ),
       [
+        { scope: "repository", permission: "administration", access: "write" },
         { scope: "repository", permission: "contents", access: "write" },
         { scope: "repository", permission: "pull_requests", access: "write" },
       ],
@@ -376,6 +378,7 @@ repositories:
         await loadConfigurationDirectory(root),
       ),
       [
+        { scope: "repository", permission: "administration", access: "write" },
         { scope: "repository", permission: "contents", access: "write" },
         { scope: "repository", permission: "pull_requests", access: "write" },
       ],

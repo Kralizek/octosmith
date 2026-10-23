@@ -6,6 +6,10 @@ import {
 } from "../mod.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
 import { GitHubRequestError } from "./client.ts";
+import {
+  assertBootstrapFileOwned,
+  BOOTSTRAP_FILE_PATH,
+} from "../state/bootstrap.ts";
 
 /** Read the current GitHub state needed for the supplied desired state. */
 export async function readCurrentState(
@@ -65,14 +69,22 @@ export async function readCurrentState(
     settings.defaultBranch,
   );
   const empty = history?.initialized === false;
-  const desiredBranch = empty || desired.defaultBranchDrift === "enforce"
-    ? desired.settings?.defaultBranch ??
-      (empty ? "main" : settings.defaultBranch)
-    : settings.defaultBranch;
+  const recovering = history?.initialized === true &&
+    history.branch !== settings.defaultBranch;
+  const desiredBranch =
+    empty || recovering || desired.defaultBranchDrift === "enforce"
+      ? desired.settings?.defaultBranch ??
+        (empty || recovering ? "main" : settings.defaultBranch)
+      : settings.defaultBranch;
+  if (recovering && history.branch !== desiredBranch) {
+    throw new Error(
+      "Repository has history but its configured default branch is missing. Inspect branches and complete initialization manually; Octosmith will not create another branch.",
+    );
+  }
   const filesBranch = operations === undefined
     ? desiredBranch
     : fileExecutionBranch(settings.defaultBranch, operations);
-  if (!empty && desiredBranch !== settings.defaultBranch) {
+  if (!empty && !recovering && desiredBranch !== settings.defaultBranch) {
     try {
       await source.getBranchHead(repository, desiredBranch);
     } catch (error) {
@@ -102,9 +114,24 @@ export async function readCurrentState(
       }),
     ]),
   ];
-  const filesBaseSha = options.authoritativeFiles && !empty
-    ? await source.getBranchHead(repository, filesBranch)
+  const snapshotHead = !empty && history?.initialized
+    ? history.branch === filesBranch
+      ? history.head
+      : await source.getBranchHead(repository, filesBranch)
     : undefined;
+  const bootstrapFile = snapshotHead !== undefined
+    ? await source.getFile(repository, BOOTSTRAP_FILE_PATH, snapshotHead)
+    : undefined;
+  if (bootstrapFile) assertBootstrapFileOwned(bootstrapFile);
+  if (recovering && !bootstrapFile) {
+    throw new Error(
+      "Incomplete repository initialization has no recognized bootstrap file; inspect the default branch manually",
+    );
+  }
+  const filesBaseSha =
+    !empty && (options.authoritativeFiles || bootstrapFile !== undefined)
+      ? snapshotHead ?? await source.getBranchHead(repository, filesBranch)
+      : undefined;
   const files = empty ? [] : await readOwnedFiles(
     source,
     repository,
@@ -117,6 +144,11 @@ export async function readCurrentState(
     repository,
     ...(history !== undefined &&
       { history: { initialized: history.initialized } }),
+    ...(bootstrapFile !== undefined && { bootstrapFile }),
+    ...(recovering &&
+      {
+        bootstrapBranchPending: { branch: history.branch, head: history.head },
+      }),
     settings,
     customProperties: desired.customProperties === undefined
       ? {}

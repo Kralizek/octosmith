@@ -1,6 +1,9 @@
 import type { ManagedFileSnapshot, Operation, Plan } from "../mod.ts";
 import type { PullRequestResult } from "../report/types.ts";
-import { assertPersistedOperationsExecutable } from "../plan/operation_contract.ts";
+import {
+  assertBootstrapPlanExecutable,
+  assertPersistedOperationsExecutable,
+} from "../plan/operation_contract.ts";
 
 /** Describes apply operation status. */
 export type ApplyOperationStatus = "applied" | "failed" | "skipped";
@@ -47,6 +50,7 @@ export async function applyPlan(
   options: ApplyPlanOptions = {},
 ): Promise<ApplyPlanResult> {
   assertPersistedOperationsExecutable(plan.operations);
+  assertBootstrapPlanExecutable(plan);
   const preparedSink = sink.prepare
     ? await sink.prepare(
       plan.repository,
@@ -77,7 +81,8 @@ export async function applyPlan(
       });
     } catch (error) {
       failed = true;
-      bootstrapFailed = operation.type === "initialize-repository";
+      bootstrapFailed = operation.type === "initialize-repository" ||
+        operation.type === "cleanup-repository-bootstrap";
       results.push({
         operation,
         status: "failed",

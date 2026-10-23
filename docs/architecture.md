@@ -138,27 +138,50 @@ This keeps the planner testable without GitHub.
 ### Repository bootstrap
 
 The state source probes repository history separately from the managed-file
-branch. Only GitHub's specific empty-repository response is mapped to an
-uninitialized domain state; missing branches and other API failures remain
-errors. The planner emits `initialize-repository` first, ahead of settings,
-ruleset creation or updates, environments, and file delivery. Initialized
-repositories retain their existing operation order.
+branch. Only GitHub's specific empty-repository response means uninitialized;
+other failures remain errors. When metadata names a missing default branch,
+existing branches distinguish partial initialization from an empty repository.
 
-`RepositoryBootstrap` is a reusable library boundary, independent of CLI
-commands and repository creation. `GitHubRepositoryBootstrap` checks GitHub
-preconditions, uses an isolated local Git push, and verifies GitHub's result.
-GitHub's Git Data API cannot create the first reference in an empty repository,
-even when a root commit object exists, so bootstrap alone uses local Git.
+`RepositoryBootstrap` remains a reusable library boundary, independent of CLI
+commands and repository creation. `GitHubRepositoryBootstrap` uses only public
+APIs: a Contents API create, without a replacement SHA, establishes the first
+commit on the selected branch. GitHub can retain its old configured default
+branch in metadata, so bootstrap verifies the sole branch, parentless commit,
+owned file and root tree before setting the default through the repository API.
+It verifies the final branch and default again rather than silently accepting a
+fallback. This sequence was verified against a disposable github.com repository.
+No Git subprocess, local Git workspace, or Git installation is required.
 
-Direct delivery consumes file-create operations in the root commit and verifies
-them at the resulting commit. PR delivery creates an empty root commit and
-replaces the tagged uninitialized file snapshot with the authoritative GitHub
-base SHA before calling the existing PR reconciler. Preparation still resolves
-runtime dependencies before mutation, and bootstrap failure blocks dependent
-operations. Persisted plans include history in the operation's state contract;
-they never replay initialization against changed history. The configuration and
-artifact versions remain unchanged; older consumers reject the new operation or
-snapshot variant rather than executing it incorrectly.
+The reserved `.github/.octosmith-bootstrap` path, content, and permanent
+versioned ownership markers are centralized in the state model. Templates cannot
+declare it. Current bootstrap ownership is separate from user files, and cleanup
+is an explicit internal operation with its own immutable SHA precondition. Both
+file executors materialize that operation as a deletion only after recognizing
+the ownership markers; explanatory wording is not the ownership signature.
+
+Direct mode batches desired files and bootstrap deletion into one subsequent Git
+Data commit. PR mode adds the deletion to the authoritative file delta,
+including cleanup-only PRs, using the existing ownership, locking, and PR
+lifecycle logic. Cleanup-only empty trees use the actual zero-entry Git tree
+object: GitHub rejects an empty tree-creation request but accepts that tree when
+creating the commit. The executor verifies that no unrelated entries remain
+before selecting it.
+
+Initialization and initial file delivery precede managed protections. Direct
+cleanup completes before rulesets; PR mode defers all managed ruleset changes
+until cleanup is absent from the target branch. Ordinary initialized
+repositories without bootstrap state retain their existing operation order.
+Existing policies are never disabled or bypassed.
+
+Preparation and exact replay share the existing executable-resource boundary.
+Saved plans hash history, bootstrap ownership, commit and cleanup dependencies;
+their internal operation and snapshot must agree. A partial default-branch
+update can resume only against the same verified owned root commit and sole
+branch. Fresh retries after cleanup or response loss observe remote state and do
+not initialize again. Configuration and artifact versions remain unchanged.
+Normal legacy plans still replay; older bootstrap plans lacking the cleanup
+contract must be regenerated, and older consumers reject the new cleanup
+operation.
 
 ## Persisted executable plans
 

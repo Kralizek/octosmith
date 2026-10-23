@@ -26,6 +26,9 @@ export type ManagedFileSnapshot =
   & {
     readonly branch: string;
     readonly files: readonly DesiredFile[];
+    readonly bootstrapCleanup?: { readonly sha: string } | {
+      readonly afterInitialization: true;
+    };
   }
   & (
     | { readonly baseSha: string; readonly uninitialized?: never }
@@ -35,6 +38,7 @@ export type ManagedFileSnapshot =
 /** Describes apply item type. */
 export type ApplyItemType =
   | "repository-initialization"
+  | "bootstrap-cleanup"
   | "repository-settings"
   | "custom-property"
   | "actions-settings"
@@ -57,6 +61,7 @@ export interface ApplyEvaluation {
 /** Describes operation. */
 export type Operation =
   | InitializeRepositoryOperation
+  | CleanupRepositoryBootstrapOperation
   | UpdateRepositorySettingsOperation
   | SetCustomPropertyOperation
   | UpdateActionsSettingsOperation
@@ -83,6 +88,13 @@ export type Operation =
 export interface InitializeRepositoryOperation {
   readonly type: "initialize-repository";
   readonly branch: string;
+  readonly expectedHead?: string;
+}
+
+/** Remove the recognized reserved file through the configured file delivery mode. */
+export interface CleanupRepositoryBootstrapOperation {
+  readonly type: "cleanup-repository-bootstrap";
+  readonly sha?: string;
 }
 
 /** Describes update repository settings operation. */
