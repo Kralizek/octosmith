@@ -116,6 +116,13 @@ Do not retry with unchanged Octosmith 0.9.0. Review this fix and use a release
 containing it, or run the CLI from this reviewed checkout. No rule relaxation,
 App bypass, manual branch creation/deletion, or secret rewrite is required.
 
+For a secret-free retry, the existing root configuration must already set
+`repositories.settings.secrets: manual`. `--include-secrets=false` respects that
+policy; it does not force exclusion when the policy is `automatic` or omitted
+(the default). If the configuration is not already manual, stop and obtain
+separate authorization for a policy change or an apply that includes secrets. Do
+not change the control configuration as part of this retry.
+
 In an authorized shell, authenticate as the same App through the normal token
 minting mechanism. Do not print the token. Keep the control repository unchanged
 and substitute its existing checkout path below:
@@ -130,9 +137,10 @@ deno run -A /workspaces/Octosmith/packages/cli/mod.ts plan "$REPOSITORY" \
 
 Review the fresh plan before applying it. It must target only the intended
 repository and contain only the expected managed-file change. Stop if repository
-configuration or other unexpected operations appear. Confirm that no other
-reconciliation is running and that `octosmith/reconcile-lock` is absent. Do not
-manually remove a lock if one appears; establish its owner first.
+configuration, secret writes or removals, or other unexpected operations appear.
+Confirm that no other reconciliation is running and that
+`octosmith/reconcile-lock` is absent. Do not manually remove a lock if one
+appears; establish its owner first.
 
 After explicit authorization for the reviewed file-only apply:
 
@@ -141,8 +149,10 @@ deno run -A /workspaces/Octosmith/packages/cli/mod.ts apply \
   --path "$CONTROL_REPO/github" --plan "$PLAN"
 ```
 
-Saved plans use their recorded secret policy, so excluding secrets must happen
-when creating the plan, not merely on the saved-plan apply command. A stale
+Saved plans retain their recorded operations and secret exclusions. Neither the
+current policy nor `--include-secrets=false` on `apply --plan` removes secret
+operations from an existing artifact. Create a fresh plan under the manual
+policy and review it; do not reuse a plan containing secret operations. A stale
 target requires a fresh plan, not a force retry. After success, verify one open
 Octosmith PR targeting the planned branch, the intended file diff, an unchanged
 target SHA, and no lock ref. Leave the PR open for review; do not merge or close
