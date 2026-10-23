@@ -75,6 +75,27 @@ destination names before omitting skipped bindings. The engine uses the same
 exclusions for planning ownership and reports; environment update operations
 also record preserved names so strict cleanup cannot remove skipped values.
 
+## Explicit desired state and bootstrap defaults
+
+Implicit defaults may support initialization, but must never become implicitly
+enforced desired state. Bootstrap-time fallbacks and declared template values
+serve different purposes: a fallback selects a starting value when creating a
+resource, while reconciliation owns only values explicitly declared by the
+effective desired state.
+
+For example, an uninitialized Git repository may use `main` as its fallback
+initial branch when the template omits `repository.settings.default_branch`.
+That does not declare `main` as its desired default branch for subsequent
+reconciliation. Even if default-branch drift enforcement is enabled globally,
+Octosmith must not infer an enforceable branch name from the bootstrap fallback.
+An explicitly declared default branch may be reconciled according to the
+configured drift policy.
+
+Normalization, planning, and persisted plans must retain the distinction
+between an absent declaration and an explicit value. Never turn an implicit
+bootstrap fallback into a managed property by materializing it into desired
+state.
+
 ## Secret policy
 
 Fresh secret policy is computed in the core with `shouldIncludeSecrets` and
