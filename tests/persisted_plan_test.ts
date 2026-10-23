@@ -7,6 +7,8 @@ import {
 import { stringify } from "@std/yaml";
 import {
   applyPlan,
+  BOOTSTRAP_FILE_CONTENT,
+  BOOTSTRAP_FILE_PATH,
   buildApplyEvaluations,
   buildPlan,
   createPersistedPlanArtifact,
@@ -30,6 +32,308 @@ import { applyPersistedPlan } from "../packages/cli/persisted.ts";
 import { apply } from "../packages/cli/apply.ts";
 import { executeExecutableResources } from "../packages/cli/execution.ts";
 import { main } from "../packages/cli/mod.ts";
+
+Deno.test("bootstrap persisted plans round trip and reject concurrent initialization", async () => {
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: "all" },
+        fileChanges: { mode: "direct" },
+      },
+    },
+    templates: {
+      "repository:code": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: {},
+      },
+    },
+  };
+  const metadata = { name: "sample", teams: [], properties: {} };
+  const desired = await resolveDesiredState(loaded, metadata, () => "unused");
+  const current = currentState({
+    history: { initialized: false },
+    filesBranch: "main",
+  });
+  const plan = buildPlan(current, desired);
+  const artifact = parsePersistedPlanArtifact(
+    JSON.parse(
+      JSON.stringify(
+        await createPersistedPlanArtifact(loaded, [{
+          desired,
+          current,
+          plan,
+          evaluations: buildApplyEvaluations(desired, plan.operations, current),
+        }]),
+      ),
+    ),
+  );
+  assertEquals(artifact.resources[0].managedFiles, {
+    bootstrapCleanup: { afterInitialization: true },
+    branch: "main",
+    uninitialized: true,
+    files: [],
+  });
+  let changed = false;
+  let preparations = 0;
+  let applications = 0;
+  const runtime = {
+    discover: () => Promise.resolve({ repositories: [metadata], failures: [] }),
+    read: () =>
+      Promise.resolve(
+        changed ? { ...current, history: { initialized: true } } : current,
+      ),
+    prepare() {
+      preparations++;
+    },
+    recheck() {},
+    apply() {
+      applications++;
+      return Promise.resolve({ repository: "sample", operations: [] });
+    },
+  };
+  await applyPersistedPlan(runtime, loaded, artifact, () => {});
+  assertEquals(applications, 1);
+  changed = true;
+  preparations = 0;
+  await assertRejects(
+    () => applyPersistedPlan(runtime, loaded, artifact, () => {}),
+    Error,
+    "stale",
+  );
+  assertEquals(preparations, 0);
+  assertEquals(applications, 1);
+});
+
+Deno.test("persisted cleanup owns only its reserved snapshot and rejects changed content, commits, and completion", async () => {
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: {
+        scope: { include: "all" },
+        fileChanges: { mode: "direct" },
+      },
+    },
+    templates: {
+      "repository:code": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: {},
+      },
+    },
+  };
+  const metadata = { name: "sample", teams: [], properties: {} };
+  const desired = await resolveDesiredState(loaded, metadata, () => "unused");
+  const current = currentState({
+    history: { initialized: true },
+    filesBranch: "main",
+    filesBaseSha: "root",
+    bootstrapFile: {
+      path: BOOTSTRAP_FILE_PATH,
+      content: BOOTSTRAP_FILE_CONTENT,
+      sha: "owned-sha",
+    },
+  });
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    current,
+    desired,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }]);
+  assertEquals(parsePersistedPlanArtifact(structuredClone(artifact)), artifact);
+  let preparations = 0;
+  for (
+    const changed of [
+      {
+        ...current,
+        bootstrapFile: {
+          ...current.bootstrapFile!,
+          content: "unrecognized replacement",
+          sha: "other",
+        },
+      },
+      { ...current, filesBaseSha: "advanced" },
+      {
+        ...current,
+        bootstrapFile: undefined,
+        filesBaseSha: "cleanup-committed",
+      },
+    ]
+  ) {
+    await assertRejects(
+      () =>
+        applyPersistedPlan(
+          {
+            discover: () =>
+              Promise.resolve({ repositories: [metadata], failures: [] }),
+            read: () => Promise.resolve(changed),
+            prepare() {
+              preparations++;
+            },
+            recheck() {},
+            apply() {
+              throw new Error("must not mutate");
+            },
+          },
+          loaded,
+          artifact,
+          () => {},
+        ),
+      Error,
+      "stale",
+    );
+  }
+  assertEquals(preparations, 0);
+  for (
+    const tamper of [
+      "drop-snapshot",
+      "drop-operation",
+      "change-sha",
+      "ordinary-delete",
+    ] as const
+  ) {
+    const changed = structuredClone(artifact);
+    const resource = changed.resources[0];
+    if (tamper === "drop-snapshot") {
+      delete (resource.managedFiles as { bootstrapCleanup?: unknown })
+        .bootstrapCleanup;
+    }
+    if (tamper === "drop-operation") {
+      (resource.operations as Operation[]).splice(0);
+    }
+    if (tamper === "change-sha") {
+      (resource.operations as Operation[])[0] = {
+        type: "cleanup-repository-bootstrap",
+        sha: "other",
+      };
+    }
+    if (tamper === "ordinary-delete") {
+      (resource.operations as Operation[])[0] = {
+        type: "delete-file",
+        path: BOOTSTRAP_FILE_PATH,
+        sha: "owned-sha",
+      };
+    }
+    assertThrows(() => parsePersistedPlanArtifact(changed));
+  }
+});
+
+Deno.test("pre-revision bootstrap plans without internal cleanup require regeneration", async () => {
+  const loaded = legacyFixtureConfiguration();
+  const current = currentState({
+    history: { initialized: false },
+    filesBranch: "main",
+  });
+  const desired = await resolveDesiredState(loaded, {
+    name: "sample",
+    teams: [],
+    properties: {},
+  }, () => "unused");
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    current,
+    desired,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }]);
+  (artifact.resources[0].operations as Operation[]).splice(
+    artifact.resources[0].operations.findIndex((operation) =>
+      operation.type === "cleanup-repository-bootstrap"
+    ),
+    1,
+  );
+  assertThrows(
+    () => parsePersistedPlanArtifact(artifact),
+    Error,
+    "recreate older bootstrap plans",
+  );
+});
+
+Deno.test("persisted artifact parsing rejects cleanup reordered across protections and other mutations", async () => {
+  const loaded = legacyFixtureConfiguration();
+  const current = currentState({
+    history: { initialized: true },
+    filesBranch: "main",
+    filesBaseSha: "root",
+    bootstrapFile: {
+      path: BOOTSTRAP_FILE_PATH,
+      content: BOOTSTRAP_FILE_CONTENT,
+      sha: "owned",
+    },
+  });
+  const desired = await resolveDesiredState(loaded, {
+    name: "sample",
+    teams: [],
+    properties: {},
+  }, () => "unused");
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    current,
+    desired,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }]);
+  assertEquals(parsePersistedPlanArtifact(structuredClone(artifact)), artifact);
+  for (
+    const mutation of [
+      "create-protection",
+      "update-protection",
+      "settings-before-cleanup",
+      "files-after-cleanup",
+      "branch-after-cleanup",
+    ]
+  ) {
+    const changed = structuredClone(artifact);
+    const operations = changed.resources[0].operations as Operation[];
+    if (mutation === "create-protection") {
+      operations.unshift({
+        type: "create-ruleset",
+        ruleset: {
+          name: "protect",
+          target: "push",
+          enforcement: "active",
+          rules: [],
+          bypassActors: [],
+        },
+      });
+    }
+    if (mutation === "update-protection") {
+      operations.unshift({
+        type: "update-ruleset",
+        id: 1,
+        changes: { name: "protect", enforcement: "active" },
+      });
+    }
+    if (mutation === "settings-before-cleanup") {
+      operations.splice(1, 0, operations.shift()!);
+    }
+    if (mutation === "files-after-cleanup") {
+      operations.splice(1, 0, {
+        type: "create-file",
+        file: { path: "managed.txt", ensure: "exact", content: "managed" },
+      });
+    }
+    if (mutation === "branch-after-cleanup") {
+      operations.push({
+        type: "update-repository-settings",
+        settings: { defaultBranch: "develop" },
+      });
+    }
+    assertThrows(
+      () => parsePersistedPlanArtifact(changed),
+      Error,
+      "Bootstrap cleanup",
+    );
+  }
+});
 
 function legacyFixtureConfiguration(
   secrets?: "automatic" | "manual",

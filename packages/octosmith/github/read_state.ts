@@ -5,6 +5,11 @@ import {
   type Operation,
 } from "../mod.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
+import { GitHubRequestError } from "./client.ts";
+import {
+  assertBootstrapFileOwned,
+  BOOTSTRAP_FILE_PATH,
+} from "../state/bootstrap.ts";
 
 /** Read the current GitHub state needed for the supplied desired state. */
 export async function readCurrentState(
@@ -59,9 +64,40 @@ export async function readCurrentState(
       : Promise.resolve([]),
   ]);
 
+  const history = await source.getRepositoryHistory?.(
+    repository,
+    settings.defaultBranch,
+  );
+  const empty = history?.initialized === false;
+  const recovering = history?.initialized === true &&
+    history.branch !== settings.defaultBranch;
+  const desiredBranch =
+    empty || recovering || desired.defaultBranchDrift === "enforce"
+      ? desired.settings?.defaultBranch ??
+        (empty || recovering ? "main" : settings.defaultBranch)
+      : settings.defaultBranch;
+  if (recovering && history.branch !== desiredBranch) {
+    throw new Error(
+      "Repository has history but its configured default branch is missing. Inspect branches and complete initialization manually; Octosmith will not create another branch.",
+    );
+  }
   const filesBranch = operations === undefined
-    ? desired.settings?.defaultBranch ?? settings.defaultBranch
+    ? desiredBranch
     : fileExecutionBranch(settings.defaultBranch, operations);
+  if (!empty && !recovering && desiredBranch !== settings.defaultBranch) {
+    try {
+      await source.getBranchHead(repository, desiredBranch);
+    } catch (error) {
+      if (!(error instanceof GitHubRequestError) || error.status !== 404) {
+        throw error;
+      }
+      throw new Error(
+        "Cannot enforce default branch " + desiredBranch +
+          ". Ensure the branch exists and is accessible before applying; Octosmith does not create branches on initialized repositories.",
+        { cause: error },
+      );
+    }
+  }
   const paths = [
     ...new Set([
       ...(desired.files ?? []).map((file) => file.path),
@@ -78,10 +114,25 @@ export async function readCurrentState(
       }),
     ]),
   ];
-  const filesBaseSha = options.authoritativeFiles
-    ? await source.getBranchHead(repository, filesBranch)
+  const snapshotHead = !empty && history?.initialized
+    ? history.branch === filesBranch
+      ? history.head
+      : await source.getBranchHead(repository, filesBranch)
     : undefined;
-  const files = await readOwnedFiles(
+  const bootstrapFile = snapshotHead !== undefined
+    ? await source.getFile(repository, BOOTSTRAP_FILE_PATH, snapshotHead)
+    : undefined;
+  if (bootstrapFile) assertBootstrapFileOwned(bootstrapFile);
+  if (recovering && !bootstrapFile) {
+    throw new Error(
+      "Incomplete repository initialization has no recognized bootstrap file; inspect the default branch manually",
+    );
+  }
+  const filesBaseSha =
+    !empty && (options.authoritativeFiles || bootstrapFile !== undefined)
+      ? snapshotHead ?? await source.getBranchHead(repository, filesBranch)
+      : undefined;
+  const files = empty ? [] : await readOwnedFiles(
     source,
     repository,
     paths,
@@ -91,6 +142,13 @@ export async function readCurrentState(
 
   return {
     repository,
+    ...(history !== undefined &&
+      { history: { initialized: history.initialized } }),
+    ...(bootstrapFile !== undefined && { bootstrapFile }),
+    ...(recovering &&
+      {
+        bootstrapBranchPending: { branch: history.branch, head: history.head },
+      }),
     settings,
     customProperties: desired.customProperties === undefined
       ? {}
@@ -145,7 +203,8 @@ export async function readCurrentState(
       : strict
       ? environments
       : filterSparseEnvironments(environments, desired.environments),
-    ...((paths.length > 0 || filesBaseSha !== undefined) && { filesBranch }),
+    ...((empty || paths.length > 0 || filesBaseSha !== undefined) &&
+      { filesBranch }),
     ...(filesBaseSha !== undefined && { filesBaseSha }),
     files,
   };

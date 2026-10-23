@@ -5,6 +5,12 @@ import type { FileChangesPullRequestConfiguration } from "../configuration/types
 import type { PullRequestResult } from "../report/types.ts";
 import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import { GitHubRepositoryStateSource } from "./rest_state_source.ts";
+import { createManagedFileTree } from "./file_tree.ts";
+import {
+  assertBootstrapFileOwned,
+  assertNoBootstrapFileDeclarations,
+  BOOTSTRAP_FILE_PATH,
+} from "../state/bootstrap.ts";
 
 type FileOperation = Extract<Operation, {
   readonly type: "create-file" | "update-file" | "delete-file";
@@ -105,6 +111,28 @@ export async function reconcileFilePullRequest(options: {
   readonly onPullRequest: (result: PullRequestResult) => void | Promise<void>;
 }): Promise<void> {
   const { client, owner, repository, snapshot, settings } = options;
+  if (snapshot.baseSha === undefined) {
+    throw new Error(
+      "Repository must be initialized before pull-request delivery",
+    );
+  }
+  assertNoBootstrapFileDeclarations(snapshot.files);
+  const desiredFiles = [...snapshot.files];
+  if (snapshot.bootstrapCleanup !== undefined) {
+    if (!("sha" in snapshot.bootstrapCleanup)) {
+      throw new Error("Bootstrap cleanup snapshot is not initialized");
+    }
+    const file = await new GitHubRepositoryStateSource(client, owner).getFile(
+      repository,
+      BOOTSTRAP_FILE_PATH,
+      snapshot.baseSha,
+    );
+    if (!file || file.sha !== snapshot.bootstrapCleanup.sha) {
+      throw new Error("Bootstrap cleanup ownership changed since planning");
+    }
+    assertBootstrapFileOwned(file);
+    desiredFiles.push({ path: BOOTSTRAP_FILE_PATH, ensure: "absent" });
+  }
   const fullName = owner + "/" + repository;
   const repo = "/repos/" + encodeURIComponent(owner) + "/" +
     encodeURIComponent(repository);
@@ -138,13 +166,13 @@ export async function reconcileFilePullRequest(options: {
   };
   await assertTarget();
   const files = await Promise.all(
-    snapshot.files.map((file) =>
+    desiredFiles.map((file) =>
       source.getFile(repository, file.path, snapshot.baseSha)
     ),
   );
   const delta = buildFileOperations(
     files.filter((file) => file !== undefined),
-    snapshot.files,
+    desiredFiles,
   );
   const sorted = (operations: readonly FileOperation[]) =>
     [...operations].sort((left, right) =>
@@ -327,22 +355,19 @@ export async function reconcileFilePullRequest(options: {
     );
     const nextTree = delta.length === 0
       ? base.tree
-      : await client.request<{ sha: string }>(
-        "POST",
-        repo + "/git/trees",
-        {
-          body: {
-            base_tree: base.tree.sha,
-            tree: sorted(delta).map((operation) => ({
-              path: filePath(operation),
-              mode: "100644",
-              type: "blob",
-              ...(operation.type === "delete-file"
-                ? { sha: null }
-                : { content: operation.file.content }),
-            })),
-          },
-        },
+      : await createManagedFileTree(
+        client,
+        repo,
+        base.tree.sha,
+        sorted(delta).map((operation) => ({
+          path: filePath(operation),
+          mode: "100644",
+          type: "blob",
+          ...(operation.type === "delete-file"
+            ? { sha: null }
+            : { content: operation.file.content }),
+        })),
+        snapshot.bootstrapCleanup !== undefined,
       );
     const commit = await client.request<{ sha: string }>(
       "POST",

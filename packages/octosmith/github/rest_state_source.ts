@@ -14,8 +14,11 @@ import type {
   TeamPermission,
   Variable,
 } from "../mod.ts";
-import type { GitHubClient } from "./client.ts";
-import type { RepositoryStateSource } from "./state_source.ts";
+import { type GitHubClient, GitHubRequestError } from "./client.ts";
+import type {
+  RepositoryHistory,
+  RepositoryStateSource,
+} from "./state_source.ts";
 
 interface RepositoryResponse {
   readonly name: string;
@@ -309,6 +312,48 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
         };
       }),
     );
+  }
+
+  async getRepositoryHistory(
+    repository: string,
+    defaultBranch: string,
+  ): Promise<RepositoryHistory> {
+    try {
+      const head = await this.getBranchHead(repository, defaultBranch);
+      return { initialized: true, branch: defaultBranch, head };
+    } catch (error) {
+      if (
+        error instanceof GitHubRequestError && error.status === 409 &&
+        (error.details?.message === "Git Repository is empty." ||
+          error.details?.message === "Git Repository is empty")
+      ) {
+        return { initialized: false };
+      }
+      if (error instanceof GitHubRequestError && error.status === 404) {
+        const branches = await this.client.get<
+          readonly {
+            readonly name: string;
+            readonly commit: { readonly sha: string };
+          }[]
+        >(this.repo(repository) + "/branches", { per_page: 100 });
+        if (branches.length > 1) {
+          throw new Error(
+            "Cannot recover repository initialization: configured default branch " +
+              defaultBranch + " is missing and multiple branches exist. " +
+              "Set the intended default branch in GitHub, inspect the bootstrap state, and create a fresh plan.",
+            { cause: error },
+          );
+        }
+        if (branches.length === 1) {
+          return {
+            initialized: true,
+            branch: branches[0].name,
+            head: branches[0].commit.sha,
+          };
+        }
+      }
+      throw error;
+    }
   }
 
   async getBranchHead(repository: string, branch: string): Promise<string> {

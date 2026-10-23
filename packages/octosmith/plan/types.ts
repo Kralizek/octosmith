@@ -22,14 +22,23 @@ export interface Plan {
 }
 
 /** Complete desired managed files and the immutable target they were planned against. */
-export interface ManagedFileSnapshot {
-  readonly branch: string;
-  readonly baseSha: string;
-  readonly files: readonly DesiredFile[];
-}
+export type ManagedFileSnapshot =
+  & {
+    readonly branch: string;
+    readonly files: readonly DesiredFile[];
+    readonly bootstrapCleanup?: { readonly sha: string } | {
+      readonly afterInitialization: true;
+    };
+  }
+  & (
+    | { readonly baseSha: string; readonly uninitialized?: never }
+    | { readonly uninitialized: true; readonly baseSha?: never }
+  );
 
 /** Describes apply item type. */
 export type ApplyItemType =
+  | "repository-initialization"
+  | "bootstrap-cleanup"
   | "repository-settings"
   | "custom-property"
   | "actions-settings"
@@ -51,6 +60,8 @@ export interface ApplyEvaluation {
 
 /** Describes operation. */
 export type Operation =
+  | InitializeRepositoryOperation
+  | CleanupRepositoryBootstrapOperation
   | UpdateRepositorySettingsOperation
   | SetCustomPropertyOperation
   | UpdateActionsSettingsOperation
@@ -72,6 +83,19 @@ export type Operation =
   | CreateFileOperation
   | UpdateFileOperation
   | DeleteFileOperation;
+
+/** Initialize a repository only while it has no Git history. */
+export interface InitializeRepositoryOperation {
+  readonly type: "initialize-repository";
+  readonly branch: string;
+  readonly expectedHead?: string;
+}
+
+/** Remove the recognized reserved file through the configured file delivery mode. */
+export interface CleanupRepositoryBootstrapOperation {
+  readonly type: "cleanup-repository-bootstrap";
+  readonly sha?: string;
+}
 
 /** Describes update repository settings operation. */
 export interface UpdateRepositorySettingsOperation {

@@ -1,5 +1,6 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { join } from "@std/path";
+import { BOOTSTRAP_FILE_PATH } from "../packages/octosmith/mod.ts";
 import {
   effectiveRepositorySelectorIntersection,
   loadConfigurationDirectory,
@@ -19,6 +20,72 @@ const template = {
   match: { include: { names: ["*"] } },
   repository: {},
 };
+
+Deno.test("default branch drift validates ignore and enforce and preserves omitted desired branch", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "templates/default.yml"),
+      JSON.stringify(template),
+    );
+    for (const policy of [undefined, "ignore", "enforce", "rename", true]) {
+      await Deno.writeTextFile(
+        join(root, "octosmith.yml"),
+        JSON.stringify({
+          ...configuration,
+          repositories: {
+            ...configuration.repositories,
+            settings: policy === undefined
+              ? {}
+              : { default_branch_drift: policy },
+          },
+        }),
+      );
+      if (policy === "rename" || policy === true) {
+        await assertRejects(
+          () => loadConfigurationDirectory(root),
+          Error,
+          "default_branch_drift",
+        );
+      } else {
+        assertEquals(await validateConfigurationDirectory(root), []);
+        const loaded = await loadConfigurationDirectory(root);
+        assertEquals(
+          loaded.configuration.repositories.settings?.defaultBranchDrift,
+          policy,
+        );
+      }
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("offline template validation rejects the internal bootstrap path", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      JSON.stringify(configuration),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates/default.yml"),
+      JSON.stringify({
+        ...template,
+        repository: { files: { [BOOTSTRAP_FILE_PATH]: { ensure: "absent" } } },
+      }),
+    );
+    await assertRejects(
+      () => validateConfigurationDirectory(root),
+      Error,
+      "managed exclusively",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 Deno.test("effective selector intersection matches candidates with exclusions", () => {
   const intersection = effectiveRepositorySelectorIntersection(

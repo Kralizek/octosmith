@@ -2,6 +2,7 @@ import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import { parse, stringify } from "@std/yaml";
 import { Ajv2020 } from "ajv/2020";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
+import { BOOTSTRAP_FILE_PATH } from "../packages/octosmith/mod.ts";
 import templateSchema from "../schemas/template.schema.json" with {
   type: "json",
 };
@@ -911,6 +912,10 @@ function fakeInspectionGitHub(
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
     requests.push({ method, url });
+    if (
+      method === "GET" &&
+      url.pathname.endsWith("/contents/" + BOOTSTRAP_FILE_PATH)
+    ) return Promise.resolve(json({ message: "Not Found" }, 404));
     const path = url.pathname.replace(/^\/api\/v3/, "");
     if (method === "GET" && path.endsWith("/git/ref/heads/master")) {
       return Promise.resolve(json({ object: { sha: "head" } }));
@@ -1987,6 +1992,11 @@ function fakePreflightGitHub(
   events: string[],
 ): typeof globalThis.fetch {
   return (input, init) => {
+    if (
+      new URL(String(input)).pathname.endsWith(
+        "/contents/" + BOOTSTRAP_FILE_PATH,
+      )
+    ) return Promise.resolve(json({ message: "Not Found" }, 404));
     const url = new URL(String(input));
     const method = init?.method ?? "GET";
     requests.push({ method, url });
@@ -2049,6 +2059,10 @@ function fakeGitHub(
       : undefined;
 
     requests.push({ method, url, body });
+    if (
+      method === "GET" &&
+      url.pathname.endsWith("/contents/" + BOOTSTRAP_FILE_PATH)
+    ) return json({ message: "Not Found" }, 404);
 
     if (method === "GET" && url.pathname.endsWith("/git/ref/heads/master")) {
       return json({ object: { sha: "head" } });
@@ -2954,6 +2968,8 @@ async function fileConfigurationDirectory(
       "version: 1",
       "organization: acme",
       "repositories:",
+      "  settings:",
+      "    default_branch_drift: enforce",
       "  scope:",
       "    include:",
       "      names:",
@@ -2994,6 +3010,9 @@ function fakeFileDeliveryGitHub(
   requests: CapturedRequest[],
   state?: FileDeliveryState,
 ): typeof globalThis.fetch {
+  const absentBootstrap = (input: RequestInfo | URL) =>
+    new URL(input instanceof Request ? input.url : String(input)).pathname
+      .endsWith("/contents/" + BOOTSTRAP_FILE_PATH);
   const snapshots = new Map<
     string,
     { content: string; sha: string } | undefined
@@ -3002,6 +3021,7 @@ function fakeFileDeliveryGitHub(
   let lockHead: string | undefined;
   let pull: Record<string, unknown> | undefined;
   return async (input, init) => {
+    if (absentBootstrap(input)) return json({ message: "Not Found" }, 404);
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
@@ -3239,6 +3259,10 @@ function fakeSecretGitHub(
   requests: CapturedRequest[],
 ): typeof globalThis.fetch {
   return (input, init) => {
+    if (
+      new URL(input instanceof Request ? input.url : String(input)).pathname
+        .endsWith("/contents/" + BOOTSTRAP_FILE_PATH)
+    ) return Promise.resolve(json({ message: "Not Found" }, 404));
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
@@ -3277,6 +3301,10 @@ function fakePartialGitHub(
   requests: CapturedRequest[],
 ): typeof globalThis.fetch {
   return async (input, init) => {
+    if (
+      new URL(input instanceof Request ? input.url : String(input)).pathname
+        .endsWith("/contents/" + BOOTSTRAP_FILE_PATH)
+    ) return json({ message: "Not Found" }, 404);
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();

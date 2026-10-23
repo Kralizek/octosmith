@@ -91,10 +91,9 @@ Octosmith must not infer an enforceable branch name from the bootstrap fallback.
 An explicitly declared default branch may be reconciled according to the
 configured drift policy.
 
-Normalization, planning, and persisted plans must retain the distinction
-between an absent declaration and an explicit value. Never turn an implicit
-bootstrap fallback into a managed property by materializing it into desired
-state.
+Normalization, planning, and persisted plans must retain the distinction between
+an absent declaration and an explicit value. Never turn an implicit bootstrap
+fallback into a managed property by materializing it into desired state.
 
 ## Secret policy
 
@@ -135,6 +134,60 @@ The GitHub layer is split around interfaces:
 - mutation sinks translate operations into GitHub API calls
 
 This keeps the planner testable without GitHub.
+
+### Repository bootstrap
+
+The state source probes repository history separately from the managed-file
+branch. Only GitHub's specific empty-repository response means uninitialized;
+other failures remain errors. When metadata names a missing default branch,
+existing branches distinguish partial initialization from an empty repository.
+
+`RepositoryBootstrap` remains a reusable library boundary, independent of CLI
+commands and repository creation. `GitHubRepositoryBootstrap` uses only public
+APIs: a Contents API create, without a replacement SHA, establishes the first
+commit on the selected branch. GitHub can retain its old configured default
+branch in metadata, so bootstrap verifies the sole branch, parentless commit,
+owned file and root tree before setting the default through the repository API.
+It verifies the final branch and default again rather than silently accepting a
+fallback. This sequence was verified against a disposable github.com repository.
+No Git subprocess, local Git workspace, or Git installation is required.
+
+The reserved `.github/.octosmith-bootstrap` path, content, and permanent
+versioned ownership markers are centralized in the state model. Templates cannot
+declare it. Current bootstrap ownership is separate from user files, and cleanup
+is an explicit internal operation with its own immutable SHA precondition. Both
+file executors materialize that operation as a deletion only after recognizing
+the ownership markers; explanatory wording is not the ownership signature. Those
+markers claim the whole file as disposable lifecycle state, including arbitrary
+edited interior text. They are not authentication or proof of origin; the
+reviewed content and SHA separately provide concurrency preconditions.
+
+Direct mode batches desired files and bootstrap deletion into one subsequent Git
+Data commit. PR mode adds the deletion to the authoritative file delta,
+including cleanup-only PRs, using the existing ownership, locking, and PR
+lifecycle logic. Cleanup-only empty trees use the actual zero-entry Git tree
+object: GitHub rejects an empty tree-creation request but accepts that tree when
+creating the commit. The executor verifies that no unrelated entries remain
+before selecting it.
+
+Initialization and initial file delivery precede managed protections. Direct
+cleanup completes before rulesets; PR mode defers all managed ruleset changes
+until cleanup is absent from the target branch. Ordinary initialized
+repositories without bootstrap state retain their existing operation order.
+Executable plans enforce that ordering before preparation. An enforced branch
+switch alone may precede cleanup and file delivery; other settings stay after
+cleanup, and direct delivery targets the immutable snapshot branch. Existing
+policies are never disabled or bypassed.
+
+Preparation and exact replay share the existing executable-resource boundary.
+Saved plans hash history, bootstrap ownership, commit and cleanup dependencies;
+their internal operation and snapshot must agree. A partial default-branch
+update can resume only against the same verified owned root commit and sole
+branch. Fresh retries after cleanup or response loss observe remote state and do
+not initialize again. Configuration and artifact versions remain unchanged.
+Normal legacy plans still replay; older bootstrap plans lacking the cleanup
+contract must be regenerated, and older consumers reject the new cleanup
+operation.
 
 ## Persisted executable plans
 

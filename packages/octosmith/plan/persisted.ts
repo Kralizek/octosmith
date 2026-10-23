@@ -14,7 +14,10 @@ import type {
 } from "../configuration/runtime_references.ts";
 import { type ContentHash, hashCanonical } from "./canonical.ts";
 import { projectOwnedCurrentState } from "./owned_state.ts";
-import { assertPersistedOperationsExecutable } from "./operation_contract.ts";
+import {
+  assertBootstrapPlanExecutable,
+  assertPersistedOperationsExecutable,
+} from "./operation_contract.ts";
 import planSchema from "./plan.schema.json" with {
   type: "json",
 };
@@ -200,6 +203,8 @@ function normalizeConfigurationForHash(
         }),
       },
       settings: {
+        ...(repositories.settings?.defaultBranchDrift === "enforce" &&
+          { defaultBranchDrift: "enforce" }),
         collectionManagement: repositories.settings?.collectionManagement ??
           "explicit",
         unmatchedRepositories: repositories.settings?.unmatchedRepositories ??
@@ -388,6 +393,11 @@ export function parsePersistedPlanArtifact(
 
   for (const resource of artifact.resources) {
     assertPersistedOperationsExecutable(resource.operations);
+    assertBootstrapPlanExecutable({
+      repository: resource.name,
+      operations: resource.operations,
+      managedFiles: resource.managedFiles,
+    });
 
     for (const evaluation of resource.evaluations) {
       if (

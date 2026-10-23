@@ -125,10 +125,37 @@
         "managedFiles": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["branch", "baseSha", "files"],
+          "required": ["branch", "files"],
+          "oneOf": [
+            {
+              "required": ["baseSha"],
+              "not": { "required": ["uninitialized"] }
+            },
+            {
+              "required": ["uninitialized"],
+              "not": { "required": ["baseSha"] }
+            }
+          ],
           "properties": {
             "branch": { "type": "string", "minLength": 1 },
             "baseSha": { "type": "string", "minLength": 1 },
+            "uninitialized": { "const": true },
+            "bootstrapCleanup": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["sha"],
+                  "properties": { "sha": { "type": "string", "minLength": 1 } }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["afterInitialization"],
+                  "properties": { "afterInitialization": { "const": true } }
+                }
+              ]
+            },
             "files": {
               "type": "array",
               "items": {
@@ -210,6 +237,25 @@
     },
     "operation": {
       "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "const": "cleanup-repository-bootstrap" },
+            "sha": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "branch"],
+          "properties": {
+            "type": { "const": "initialize-repository" },
+            "expectedHead": { "type": "string", "minLength": 1 },
+            "branch": { "type": "string", "minLength": 1 }
+          }
+        },
         {
           "type": "object",
           "additionalProperties": false,
@@ -712,6 +758,8 @@
       "properties": {
         "type": {
           "enum": [
+            "repository-initialization",
+            "bootstrap-cleanup",
             "repository-settings",
             "custom-property",
             "actions-settings",

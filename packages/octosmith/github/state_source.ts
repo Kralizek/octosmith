@@ -11,9 +11,23 @@ import type {
   Variable,
 } from "../mod.ts";
 
+/** Git history availability, independent of any requested execution branch. */
+export type RepositoryHistory =
+  | { readonly initialized: false }
+  | {
+    readonly initialized: true;
+    readonly branch: string;
+    readonly head: string;
+  };
+
 /** Describes repository state source. */
 export interface RepositoryStateSource {
   getRepositorySettings(repository: string): Promise<CurrentRepositorySettings>;
+
+  getRepositoryHistory?(
+    repository: string,
+    defaultBranch: string,
+  ): Promise<RepositoryHistory>;
 
   getCustomProperties(
     repository: string,

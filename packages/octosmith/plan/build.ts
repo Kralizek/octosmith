@@ -33,6 +33,10 @@ import type {
 } from "../state/types.ts";
 import type { RuntimeReference } from "../configuration/runtime_references.ts";
 import type { ApplyEvaluation, Operation, Plan } from "./types.ts";
+import {
+  assertBootstrapFileOwned,
+  assertNoBootstrapFileDeclarations,
+} from "../state/bootstrap.ts";
 
 /** Build the operations required to move current state to desired state. */
 export function buildPlan(
@@ -53,23 +57,69 @@ export function buildPlan(
   const operations: Operation[] = [];
   const collections = desired.collections ?? "explicit";
   const skipped = options.skippedRuntimeReferences ?? [];
+  const empty = current.history?.initialized === false;
+  assertNoBootstrapFileDeclarations(desired.files ?? []);
+  if (current.bootstrapFile) assertBootstrapFileOwned(current.bootstrapFile);
+  const lifecycle = empty || current.bootstrapFile !== undefined;
+  const pending = current.bootstrapBranchPending;
+  const branch = empty || pending || desired.defaultBranchDrift === "enforce"
+    ? desired.settings?.defaultBranch ??
+      (empty || pending ? "main" : current.settings.defaultBranch)
+    : current.settings.defaultBranch;
+
+  if (empty || pending) {
+    operations.push({
+      type: "initialize-repository",
+      branch,
+      ...(pending && { expectedHead: pending.head }),
+    });
+  }
 
   if (
     desired.files?.length &&
     (current.filesBranch ?? current.settings.defaultBranch) !==
-      (desired.settings?.defaultBranch ?? current.settings.defaultBranch)
+      branch
   ) {
     throw new Error(
       "Managed file snapshot does not match the execution branch",
     );
   }
-
+  const settingsOperations: Operation[] = [];
   planRepositorySettings(
     current,
     desired,
-    operations,
+    settingsOperations,
     options.offlineValidation ?? false,
   );
+  const settingsAfterCleanup: Operation[] = [];
+  for (const operation of settingsOperations) {
+    if (
+      lifecycle && operation.type === "update-repository-settings" &&
+      operation.settings.defaultBranch !== undefined
+    ) {
+      const { defaultBranch, ...settings } = operation.settings;
+      operations.push({
+        type: "update-repository-settings",
+        settings: { defaultBranch },
+      });
+      if (Object.keys(settings).length > 0) {
+        settingsAfterCleanup.push({
+          type: "update-repository-settings",
+          settings,
+        });
+      }
+    } else {
+      settingsAfterCleanup.push(operation);
+    }
+  }
+  if (lifecycle) {
+    planFiles(current, desired, operations);
+    operations.push({
+      type: "cleanup-repository-bootstrap",
+      ...(current.bootstrapFile && { sha: current.bootstrapFile.sha }),
+    });
+  }
+  operations.push(...settingsAfterCleanup);
   planCustomProperties(current, desired, operations, collections);
   planActions(
     current,
@@ -90,7 +140,9 @@ export function buildPlan(
     ),
   );
   planTeams(current, desired, operations, collections);
-  planRulesets(current, desired, operations, collections);
+  if (!lifecycle || desired.fileDelivery === "direct") {
+    planRulesets(current, desired, operations, collections);
+  }
   planEnvironments(
     current,
     desired,
@@ -98,15 +150,25 @@ export function buildPlan(
     collections,
     skipped.filter((reference) => reference.scope === "environment"),
   );
-  planFiles(current, desired, operations);
+  if (!lifecycle) planFiles(current, desired, operations);
 
   return {
     repository: desired.repository,
     operations,
-    ...(current.filesBaseSha !== undefined && {
+    ...((lifecycle || current.filesBaseSha !== undefined) && {
       managedFiles: {
-        branch: current.filesBranch ?? current.settings.defaultBranch,
-        baseSha: current.filesBaseSha,
+        branch: empty
+          ? branch
+          : current.filesBranch ?? current.settings.defaultBranch,
+        ...(empty
+          ? { uninitialized: true as const }
+          : { baseSha: current.filesBaseSha! }),
+        ...(lifecycle &&
+          {
+            bootstrapCleanup: current.bootstrapFile
+              ? { sha: current.bootstrapFile.sha }
+              : { afterInitialization: true as const },
+          }),
         files: [...(desired.files ?? [])].sort((left, right) =>
           left.path < right.path ? -1 : left.path > right.path ? 1 : 0
         ),
@@ -127,7 +189,14 @@ function planRepositorySettings(
 
   const changes = diffRepositorySettings(
     current.settings,
-    desired.settings,
+    {
+      ...desired.settings,
+      defaultBranch: current.history?.initialized !== false &&
+          !current.bootstrapBranchPending &&
+          desired.defaultBranchDrift === "enforce"
+        ? desired.settings.defaultBranch
+        : undefined,
+    },
     { offlineValidation },
   );
 
@@ -775,7 +844,12 @@ export function buildApplyEvaluations(
     ) {
       evaluations.push({
         type: "ruleset",
-        details: { name: ruleset.name },
+        details: {
+          name: ruleset.name,
+          ...((current?.history?.initialized === false ||
+            current?.bootstrapFile !== undefined) &&
+            desired.fileDelivery !== "direct" && { deferred: true }),
+        },
       });
     }
   }
@@ -820,6 +894,18 @@ function operationEvaluation(
   current?: CurrentState,
 ): ApplyEvaluation {
   switch (operation.type) {
+    case "cleanup-repository-bootstrap":
+      return {
+        type: "bootstrap-cleanup",
+        details: { action: "remove" },
+        operation,
+      };
+    case "initialize-repository":
+      return {
+        type: "repository-initialization",
+        details: { branch: operation.branch },
+        operation,
+      };
     case "update-repository-settings":
       return {
         type: "repository-settings",

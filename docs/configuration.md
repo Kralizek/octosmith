@@ -60,6 +60,7 @@ repositories:
   settings:
     collection_management: explicit
     unmatched_repositories: ignore
+    default_branch_drift: ignore
 ```
 
 Repository scope may use names, teams, visibility, and custom properties. Name
@@ -116,6 +117,94 @@ repository:
 
 Templates can manage repository settings, teams, custom properties, Actions
 settings and values, Dependabot secrets, rulesets, environments, and files.
+
+### Default branch and automatic initialization
+
+`repository.settings.default_branch` remains an optional string:
+
+```yaml
+repository:
+  settings:
+    default_branch: develop
+```
+
+`plan` detects repositories without Git history and reports an initialization
+operation without changing GitHub. `apply` initializes them automatically,
+including repositories whose effective template has no managed files. The
+initial branch is the explicitly declared branch, or `main` when omitted. That
+fallback is used only for initialization and never becomes managed desired
+state.
+
+The root policy `repositories.settings.default_branch_drift` defaults to
+`ignore`. On initialized repositories, `ignore` preserves the current default
+branch even when the template declares a different branch. `enforce` corrects
+drift only when the effective template explicitly declares `default_branch`. The
+target branch must already exist; Octosmith never creates, renames, or deletes
+branches to reconcile an initialized repository. Managed files use the preserved
+default branch under `ignore`, or the explicitly enforced target under
+`enforce`.
+
+Bootstrap uses only GitHub APIs and does not require Git to be installed. The
+Contents API creates `.github/.octosmith-bootstrap` in the first commit on the
+selected branch. No README is created. The reserved file explains its purpose
+and contains stable, versioned Octosmith ownership markers. Templates, including
+fragments, cannot manage this path, even with `ensure: absent`. Unrecognized
+contents produce an actionable conflict and are never overwritten or deleted.
+
+Both boundary markers are the permanent ownership contract for the entire file,
+not proof of who created it. Keeping both markers makes all enclosed content
+eligible for cleanup, even if it has been edited or completely repurposed.
+Octosmith deliberately does not match the explanatory prose, so legitimate
+wording changes remain compatible across upgrades. Do not store user data inside
+those markers. To repurpose the contents, move them outside the reserved path;
+removing either marker instead causes a conflict and prevents automatic
+deletion. Edits after planning still invalidate the reviewed SHA and saved-state
+checks.
+
+GitHub supports an explicitly selected initial branch through the Contents API,
+but may retain its previously configured default branch in metadata. Octosmith
+verifies the new root commit and owned file, updates the default through the
+repository API when required, and verifies the final state. It never creates an
+extra branch as a fallback. The credential needs Contents write and, when the
+default needs completion, Administration write. API failures, including servers
+that cannot establish the requested branch, are reported rather than bypassed.
+
+With `repositories.file_changes.mode: direct`, the existing Git Data file
+executor adds all desired files and deletes the bootstrap file in one subsequent
+commit. Even a fileless template gets a cleanup commit, leaving an empty tree.
+With `pull_request` (the CLI default), the initial commit contains only the
+bootstrap file; the first managed-file PR removes it alongside desired changes.
+A fileless template gets a cleanup-only PR. The file stays on the target branch
+until the PR is merged. Repeated applies reuse the owned PR, and a PR closed
+without merging can be recreated normally.
+
+Bootstrap and initial file reconciliation precede Octosmith-managed protections.
+Direct cleanup finishes before ruleset creates or updates. In PR mode, managed
+ruleset changes are explicitly deferred until cleanup has merged; a later apply
+installs them. This also applies to already initialized repositories still
+containing the owned file. Unrelated initialized repositories keep normal order.
+Existing repository and inherited organization policies remain active
+throughout. If they block initialization or cleanup, their actual restriction is
+reported. An administrator must provide policy-compliant intervention; no bypass
+or temporary disabling is attempted.
+
+Saved plans record explicit initialization, ownership and cleanup preconditions
+and reject changed history, contents or commit SHAs. A saved empty-state plan
+cannot initialize a repository another actor initialized. Regenerate a plan
+after partial application: recognized bootstrap state resumes cleanup without
+another first commit. If the first commit succeeded but default selection
+failed, recovery verifies the same owned root commit and sole branch before
+completing that selection. If cleanup succeeded but its response was lost, fresh
+planning observes the completed state and does not repeat it. Pre-revision
+bootstrap plans without a cleanup contract must also be regenerated; ordinary
+legacy plans remain compatible.
+
+GitHub's Contents API has no conditional "repository still has no history"
+transaction. A concurrent first commit may cause a conflict or leave an
+additional owned bootstrap commit; Octosmith detects non-root or changed-branch
+results, does not overwrite user content, and stops before default changes or
+protections. Inspect such races and create a fresh plan. There is no Git
+subprocess fallback.
 
 ### Squash merge commit settings
 

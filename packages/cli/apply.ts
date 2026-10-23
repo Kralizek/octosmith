@@ -30,6 +30,7 @@ import {
   type ApplyPlanResult,
   discoverRepositories,
   FetchGitHubClient,
+  GitHubRepositoryBootstrap,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
   type GitHubResponseTrace,
@@ -110,6 +111,10 @@ export function createGitHubRuntime(
         mode: "pull_request",
       };
       sink = new GitHubRepositoryMutationSink({
+        bootstrap: new GitHubRepositoryBootstrap(
+          client,
+          loaded.configuration.organization,
+        ),
         client,
         owner: loaded.configuration.organization,
         secretValue,
@@ -142,13 +147,21 @@ export function createGitHubRuntime(
         const expected = {
           branch: resource.current.filesBranch ??
             resource.current.settings.defaultBranch,
-          baseSha: resource.current.filesBaseSha,
+          ...(resource.current.history?.initialized === false
+            ? { uninitialized: true }
+            : { baseSha: resource.current.filesBaseSha }),
+          ...(resource.current.bootstrapFile
+            ? { bootstrapCleanup: { sha: resource.current.bootstrapFile.sha } }
+            : resource.current.history?.initialized === false
+            ? { bootstrapCleanup: { afterInitialization: true } }
+            : {}),
           files: [...(resource.desired.files ?? [])].sort((left, right) =>
             left.path < right.path ? -1 : left.path > right.path ? 1 : 0
           ),
         };
         if (
-          resource.current.filesBaseSha === undefined ||
+          (resource.current.filesBaseSha === undefined &&
+            resource.current.history?.initialized !== false) ||
           resource.plan.managedFiles === undefined ||
           (await hashCanonical(expected)).hash !==
             (await hashCanonical(resource.plan.managedFiles)).hash
@@ -446,7 +459,8 @@ function validateFileDeliveryPreconditions(
   const hasFileOperations = resource.plan.operations.some((operation) =>
     operation.type === "create-file" ||
     operation.type === "update-file" ||
-    operation.type === "delete-file"
+    operation.type === "delete-file" ||
+    operation.type === "cleanup-repository-bootstrap"
   );
   if (!hasFileOperations) {
     return;

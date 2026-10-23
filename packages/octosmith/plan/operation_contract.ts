@@ -1,5 +1,6 @@
 import { Ajv2020 } from "ajv/2020";
-import type { CurrentState, Operation } from "../mod.ts";
+import type { CurrentState, Operation, Plan } from "../mod.ts";
+import { assertNoBootstrapFileDeclarations } from "../state/bootstrap.ts";
 import planSchema from "./plan.schema.json" with { type: "json" };
 
 const validateExecutableRulesetChanges = new Ajv2020({
@@ -44,6 +45,9 @@ export function persistedOperationContract(
 
   for (const operation of operations) {
     switch (operation.type) {
+      case "initialize-repository":
+      case "cleanup-repository-bootstrap":
+        break;
       case "update-repository-settings":
       case "set-custom-property":
       case "set-team-permission":
@@ -281,6 +285,20 @@ export function persistedOperationContract(
   }
 
   const state: Record<string, unknown> = {};
+  if (
+    operations.some((operation) => operation.type === "initialize-repository")
+  ) {
+    state.history = current.history;
+    state.bootstrapBranchPending = current.bootstrapBranchPending;
+  }
+  if (
+    operations.some((operation) =>
+      operation.type === "cleanup-repository-bootstrap"
+    )
+  ) {
+    state.bootstrapFile = current.bootstrapFile;
+    needsDefaultBranch = true;
+  }
 
   if (Object.keys(actions).length > 0) {
     state.actions = actions;
@@ -319,11 +337,14 @@ export function fileExecutionBranch(
   let branch = defaultBranch;
   let filesBranch: string | undefined;
   for (const operation of operations) {
-    if (operation.type === "update-repository-settings") {
+    if (operation.type === "initialize-repository") {
+      branch = operation.branch;
+    } else if (operation.type === "update-repository-settings") {
       branch = operation.settings.defaultBranch ?? branch;
     } else if (
       operation.type === "create-file" || operation.type === "update-file" ||
-      operation.type === "delete-file"
+      operation.type === "delete-file" ||
+      operation.type === "cleanup-repository-bootstrap"
     ) {
       if (filesBranch !== undefined && filesBranch !== branch) {
         throw new Error(
@@ -340,8 +361,100 @@ export function fileExecutionBranch(
 export function assertPersistedOperationsExecutable(
   operations: readonly Operation[],
 ): void {
+  const initializations = operations.filter((operation) =>
+    operation.type === "initialize-repository"
+  );
+  if (
+    initializations.length > 1 ||
+    (initializations.length === 1 &&
+      operations[0].type !== "initialize-repository")
+  ) {
+    throw new Error(
+      "Repository initialization must be the first and only bootstrap operation",
+    );
+  }
+  if (
+    initializations.some((operation) => operation.expectedHead === undefined) &&
+    operations.some((operation) =>
+      operation.type === "update-file" || operation.type === "delete-file"
+    )
+  ) {
+    throw new Error(
+      "Uninitialized repositories cannot have file update or delete operations",
+    );
+  }
+  const cleanup = operations.filter((operation) =>
+    operation.type === "cleanup-repository-bootstrap"
+  );
+  if (
+    cleanup.length > 1 || (initializations.length > 0 && cleanup.length !== 1)
+  ) {
+    throw new Error(
+      "Repository bootstrap requires exactly one internal cleanup operation; recreate older bootstrap plans",
+    );
+  }
+  if (
+    cleanup.some((operation) => operation.sha === undefined) &&
+    !initializations.some((operation) => operation.expectedHead === undefined)
+  ) {
+    throw new Error(
+      "Deferred bootstrap cleanup requires an uninitialized-state operation",
+    );
+  }
+  const cleanupIndex = operations.findIndex((operation) =>
+    operation.type === "cleanup-repository-bootstrap"
+  );
+  if (cleanupIndex !== -1) {
+    let fileDeliveryStarted = false;
+    let branchSwitched = false;
+    for (const operation of operations.slice(0, cleanupIndex)) {
+      if (operation.type === "initialize-repository") continue;
+      if (
+        operation.type === "create-file" || operation.type === "update-file" ||
+        operation.type === "delete-file"
+      ) {
+        fileDeliveryStarted = true;
+        continue;
+      }
+      if (
+        operation.type === "update-repository-settings" &&
+        operation.settings.defaultBranch !== undefined &&
+        Object.keys(operation.settings).length === 1 && !fileDeliveryStarted &&
+        !branchSwitched && initializations.length === 0
+      ) {
+        branchSwitched = true;
+        continue;
+      }
+      throw new Error(
+        "Bootstrap cleanup must precede protections and other mutations; only initialization, one initial branch-only switch, and managed files may precede cleanup",
+      );
+    }
+    if (
+      operations.slice(cleanupIndex + 1).some((operation) =>
+        operation.type === "create-file" ||
+        operation.type === "update-file" || operation.type === "delete-file" ||
+        (operation.type === "update-repository-settings" &&
+          operation.settings.defaultBranch !== undefined)
+      )
+    ) {
+      throw new Error(
+        "Bootstrap cleanup must follow all managed-file operations and any default-branch switch",
+      );
+    }
+  }
   for (const operation of operations) {
     switch (operation.type) {
+      case "initialize-repository":
+        requireNonEmpty(operation.branch, "initial branch");
+        if (operation.expectedHead !== undefined) {
+          requireNonEmpty(operation.expectedHead, "bootstrap recovery head");
+        }
+        break;
+      case "cleanup-repository-bootstrap":
+        if (operation.sha !== undefined) {
+          requireNonEmpty(operation.sha, "bootstrap file SHA");
+        }
+        break;
       case "update-repository-settings":
       case "update-actions-settings":
       case "update-actions-oidc":
@@ -422,21 +535,71 @@ export function assertPersistedOperationsExecutable(
 
       case "create-file":
         requireNonEmpty(operation.file.path, "file path");
+        assertNoBootstrapFileDeclarations([operation.file]);
         break;
 
       case "update-file":
         requireNonEmpty(operation.file.path, "file path");
+        assertNoBootstrapFileDeclarations([operation.file]);
         requireNonEmpty(operation.sha, "file sha");
         break;
 
       case "delete-file":
         requireNonEmpty(operation.path, "file path");
+        assertNoBootstrapFileDeclarations([{
+          path: operation.path,
+          ensure: "absent",
+        }]);
         requireNonEmpty(operation.sha, "file sha");
         break;
 
       default:
         assertNever(operation);
     }
+  }
+}
+
+/** Verify internal bootstrap operations and their reviewed file snapshot agree. */
+export function assertBootstrapPlanExecutable(plan: Plan): void {
+  const initialization = plan.operations.find((operation) =>
+    operation.type === "initialize-repository"
+  );
+  const cleanup = plan.operations.find((operation) =>
+    operation.type === "cleanup-repository-bootstrap"
+  );
+  const snapshot = plan.managedFiles;
+  if (snapshot) assertNoBootstrapFileDeclarations(snapshot.files);
+  if (!cleanup && snapshot?.bootstrapCleanup === undefined && !initialization) {
+    return;
+  }
+  if (!cleanup || !snapshot?.bootstrapCleanup) {
+    throw new Error(
+      "Bootstrap cleanup requires its reviewed internal file snapshot; recreate the plan",
+    );
+  }
+  const expected = snapshot.bootstrapCleanup;
+  if ("sha" in expected) {
+    if (cleanup.sha !== expected.sha || snapshot.baseSha === undefined) {
+      throw new Error(
+        "Bootstrap cleanup operation does not match its reviewed SHA",
+      );
+    }
+  } else if (
+    cleanup.sha !== undefined || !snapshot.uninitialized || !initialization ||
+    initialization.expectedHead !== undefined
+  ) {
+    throw new Error(
+      "Deferred bootstrap cleanup requires a matching uninitialized snapshot",
+    );
+  }
+  if (
+    initialization && (initialization.branch !== snapshot.branch ||
+      (initialization.expectedHead !== undefined &&
+        initialization.expectedHead !== snapshot.baseSha))
+  ) {
+    throw new Error(
+      "Bootstrap initialization does not match its reviewed branch and head",
+    );
   }
 }
 
@@ -460,7 +623,9 @@ export function persistedOperationSecretSources(
         }
         break;
 
+      case "initialize-repository":
       case "update-repository-settings":
+      case "cleanup-repository-bootstrap":
       case "set-custom-property":
       case "update-actions-settings":
       case "update-actions-oidc":

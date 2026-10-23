@@ -23,6 +23,10 @@ Deno.test("CLI shebang permits running gh for local authentication", async () =>
     new URL("./mod.ts", import.meta.url),
   );
   assertStringIncludes(entrypoint.split("\n", 1)[0], "--allow-run=gh");
+  assertEquals(
+    entrypoint.split("\n", 1)[0].includes("--allow-run=gh,git"),
+    false,
+  );
 });
 
 Deno.test("missing gh returns a clear CLI failure", async () => {

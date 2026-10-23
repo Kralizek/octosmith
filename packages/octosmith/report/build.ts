@@ -26,7 +26,9 @@ export function reportPlannedRepository(
     status: plan.operations.length === 0 ? "unchanged" : "planned",
     items: evaluations.map((evaluation) => ({
       type: evaluation.type,
-      status: evaluation.operation === undefined ? "unchanged" : "planned",
+      status: evaluation.operation === undefined
+        ? evaluation.details.deferred === true ? "skipped" : "unchanged"
+        : "planned",
       details: evaluation.details,
     })),
     ...(diagnostics !== undefined && diagnostics.length > 0 && { diagnostics }),
@@ -61,7 +63,7 @@ export function reportAppliedRepository(
     if (evaluation.operation === undefined) {
       return {
         type: evaluation.type,
-        status: "unchanged",
+        status: evaluation.details.deferred === true ? "skipped" : "unchanged",
         details: evaluation.details,
       };
     }

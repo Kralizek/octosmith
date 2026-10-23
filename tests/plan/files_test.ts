@@ -167,6 +167,7 @@ Deno.test("file planning requires a snapshot of the effective branch", () => {
   const desired = {
     repository: "sample",
     template: "code",
+    defaultBranchDrift: "enforce" as const,
     settings: { defaultBranch: "release" },
     files: [{ path: "managed.txt", ensure: "exact" as const, content: "new" }],
   };

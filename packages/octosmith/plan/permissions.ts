@@ -112,6 +112,11 @@ const organization = (
 });
 
 const operationPermissions = {
+  "initialize-repository": [
+    repository("contents", "write"),
+    repository("administration", "write"),
+  ],
+  "cleanup-repository-bootstrap": [repository("contents", "write")],
   "update-repository-settings": [
     repository("administration", "write"),
   ],

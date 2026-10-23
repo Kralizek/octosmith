@@ -63,7 +63,7 @@ function potentialOperationTypes(
   repository: RepositoryConfiguration,
   strict: boolean,
 ): OperationType[] {
-  const types: OperationType[] = [];
+  const types: OperationType[] = ["initialize-repository"];
 
   if (
     repository.settings &&

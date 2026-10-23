@@ -5,8 +5,91 @@ import {
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryStateSource,
+  GitHubRequestError,
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
+
+Deno.test("repository history distinguishes empty repositories from API failures", async () => {
+  for (
+    const [status, message, empty] of [
+      [409, "Git Repository is empty.", true],
+      [409, "Git Repository is empty", true],
+      [409, "Conflict", false],
+      [404, "Not Found", false],
+      [403, "Resource not accessible by integration", false],
+    ] as const
+  ) {
+    const client = new FetchGitHubClient({
+      token: "test",
+      fetch: () =>
+        Promise.resolve(new Response(JSON.stringify({ message }), { status })),
+    });
+    const source = new GitHubRepositoryStateSource(client, "acme");
+    if (empty) {
+      assertEquals(await source.getRepositoryHistory("sample", "main"), {
+        initialized: false,
+      });
+    } else {
+      await assertRejects(
+        () => source.getRepositoryHistory("sample", "main"),
+        GitHubRequestError,
+        message,
+      );
+    }
+  }
+});
+
+for (
+  const branches of [[], ["main"], ["main", "develop"], ["develop", "main"]]
+) {
+  Deno.test(`missing default branch recovery requires a unique candidate (${branches.join(", ") || "none"})`, async () => {
+    const requests: string[] = [];
+    const source = new GitHubRepositoryStateSource(
+      new FetchGitHubClient({
+        token: "test",
+        fetch: (input, options) => {
+          const path = new URL(String(input)).pathname;
+          requests.push((options?.method ?? "GET") + " " + path);
+          return Promise.resolve(
+            path.endsWith("/branches")
+              ? Response.json(
+                branches.map((name) => ({
+                  name,
+                  commit: { sha: name + "-head" },
+                })),
+              )
+              : Response.json({ message: "Not Found" }, { status: 404 }),
+          );
+        },
+      }),
+      "acme",
+    );
+    if (branches.length === 1) {
+      assertEquals(await source.getRepositoryHistory("sample", "master"), {
+        initialized: true,
+        branch: "main",
+        head: "main-head",
+      });
+    } else if (branches.length > 1) {
+      const error = await assertRejects(
+        () => source.getRepositoryHistory("sample", "master"),
+        Error,
+        "Set the intended default branch in GitHub",
+      );
+      assertEquals(error.cause instanceof GitHubRequestError, true);
+    } else {
+      await assertRejects(
+        () => source.getRepositoryHistory("sample", "master"),
+        GitHubRequestError,
+        "Not Found",
+      );
+    }
+    assertEquals(requests, [
+      "GET /repos/acme/sample/git/ref/heads/master",
+      "GET /repos/acme/sample/branches",
+    ]);
+  });
+}
 
 class PagingClient implements GitHubClient {
   readonly requests: string[] = [];
