@@ -201,6 +201,9 @@ class ReconciliationClient implements GitHubClient {
   failCreate = false;
   failUpdate = false;
   failCleanup = false;
+  atomicErrors?: readonly unknown[];
+  atomicHttpError?: GitHubRequestError;
+  cleanupErrors?: readonly unknown[];
   lastResult?: ApplyPlanResult;
   nextId = 1;
 
@@ -429,14 +432,25 @@ class ReconciliationClient implements GitHubClient {
       if (refUpdates.length === 1 && this.failCleanup) {
         throw new Error("Lock deletion failed");
       }
+      if (refUpdates.length === 1 && this.cleanupErrors) {
+        return { errors: this.cleanupErrors };
+      }
       if (refUpdates.length > 1) {
         this.beforeAtomic?.();
-        assertEquals(refUpdates.length, 3);
-        assertEquals(refUpdates[0].force, false);
-        assertEquals(refUpdates[0].afterOid, refUpdates[0].beforeOid);
-        assertEquals(refUpdates[1].name, "refs/heads/octosmith/reconcile");
-        assertEquals(refUpdates[2].name, "refs/heads/octosmith/reconcile-lock");
-        assertEquals(refUpdates[2].force, false);
+        if (this.atomicHttpError) throw this.atomicHttpError;
+        if (this.atomicErrors) return { errors: this.atomicErrors };
+        if (refUpdates.some((ref) => ref.name === "refs/heads/main")) {
+          return {
+            errors: [{
+              type: "FORBIDDEN",
+              message: "Changes must be made through a pull request.",
+            }],
+          };
+        }
+        assertEquals(refUpdates.length, 2);
+        assertEquals(refUpdates[0].name, "refs/heads/octosmith/reconcile");
+        assertEquals(refUpdates[1].name, "refs/heads/octosmith/reconcile-lock");
+        assertEquals(refUpdates[1].force, false);
       }
       if (
         refUpdates.some((ref) =>
@@ -444,7 +458,12 @@ class ReconciliationClient implements GitHubClient {
             ref.beforeOid
         )
       ) {
-        return { errors: [{ message: "Expected old SHA mismatch" }] };
+        return {
+          errors: [{
+            message:
+              "Something went wrong while executing your query. Please include `probe-correlation-id` when reporting this issue.",
+          }],
+        };
       }
       for (const ref of refUpdates) {
         if (ref.afterOid === "0".repeat(40)) {
@@ -505,6 +524,217 @@ class ReconciliationClient implements GitHubClient {
 const fileA = { path: "A.md", ensure: "exact", content: "A" } as const;
 const fileB = { path: "B.md", ensure: "exact", content: "B" } as const;
 
+Deno.test("atomic API rejection preserves GitHub messages and codes without request payloads", async () => {
+  const client = new ReconciliationClient();
+  client.atomicErrors = [
+    { type: "FORBIDDEN", message: "Repository rule violations found" },
+    { extensions: { code: "UNPROCESSABLE" }, message: "Reference rejected" },
+  ];
+  const error = await assertRejects(
+    () => client.reconcile([fileA]),
+    Error,
+    "acme/sample during branch transaction: [FORBIDDEN] Repository rule violations found; [UNPROCESSABLE] Reference rejected",
+  );
+  assert(!error.message.includes("may have changed"));
+  assert(!error.message.includes("repository-id"));
+  assertEquals(client.refs.has("octosmith/reconcile"), false);
+  assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+  assertEquals(client.pulls, []);
+});
+
+Deno.test("atomic HTTP rejection reports repository, stage and status without raw response data", async () => {
+  const client = new ReconciliationClient();
+  client.atomicHttpError = new GitHubRequestError(
+    403,
+    "Forbidden",
+    JSON.stringify({
+      message: "Resource not accessible by integration",
+      request: { authorization: "Bearer sensitive-token" },
+    }),
+  );
+  const error = await assertRejects(
+    () => client.reconcile([fileA]),
+    Error,
+    "acme/sample during branch transaction (HTTP 403): Resource not accessible by integration",
+  );
+  assert(!error.message.includes("sensitive-token"));
+  assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+});
+
+Deno.test("first reconciliation atomically creates both absent reserved refs with zero expected OIDs", async () => {
+  const client = new ReconciliationClient();
+  client.beforeAtomic = () => {
+    assertEquals(client.refs.has("octosmith/reconcile"), false);
+    assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+  };
+  client.afterAtomic = () => {
+    assertEquals(
+      client.refs.get("octosmith/reconcile-lock"),
+      client.refs.get("octosmith/reconcile"),
+    );
+  };
+  const target = client.refs.get("main");
+  await client.reconcile([fileA]);
+  const transactions = client.requests.filter((request) =>
+    request.path === "/graphql"
+  );
+  const updates = (transactions[0].body as {
+    variables: { input: { refUpdates: { beforeOid: string }[] } };
+  }).variables.input.refUpdates;
+  assertEquals(updates.map((update) => update.beforeOid), [
+    "0".repeat(40),
+    "0".repeat(40),
+  ]);
+  assertEquals(transactions.length, 2);
+  assertEquals(client.files(), { "A.md": "A" });
+  assertEquals(client.refs.get("main"), target);
+  assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+});
+
+Deno.test("reconciliation after a merged PR and deleted branch preserves merged files and opens a new PR", async () => {
+  const client = new ReconciliationClient();
+  await client.reconcile([fileA]);
+  client.advanceTarget(client.files());
+  client.pulls[0].state = "closed";
+  client.refs.delete("octosmith/reconcile");
+  await client.reconcile([fileA, fileB]);
+  assertEquals(client.pulls.length, 2);
+  assertEquals(client.pulls[0].state, "closed");
+  assertEquals(client.pulls[1].state, "open");
+  assertEquals(client.files(), { "A.md": "A", "B.md": "B" });
+  assertEquals(client.files("main"), { "A.md": "A" });
+  assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+});
+
+Deno.test("opaque GitHub rejection identifies observed ref conflicts without modifying refs or deleting another lock", async () => {
+  const client = new ReconciliationClient();
+  client.beforeAtomic = () => {
+    client.refs.set("octosmith/reconcile-lock", "competing-lock");
+  };
+  const error = await assertRejects(
+    () => client.reconcile([fileA]),
+    Error,
+    "Observed reference conflict: refs/heads/octosmith/reconcile-lock",
+  );
+  assert(error.message.includes("probe-correlation-id"));
+  assertEquals(client.refs.has("octosmith/reconcile"), false);
+  assertEquals(client.refs.get("octosmith/reconcile-lock"), "competing-lock");
+  assertEquals(client.pulls, []);
+});
+
+Deno.test("protected target rejects even a no-op update but managed reconciliation never submits one", async () => {
+  const client = new ReconciliationClient();
+  const target = client.refs.get("main");
+  const response = await client.request<{ errors: { message: string }[] }>(
+    "POST",
+    "/graphql",
+    {
+      body: {
+        variables: {
+          input: {
+            refUpdates: [
+              {
+                name: "refs/heads/main",
+                beforeOid: target,
+                afterOid: target,
+                force: false,
+              },
+              {
+                name: "refs/heads/octosmith/reconcile",
+                beforeOid: "0".repeat(40),
+                afterOid: target,
+                force: false,
+              },
+            ],
+          },
+        },
+      },
+    },
+  );
+  assertEquals(
+    response.errors[0].message,
+    "Changes must be made through a pull request.",
+  );
+  assertEquals(client.refs.has("octosmith/reconcile"), false);
+  await client.reconcile([fileA]);
+  assertEquals(client.pulls.length, 1);
+  assertEquals(client.refs.get("main"), target);
+  assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+});
+
+for (const existing of [false, true]) {
+  Deno.test(`target movement during lock acquisition aborts PR work and cleans its lock (existing=${existing})`, async () => {
+    const client = new ReconciliationClient();
+    if (existing) await client.reconcile([fileA]);
+    const before = client.requests.length;
+    client.beforeAtomic = () => client.advanceTarget({ upstream: "changed" });
+    await assertRejects(
+      () => client.reconcile([fileA, fileB]),
+      Error,
+      "target changed since planning",
+    );
+    assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+    assertEquals(client.pulls.length, existing ? 1 : 0);
+    assertEquals(client.files("main"), { upstream: "changed" });
+    assertEquals(
+      client.requests.slice(before).filter((request) =>
+        request.method !== "GET" &&
+        /\/(pulls|labels)(\/\d+)?$/.test(request.path)
+      ),
+      [],
+    );
+  });
+}
+
+Deno.test("overlapping first reconciliations cannot replace the newly acquired branch or lock", async () => {
+  const client = new ReconciliationClient();
+  client.afterRequest = async (_method, path, options) => {
+    if (
+      path === "/graphql" &&
+      (options.body as { variables: { input: { refUpdates: unknown[] } } })
+          .variables.input.refUpdates.length === 2
+    ) {
+      client.afterRequest = undefined;
+      const head = client.refs.get("octosmith/reconcile");
+      await assertRejects(
+        () => client.reconcile([fileB]),
+        Error,
+        "Observed reference conflict: refs/heads/octosmith/reconcile-lock",
+      );
+      assertEquals(client.refs.get("octosmith/reconcile"), head);
+      assertEquals(client.refs.get("octosmith/reconcile-lock"), head);
+    }
+  };
+  await client.reconcile([fileA]);
+  assertEquals(client.files(), { "A.md": "A" });
+  assertEquals(client.pulls.length, 1);
+  assertEquals(client.refs.has("octosmith/reconcile-lock"), false);
+});
+
+Deno.test("GraphQL cleanup rejection retains stage, GitHub code and original PR failure", async () => {
+  const client = new ReconciliationClient();
+  client.failCreate = true;
+  client.cleanupErrors = [{
+    type: "FORBIDDEN",
+    message: "Cannot delete protected lock reference",
+  }];
+  const error = await assertRejects(
+    () => client.reconcile([fileA]),
+    Error,
+    "PR creation failed. Reconciliation lock cleanup failed",
+  );
+  assert(error.message.includes("acme/sample during lock cleanup"));
+  assert(
+    error.message.includes(
+      "[FORBIDDEN] Cannot delete protected lock reference",
+    ),
+  );
+  assertEquals(
+    client.refs.get("octosmith/reconcile-lock"),
+    client.refs.get("octosmith/reconcile"),
+  );
+});
+
 for (const action of ["opened", "updated", "closed"] as const) {
   for (
     const boundary of [
@@ -526,7 +756,7 @@ for (const action of ["opened", "updated", "closed"] as const) {
           } | undefined;
           const moved = boundary === "branch transaction"
             ? path === "/graphql" &&
-              body?.variables?.input.refUpdates.length === 3
+              body?.variables?.input.refUpdates.length === 2
             : boundary === "lock release"
             ? path === "/graphql" &&
               body?.variables?.input.refUpdates.length === 1
@@ -773,7 +1003,7 @@ Deno.test("an overlapping execution cannot overwrite the held reconciliation loc
     if (
       path === "/graphql" &&
       (options.body as { variables: { input: { refUpdates: unknown[] } } })
-          .variables.input.refUpdates.length === 3
+          .variables.input.refUpdates.length === 2
     ) {
       client.afterRequest = undefined;
       const head = client.refs.get("octosmith/reconcile");
@@ -1106,7 +1336,9 @@ for (const conflict of ["create", "branch", "target", "after-reset"] as const) {
       await assertRejects(
         () => client.reconcile(conflict === "create" ? [fileA] : []),
         Error,
-        conflict === "after-reset"
+        conflict === "target"
+          ? "target changed"
+          : conflict === "after-reset"
           ? "changed concurrently"
           : "Atomic reconciliation",
       );
@@ -1217,7 +1449,7 @@ Deno.test("an occupied lock refuses mutation and is never removed by a competing
   await assertRejects(
     () => client.reconcile([]),
     Error,
-    "lock may have changed",
+    "Observed reference conflict: refs/heads/octosmith/reconcile-lock",
   );
   assertEquals(client.refs.get("octosmith/reconcile"), head);
   assertEquals(client.refs.get("octosmith/reconcile-lock"), "competing-lock");
