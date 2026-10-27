@@ -135,6 +135,30 @@ The GitHub layer is split around interfaces:
 
 This keeps the planner testable without GitHub.
 
+### Repository creation
+
+`createRepository` owns a nontransactional lifecycle over the existing GitHub
+client: configuration, canonical preflight, availability, empty organization
+repository creation, selector assignments, actual classification, and normal
+reconciliation. The creation specification remains authoritative and names are
+never regenerated on remote failures. Lifecycle results/stages are separate from
+ordinary `Report`/`RepositoryReport`; no report is fabricated for unattempted
+reconciliation. Repositories are retained on all post-creation failures.
+
+The explicit `github-only` reconciliation scope is shared by state reading,
+planning/evaluations and the mutation sink. Desired files remain configured, but
+no file operations, snapshots, bootstrap commits or PR finishing occur. Empty
+history defers default-branch settings, all rulesets and archival until content
+bootstrap (#111); these are reported as pending, not applied. Normal plan/apply
+keeps its default scope and existing bootstrap behavior.
+
+#111 resumes by consuming the exact created identity, bootstrapping once, then
+re-reading current state and rebuilding a GitHub-only plan from the composed
+desired state. It must not replay old operations or deliver files again.
+Required selector metadata is verified before reconciliation; plans that would
+remove that metadata (for example strict collection deletions) are rejected.
+Assignment/classification failures can require manual recovery outside scope.
+
 ### Repository bootstrap
 
 The state source probes repository history separately from the managed-file

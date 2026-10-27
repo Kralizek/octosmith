@@ -65,6 +65,40 @@ write permissions for resources managed by apply.
 For long-lived organization automation, prefer a GitHub App installation token
 minted at workflow runtime over a static broad token where practical.
 
+## Repository creation permissions
+
+`octosmith template permissions services --creation --format json` (or text)
+analyzes creation separately from ordinary plan/apply. The output separates:
+
+- **Organization repository creation authorization:** the organization endpoint
+  requires repository Administration: write for fine-grained PATs/GitHub Apps.
+  This is a repository permission used for an organization-level operation, not
+  a fabricated organization Administration permission. Classic PATs require
+  `repo` for private/internal repositories or `public_repo` for public ones. The
+  authenticated actor must be allowed to create the requested visibility.
+- **Selector metadata:** team assignment requires repository Administration:
+  write, organization Members: read and metadata access. Repository custom
+  property assignment requires Custom properties: write. Definitions must
+  already exist, allow the chosen values, and permit repository-level editing.
+- **Reconciliation:** normal configured resource permissions, including deferred
+  API work, plus Contents: read to inspect history. Creation never requests
+  Contents: write or Pull requests: write just to bootstrap content.
+
+Organization/enterprise restrictions, SAML SSO authorization, visibility policy,
+enterprise-only internal visibility and installation repository selection can
+still reject a valid offline specification. Ensure a GitHub App installation can
+access the newly created repository as well as invoke creation. Permission
+analysis is not a guarantee of authorization. Ordinary `template permissions`,
+plan and apply do not gain creation-specific authorization requirements.
+
+After creation, missing teams/properties or failed classification may leave the
+repository outside management scope. Repair these manually before relying on
+ordinary discovery/apply. Reconciliation failures after successful verification
+can be repaired by fresh plan/apply. Repositories are never automatically
+deleted. Until #111 implements content bootstrap, `resource create` reports
+pending files, default-branch work, rulesets and archival rather than creating
+commits or PRs. Ordinary apply retains its existing bootstrap behavior.
+
 ## Generated workflows
 
 The scaffolder generates:

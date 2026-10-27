@@ -6,10 +6,10 @@ import type {
 } from "../types.ts";
 import type {
   CurrentActionsSettings,
-  CustomPropertyValue,
   DesiredActionsOidcSettings,
   DesiredActionsSettings,
 } from "../state/resources.ts";
+import { equalCustomPropertyValues } from "../state/resources.ts";
 import type {
   CurrentRepositorySettings,
   DesiredMergeSettings,
@@ -32,7 +32,12 @@ import type {
   DesiredState,
 } from "../state/types.ts";
 import type { RuntimeReference } from "../configuration/runtime_references.ts";
-import type { ApplyEvaluation, Operation, Plan } from "./types.ts";
+import type {
+  ApplyEvaluation,
+  Operation,
+  Plan,
+  ReconciliationScope,
+} from "./types.ts";
 import {
   assertBootstrapFileOwned,
   assertNoBootstrapFileDeclarations,
@@ -45,6 +50,7 @@ export function buildPlan(
   options: {
     readonly skippedRuntimeReferences?: readonly RuntimeReference[];
     readonly offlineValidation?: boolean;
+    readonly scope?: ReconciliationScope;
   } = {},
 ): Plan {
   if (current.repository !== desired.repository) {
@@ -58,16 +64,18 @@ export function buildPlan(
   const collections = desired.collections ?? "explicit";
   const skipped = options.skippedRuntimeReferences ?? [];
   const empty = current.history?.initialized === false;
+  const githubOnly = options.scope === "github-only";
   assertNoBootstrapFileDeclarations(desired.files ?? []);
   if (current.bootstrapFile) assertBootstrapFileOwned(current.bootstrapFile);
-  const lifecycle = empty || current.bootstrapFile !== undefined;
+  const lifecycle = !githubOnly &&
+    (empty || current.bootstrapFile !== undefined);
   const pending = current.bootstrapBranchPending;
   const branch = empty || pending || desired.defaultBranchDrift === "enforce"
     ? desired.settings?.defaultBranch ??
       (empty || pending ? "main" : current.settings.defaultBranch)
     : current.settings.defaultBranch;
 
-  if (empty || pending) {
+  if (!githubOnly && (empty || pending)) {
     operations.push({
       type: "initialize-repository",
       branch,
@@ -76,7 +84,7 @@ export function buildPlan(
   }
 
   if (
-    desired.files?.length &&
+    !githubOnly && desired.files?.length &&
     (current.filesBranch ?? current.settings.defaultBranch) !==
       branch
   ) {
@@ -90,6 +98,7 @@ export function buildPlan(
     desired,
     settingsOperations,
     options.offlineValidation ?? false,
+    githubOnly,
   );
   const settingsAfterCleanup: Operation[] = [];
   for (const operation of settingsOperations) {
@@ -140,7 +149,11 @@ export function buildPlan(
     ),
   );
   planTeams(current, desired, operations, collections);
-  if (!lifecycle || desired.fileDelivery === "direct") {
+  if (
+    githubOnly
+      ? !empty && !pending
+      : !lifecycle || desired.fileDelivery === "direct"
+  ) {
     planRulesets(current, desired, operations, collections);
   }
   planEnvironments(
@@ -150,12 +163,12 @@ export function buildPlan(
     collections,
     skipped.filter((reference) => reference.scope === "environment"),
   );
-  if (!lifecycle) planFiles(current, desired, operations);
+  if (!githubOnly && !lifecycle) planFiles(current, desired, operations);
 
   return {
     repository: desired.repository,
     operations,
-    ...((lifecycle || current.filesBaseSha !== undefined) && {
+    ...(!githubOnly && (lifecycle || current.filesBaseSha !== undefined) && {
       managedFiles: {
         branch: empty
           ? branch
@@ -182,6 +195,7 @@ function planRepositorySettings(
   desired: DesiredState,
   operations: Operation[],
   offlineValidation: boolean,
+  githubOnly: boolean,
 ): void {
   if (!desired.settings) {
     return;
@@ -191,6 +205,12 @@ function planRepositorySettings(
     current.settings,
     {
       ...desired.settings,
+      ...(githubOnly && (current.history?.initialized === false ||
+        current.bootstrapBranchPending !== undefined) &&
+        desired.settings.archived === true &&
+        {
+          archived: undefined,
+        }),
       defaultBranch: current.history?.initialized !== false &&
           !current.bootstrapBranchPending &&
           desired.defaultBranchDrift === "enforce"
@@ -233,7 +253,7 @@ function planCustomProperties(
   }
 
   for (const [name, value] of Object.entries(desired.customProperties)) {
-    if (!equalCustomPropertyValue(current.customProperties[name], value)) {
+    if (!equalCustomPropertyValues(current.customProperties[name], value)) {
       operations.push({
         type: "set-custom-property",
         name,
@@ -738,16 +758,38 @@ export function buildApplyEvaluations(
   desired: DesiredState,
   operations: readonly Operation[],
   current?: CurrentState,
+  options: { readonly scope?: ReconciliationScope } = {},
 ): readonly ApplyEvaluation[] {
   const evaluations = operations.map((operation) =>
     operationEvaluation(operation, current)
   );
   const has = (predicate: (operation: Operation) => boolean) =>
     operations.some(predicate);
+  const deferredSettings = options.scope === "github-only" &&
+      (current?.history?.initialized === false ||
+        current?.bootstrapBranchPending !== undefined)
+    ? [
+      ...(desired.settings?.defaultBranch !== undefined
+        ? ["defaultBranch"]
+        : []),
+      ...(desired.settings?.archived === true ? ["archived"] : []),
+    ]
+    : [];
+  if (deferredSettings.length > 0) {
+    evaluations.push({
+      type: "repository-settings",
+      details: {
+        fields: deferredSettings,
+        deferred: true,
+        deferredReason: "until Git content bootstrap completes",
+      },
+    });
+  }
 
   if (
     desired.settings !== undefined &&
-    !has((operation) => operation.type === "update-repository-settings")
+    !has((operation) => operation.type === "update-repository-settings") &&
+    deferredSettings.length === 0
   ) {
     evaluations.push({
       type: "repository-settings",
@@ -848,7 +890,16 @@ export function buildApplyEvaluations(
           name: ruleset.name,
           ...((current?.history?.initialized === false ||
             current?.bootstrapFile !== undefined) &&
-            desired.fileDelivery !== "direct" && { deferred: true }),
+            (options.scope === "github-only" ||
+              desired.fileDelivery !== "direct") &&
+            { deferred: true }),
+          ...(options.scope === "github-only" &&
+            (current?.history?.initialized === false ||
+              current?.bootstrapBranchPending !== undefined) &&
+            {
+              deferred: true,
+              deferredReason: "until Git content bootstrap completes",
+            }),
         },
       });
     }
@@ -881,7 +932,11 @@ export function buildApplyEvaluations(
     ) {
       evaluations.push({
         type: "file",
-        details: { path: file.path, ensure: file.ensure },
+        details: {
+          path: file.path,
+          ensure: file.ensure,
+          ...(options.scope === "github-only" && { deferred: true }),
+        },
       });
     }
   }
@@ -1863,17 +1918,6 @@ function equalPermission(
   right: RepositoryPermission,
 ): boolean {
   return left.kind === right.kind && left.name === right.name;
-}
-
-function equalCustomPropertyValue(
-  left: CustomPropertyValue | undefined,
-  right: CustomPropertyValue,
-): boolean {
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return equalUnorderedStrings(left, right);
-  }
-
-  return left === right;
 }
 
 function copyChangedScalar(

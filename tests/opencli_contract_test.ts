@@ -140,7 +140,15 @@ Deno.test("OpenCLI contract exposes explicit resource creation visibility", asyn
   const command = document.commands["octosmith resource create"];
   assertEquals(
     command.flags?.map((flag) => flag.name),
-    ["name", "visibility", "dry-run", "path", "format"],
+    [
+      "name",
+      "visibility",
+      "dry-run",
+      "include-secrets",
+      "skip-missing-values",
+      "path",
+      "format",
+    ],
   );
   assertEquals(
     command.flags?.[1].choices?.map(({ value }) => value),
@@ -238,7 +246,7 @@ Deno.test("OpenCLI permission options match the implemented template command", a
   const command = document.commands["octosmith template permissions"];
   assertEquals(
     command.flags?.map((flag) => flag.name),
-    ["path", "format"],
+    ["path", "format", "creation"],
   );
   assertEquals(command.flags?.[0].aliases, ["p"]);
   assertEquals(

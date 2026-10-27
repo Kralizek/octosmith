@@ -27,6 +27,7 @@ export interface RepositoryStateSource {
   getRepositoryHistory?(
     repository: string,
     defaultBranch: string,
+    options?: { readonly allowEmptyBranchList?: boolean },
   ): Promise<RepositoryHistory>;
 
   getCustomProperties(

@@ -3,6 +3,7 @@ import {
   type DesiredState,
   fileExecutionBranch,
   type Operation,
+  type ReconciliationScope,
 } from "../mod.ts";
 import type { RepositoryStateSource } from "./state_source.ts";
 import { GitHubRequestError } from "./client.ts";
@@ -16,10 +17,26 @@ export async function readCurrentState(
   source: RepositoryStateSource,
   desired: DesiredState,
   operations?: readonly Operation[],
-  options: { readonly authoritativeFiles?: boolean } = {},
+  options: {
+    readonly authoritativeFiles?: boolean;
+    readonly scope?: ReconciliationScope;
+  } = {},
 ): Promise<CurrentState> {
   const repository = desired.repository;
   const strict = desired.collections === "strict";
+  const githubOnly = options.scope === "github-only";
+  const scopedSettings = githubOnly
+    ? await source.getRepositorySettings(repository)
+    : undefined;
+  const scopedHistory = scopedSettings
+    ? await source.getRepositoryHistory?.(
+      repository,
+      scopedSettings.defaultBranch,
+      {
+        allowEmptyBranchList: true,
+      },
+    )
+    : undefined;
 
   const [
     settings,
@@ -33,7 +50,7 @@ export async function readCurrentState(
     rulesets,
     environments,
   ] = await Promise.all([
-    source.getRepositorySettings(repository),
+    scopedSettings ?? source.getRepositorySettings(repository),
     desired.customProperties !== undefined
       ? source.getCustomProperties(repository)
       : Promise.resolve({}),
@@ -56,7 +73,7 @@ export async function readCurrentState(
     desired.teams !== undefined
       ? source.getTeams(repository)
       : Promise.resolve([]),
-    desired.rulesets !== undefined
+    desired.rulesets !== undefined && scopedHistory?.initialized !== false
       ? source.getRulesets(repository)
       : Promise.resolve([]),
     desired.environments !== undefined
@@ -64,10 +81,12 @@ export async function readCurrentState(
       : Promise.resolve([]),
   ]);
 
-  const history = await source.getRepositoryHistory?.(
-    repository,
-    settings.defaultBranch,
-  );
+  const history = githubOnly
+    ? scopedHistory
+    : await source.getRepositoryHistory?.(
+      repository,
+      settings.defaultBranch,
+    );
   const empty = history?.initialized === false;
   const recovering = history?.initialized === true &&
     history.branch !== settings.defaultBranch;
@@ -76,7 +95,7 @@ export async function readCurrentState(
       ? desired.settings?.defaultBranch ??
         (empty || recovering ? "main" : settings.defaultBranch)
       : settings.defaultBranch;
-  if (recovering && history.branch !== desiredBranch) {
+  if (!githubOnly && recovering && history.branch !== desiredBranch) {
     throw new Error(
       "Repository has history but its configured default branch is missing. Inspect branches and complete initialization manually; Octosmith will not create another branch.",
     );
@@ -114,7 +133,7 @@ export async function readCurrentState(
       }),
     ]),
   ];
-  const snapshotHead = !empty && history?.initialized
+  const snapshotHead = !githubOnly && !empty && history?.initialized
     ? history.branch === filesBranch
       ? history.head
       : await source.getBranchHead(repository, filesBranch)
@@ -123,16 +142,16 @@ export async function readCurrentState(
     ? await source.getFile(repository, BOOTSTRAP_FILE_PATH, snapshotHead)
     : undefined;
   if (bootstrapFile) assertBootstrapFileOwned(bootstrapFile);
-  if (recovering && !bootstrapFile) {
+  if (!githubOnly && recovering && !bootstrapFile) {
     throw new Error(
       "Incomplete repository initialization has no recognized bootstrap file; inspect the default branch manually",
     );
   }
-  const filesBaseSha =
-    !empty && (options.authoritativeFiles || bootstrapFile !== undefined)
-      ? snapshotHead ?? await source.getBranchHead(repository, filesBranch)
-      : undefined;
-  const files = empty ? [] : await readOwnedFiles(
+  const filesBaseSha = !githubOnly && !empty &&
+      (options.authoritativeFiles || bootstrapFile !== undefined)
+    ? snapshotHead ?? await source.getBranchHead(repository, filesBranch)
+    : undefined;
+  const files = empty || githubOnly ? [] : await readOwnedFiles(
     source,
     repository,
     paths,
@@ -203,7 +222,8 @@ export async function readCurrentState(
       : strict
       ? environments
       : filterSparseEnvironments(environments, desired.environments),
-    ...((empty || paths.length > 0 || filesBaseSha !== undefined) &&
+    ...(!githubOnly &&
+      (empty || paths.length > 0 || filesBaseSha !== undefined) &&
       { filesBranch }),
     ...(filesBaseSha !== undefined && { filesBaseSha }),
     files,

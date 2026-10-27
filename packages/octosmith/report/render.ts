@@ -310,6 +310,19 @@ function describeItem(item: ApplyItemReport): string {
     case "repository-initialization":
       return "Initialize repository - branch: " + String(details.branch);
     case "repository-settings":
+      if (details.deferred === true) {
+        const fields = Array.isArray(details.fields)
+          ? details.fields.filter((field): field is string =>
+            typeof field === "string"
+          )
+          : [];
+        return "Repository settings" +
+          (fields.length > 0 ? " (" + fields.join(", ") + ")" : "") +
+          " - deferred" +
+          (typeof details.deferredReason === "string"
+            ? " " + details.deferredReason
+            : "");
+      }
       return "Repository settings" +
         settingsSuffix(item, details.settings);
     case "custom-property":
@@ -354,7 +367,10 @@ function describeItem(item: ApplyItemReport): string {
     case "ruleset":
       return "Ruleset " + String(details.name) +
         (details.deferred === true
-          ? " - deferred until bootstrap cleanup is merged"
+          ? " - deferred " +
+            (typeof details.deferredReason === "string"
+              ? details.deferredReason
+              : "until bootstrap cleanup is merged")
           : actionSuffix(details));
     case "environment":
       return "Environment " + String(details.name) + actionSuffix(details);

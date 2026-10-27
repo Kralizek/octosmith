@@ -52,15 +52,16 @@ and preserved. See the
 [configuration guide](../../docs/configuration.md#default-branch-and-automatic-initialization)
 for protection, concurrency, and retry limitations.
 
-| Command                           | GitHub access | Mutates GitHub | Purpose                                                         |
-| --------------------------------- | ------------- | -------------- | --------------------------------------------------------------- |
-| `template print <template>`       | No            | No             | Print a synthesized repository template                         |
-| `template validate`               | No            | No             | Validate configuration and static planner invariants            |
-| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates |
-| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                |
-| `resource create <template>`      | No            | No             | Offline preflight, or creation preview with `--dry-run`         |
-| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                 |
-| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                |
+| Command                                | GitHub access | Mutates GitHub | Purpose                                                         |
+| -------------------------------------- | ------------- | -------------- | --------------------------------------------------------------- |
+| `template print <template>`            | No            | No             | Print a synthesized repository template                         |
+| `template validate`                    | No            | No             | Validate configuration and static planner invariants            |
+| `template permissions [template]`      | No            | No             | Calculate worst-case GitHub permissions for reachable templates |
+| `resource list`                        | Yes           | No             | Inspect in-scope resources and template coverage                |
+| `resource create <template>`           | Yes           | Yes            | Create an empty repository and reconcile GitHub API resources   |
+| `resource create <template> --dry-run` | No            | No             | Offline, read-only creation preview                             |
+| `plan [repository]`                    | Yes           | No             | Compare current GitHub state with desired state                 |
+| `apply [repository]`                   | Yes           | Yes            | Build or execute a plan and apply its operations                |
 
 ### template print
 
@@ -128,6 +129,13 @@ reachable effective templates could require. Use `--format json` for structured
 output or `--format github-output` to emit `permission-<name>=<access>` lines
 for GitHub App token workflows. See [Permission output](#permission-output)
 below for the exact semantics and limitations.
+
+Use `template permissions services --creation --format json` (or text) to
+separate organization repository creation authorization, selector metadata
+assignments and post-creation reconciliation. This does not add creation
+requirements to ordinary plan/apply analysis. Creation analysis cannot be
+rendered as `github-output`, because those lifecycle scopes are distinct. See
+[creation permissions](../../docs/automation.md#repository-creation-permissions).
 
 ### resource list
 
@@ -201,20 +209,65 @@ octosmith resource create services --name team-orders-svcs --visibility internal
 octosmith resource create services --dry-run --format json
 ```
 
-Without `--dry-run`, creation currently performs an offline preflight only; it
-does not create a GitHub repository. This is transitional: future releases will
-execute creation by default, while `--dry-run` will remain the explicit
-read-only preview. Both paths use the same reusable library specification, which
-resolves the template, validates it with the same semantic checks as
-`template validate`, and reports the effective name, visibility, team, and
-custom-property constraints. If scope/template intersection yields one
-constructible naming pattern, an omitted name is generated from it; patterns
-with no `*` or `?` use their literal name. Use `--name` to override generation,
-or to select among multiple patterns. Visibility is inferred when uniquely
-constrained; use `--visibility` when multiple valid values remain. Ambiguities
-and configuration errors are returned as structured diagnostics (including in
-JSON output) and exit unsuccessfully. No prompt, credential lookup, GitHub
-access, or remote mutation occurs.
+Without `--dry-run`, creation **mutates GitHub** using the same authentication
+as plan/apply. It creates an empty repository in the configured organization,
+assigns required teams/custom properties, re-reads metadata and verifies scope
+and unique template classification, then reconciles GitHub-side resources.
+`--dry-run` remains an offline, read-only preview. Both paths use the same
+reusable library specification, which resolves the template, validates it with
+the same semantic checks as `template validate`, and reports the effective name,
+visibility, team, and custom-property constraints. If scope/template
+intersection yields one constructible naming pattern, an omitted name is
+generated from it; patterns with no `*` or `?` use their literal name. Use
+`--name` to override generation, or to select among multiple patterns.
+Visibility is inferred when uniquely constrained; use `--visibility` when
+multiple valid values remain. Ambiguities and configuration errors are returned
+as structured diagnostics (including in JSON output) and exit unsuccessfully
+before any GitHub access. No prompting is performed. Names are generated once
+per execution; a collision fails without adopting an existing repository or
+generating a replacement name.
+
+Immediate reconciliation includes repository settings (except deferred fields),
+team permissions, custom properties, Actions settings/OIDC/variables/secrets,
+Dependabot secrets, and environments and their variables/secrets. Secret,
+collection-management and runtime-value policies are unchanged; use
+`--include-secrets` or `--skip-missing-values` for the same explicit overrides.
+As with plan/apply, `--include-secrets=true` opts in and
+`--include-secrets=false` honors the configured mode. Required teams initially
+receive read access, followed by declared permissions through normal
+reconciliation. Strict collections cannot remove metadata needed for
+scope/classification; declare required entries explicitly.
+
+**Transitional limitation (#111):** repository files are not bootstrapped yet.
+Creation never initializes Git history, sends Contents API writes, or creates
+file-update PRs under either delivery mode. While history is empty, the default
+branch setting, all rulesets (including push rulesets) and archival
+(`archived: true`) are explicitly deferred: references do not exist yet, and
+policies/archival could block the first push. No default branch is fabricated.
+#111 should bootstrap contents once, then re-read current state and rebuild a
+`github-only` plan against the same desired state. Replanning avoids replaying
+completed operations. Later ordinary plan/apply retains its existing
+initialization and file-delivery behavior.
+
+An already-satisfied `archived: false` does not trigger a deferral; unarchiving
+can proceed before bootstrap. Post-creation failures retain configured deferred
+work even if runtime resolution or state reading fails. Deferred settings are
+explicitly named in the regular text report.
+
+Text and JSON separate lifecycle status/stages, identity/URL, metadata
+assignment outcomes, deferred work and the ordinary reconciliation report.
+`completed` and `awaiting_bootstrap` exit 0; the latter does **not** mean
+deferred work was applied. Preflight rejection, name collision, creation,
+assignment, classification or reconciliation failure exit 1. No reconciliation
+report is invented before reconciliation is attempted. API/provider error bodies
+are omitted to avoid exposing runtime values.
+
+Creation is not transactional: Octosmith never deletes a partially created
+repository. Failed metadata assignments or classification require manual repair
+and verification; ordinary apply cannot discover an out-of-scope repository.
+Once metadata is correct, normal plan/apply can reconcile it, although running
+ordinary apply before #111 bootstrap invokes the existing API bootstrap flow.
+After a lost creation response, inspect GitHub before explicitly retrying.
 
 `--dry-run` extends preflight with a creation preview, not a drift report
 against an imaginary repository. Text and JSON report:
@@ -246,8 +299,9 @@ generate a different name unless you pass the displayed name explicitly with
 it reports prospective naming patterns and diagnostics instead of generating a
 name just for display. It still fails with a nonzero exit status; JSON remains
 structured on failures. No filesystem writes, Git commands, commits, pushes, or
-bootstrap commands are executed. Actual creation, content bootstrap, and
-assisted prompting remain future milestones.
+bootstrap commands are executed by preview. Content bootstrap and assisted
+prompting remain future milestones; non-preview creation now provisions API
+resources.
 
 Preview JSON uses `kind: repository_creation_preview` and `version: 1`,
 including unresolved preflight results (`ready: false`). If configuration cannot

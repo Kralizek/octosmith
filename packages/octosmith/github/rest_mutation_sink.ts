@@ -9,6 +9,7 @@ import type {
   FileChangesConfiguration,
   ManagedFileSnapshot,
   Operation,
+  ReconciliationScope,
   RulesetDefinition,
   Variable,
 } from "../mod.ts";
@@ -39,6 +40,7 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly fileBranch?: string;
   readonly managedFiles?: ManagedFileSnapshot;
   readonly allowClosure?: boolean;
+  readonly scope?: ReconciliationScope;
 }
 
 type FileOperation = Extract<
@@ -83,11 +85,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #managedFiles?: ManagedFileSnapshot;
   readonly #allowClosure: boolean;
   readonly #bootstrap?: RepositoryBootstrap;
+  readonly #scope: ReconciliationScope;
   #bootstrapSnapshot?: ManagedFileSnapshot;
   #filesReconciled = false;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
     this.#bootstrap = options.bootstrap;
+    this.#scope = options.scope ?? "all";
     this.#client = options.client;
     this.#owner = options.owner;
     this.#secretValue = options.secretValue;
@@ -107,6 +111,16 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     managedFiles?: ManagedFileSnapshot,
     allowClosure: boolean = this.#allowClosure,
   ): RepositoryMutationSink {
+    if (
+      this.#scope === "github-only" &&
+      operations.some((operation) =>
+        isFileOperation(operation) || operation.type === "initialize-repository"
+      )
+    ) {
+      throw new Error(
+        "Content and initialization operations are excluded from GitHub-only reconciliation",
+      );
+    }
     const names = persistedOperationSecretSources(operations);
     const values = new Map<string, string>();
 
@@ -145,6 +159,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       fileBranch: fileBranch ?? this.#fileBranch,
       managedFiles: managedFiles ?? this.#managedFiles,
       allowClosure,
+      scope: this.#scope,
       ...(fileOperations.length > 0 && {
         preparedFileChanges: {
           operations: fileOperations,
@@ -155,6 +170,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   }
 
   async finish(repository: string): Promise<void> {
+    if (this.#scope === "github-only") return;
     if (this.#fileChanges.mode === "pull_request" && !this.#filesReconciled) {
       await this.applyFileChanges(
         repository,
@@ -164,6 +180,15 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   }
 
   async apply(repository: string, operation: Operation): Promise<void> {
+    if (
+      this.#scope === "github-only" && (
+        isFileOperation(operation) || operation.type === "initialize-repository"
+      )
+    ) {
+      throw new Error(
+        "Content and initialization operations are excluded from GitHub-only reconciliation",
+      );
+    }
     switch (operation.type) {
       case "initialize-repository": {
         if (!this.#bootstrap) {
