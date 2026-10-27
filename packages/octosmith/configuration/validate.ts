@@ -124,7 +124,8 @@ async function validateDirectoryDetailed(
     }));
   const issues = validation.issues.filter((issue) =>
     !loadIssues.some((loadIssue) =>
-      loadIssue.code === issue.code && loadIssue.template === issue.template
+      loadIssue.template === issue.template &&
+      (loadIssue.code === issue.code || issue.code === "unknown_template")
     )
   );
   return {
@@ -186,6 +187,11 @@ async function collectLoadedConfigurationValidation(
 
   const scope = loaded.configuration.repositories.scope;
   const settings = loaded.configuration.repositories.settings;
+  const selectedIdentity = selectedTemplate === undefined
+    ? undefined
+    : selectedTemplate.startsWith("repository:")
+    ? selectedTemplate
+    : "repository:" + selectedTemplate;
   if (
     selectedTemplate === undefined && templateSetComplete &&
     settings?.unmatchedRepositories === "fallback" &&
@@ -200,6 +206,7 @@ async function collectLoadedConfigurationValidation(
     });
   }
   for (const [name, template] of Object.entries(loaded.templates)) {
+    if (selectedIdentity !== undefined && name !== selectedIdentity) continue;
     if (
       template.match === undefined &&
       (settings?.unmatchedRepositories !== "fallback" ||
@@ -226,11 +233,6 @@ async function collectLoadedConfigurationValidation(
     issues.push(...findScopeCoverageIssues(scope, loaded.templates));
   }
 
-  const selectedIdentity = selectedTemplate === undefined
-    ? undefined
-    : selectedTemplate.startsWith("repository:")
-    ? selectedTemplate
-    : "repository:" + selectedTemplate;
   if (
     selectedIdentity !== undefined &&
     loaded.templates[selectedIdentity] === undefined

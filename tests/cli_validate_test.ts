@@ -1426,10 +1426,46 @@ Deno.test("validate selected template ignores unrelated template load errors", a
 
   try {
     await Deno.writeTextFile(root + "/templates/broken.yml", "invalid: [\n");
+    await Deno.writeTextFile(
+      root + "/templates/unmatched.yml",
+      "version: 1\nkind: repository\nrepository: {}\n",
+    );
     assertEquals(
       await main(["template", "validate", "default", "--path", root]),
       0,
     );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("selected validation does not report unknown for a template load failure", async () => {
+  const root = await validConfiguration();
+  const output: string[] = [];
+
+  try {
+    await Deno.writeTextFile(
+      root + "/templates/default.yml",
+      "version: [broken\n",
+    );
+    assertEquals(
+      await main(
+        [
+          "template",
+          "validate",
+          "default",
+          "--format",
+          "json",
+          "--path",
+          root,
+        ],
+        { write: (value) => output.push(value) },
+      ),
+      1,
+    );
+    const result = JSON.parse(output[0]);
+    assertEquals(result.issues.length, 1);
+    assertEquals(result.issues[0].code, "template_load_error");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
