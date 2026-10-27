@@ -327,6 +327,53 @@ repository:
   }
 });
 
+Deno.test("fallback templates contribute permissions independent of their match", async () => {
+  const root = await configuration();
+  try {
+    await Deno.writeTextFile(
+      root + "/octosmith.yml",
+      `version: 1
+organization: acme
+repositories:
+  scope:
+    include:
+      names: [app]
+  settings:
+    unmatched_repositories: fallback
+    fallback_template: repository:baseline
+  file_changes:
+    mode: direct
+`,
+    );
+    await Deno.writeTextFile(
+      root + "/templates/baseline.yml",
+      `version: 1
+kind: repository
+match:
+  include:
+    names: [legacy]
+repository:
+  teams:
+    - name: developers
+      permission: push
+`,
+    );
+
+    const requirements = requiredPermissionsForConfiguration(
+      await loadConfigurationDirectory(root),
+      "repository:baseline",
+    );
+    assertEquals(
+      requirements.some((item) =>
+        item.scope === "organization" && item.permission === "members"
+      ),
+      true,
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("direct file delivery excludes pull request permissions", async () => {
   const root = await configuration();
   try {

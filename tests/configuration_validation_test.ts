@@ -110,6 +110,17 @@ Deno.test("fallback templates validate references and may omit match", async () 
       loaded.templates["repository:baseline"].repository.settings?.hasIssues,
       false,
     );
+    await Deno.writeTextFile(
+      join(root, "templates", "baseline.yml"),
+      JSON.stringify({
+        version: 1,
+        kind: "repository",
+        match: { include: { names: ["legacy"] } },
+        includes: ["../fragments/baseline.yml"],
+        repository: {},
+      }),
+    );
+    assertEquals(await validateConfigurationDirectory(root), []);
 
     await writeConfiguration({
       unmatched_repositories: "fallback",
@@ -150,6 +161,11 @@ Deno.test("fallback templates validate references and may omit match", async () 
     );
     await assertRejects(
       () => validateConfigurationDirectory(root),
+      Error,
+      "must define match",
+    );
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
       Error,
       "must define match",
     );

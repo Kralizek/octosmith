@@ -16,28 +16,33 @@ export function requiredPermissionsForConfiguration(
   loaded: LoadedConfiguration,
   templateName?: string,
 ): readonly GitHubPermissionRequirement[] {
-  let selected = Object.values(loaded.templates);
+  let selected = Object.entries(loaded.templates);
   if (templateName !== undefined) {
-    const template = loaded.templates[
-      templateName.startsWith("repository:")
-        ? templateName
-        : "repository:" + templateName
-    ];
+    const identity = templateName.startsWith("repository:")
+      ? templateName
+      : "repository:" + templateName;
+    const template = loaded.templates[identity];
     if (template === undefined) {
       throw new Error("Unknown template: " + templateName);
     }
-    selected = [template];
+    selected = [[identity, template]];
   }
 
+  const fallbackIdentity =
+    loaded.configuration.repositories.settings?.unmatchedRepositories ===
+        "fallback"
+      ? loaded.configuration.repositories.settings.fallbackTemplate
+      : undefined;
   const strict = loaded.configuration.repositories.settings
     ?.collectionManagement === "strict";
   const delivery = loaded.configuration.repositories.fileChanges?.mode ??
     "pull_request";
-  const requirements = selected.flatMap((template) => {
+  const requirements = selected.flatMap(([identity, template]) => {
     if (
       !templateCanMatchScope(
         loaded.configuration.repositories.scope,
         template,
+        identity === fallbackIdentity,
       )
     ) {
       return [];

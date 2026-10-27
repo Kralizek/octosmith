@@ -123,8 +123,9 @@ async function validateDirectoryDetailed(
       path: issue.path,
     }));
   const issues = validation.issues.filter((issue) =>
-    issue.code !== "unknown_template" ||
-    !loadIssues.some((loadIssue) => loadIssue.template === issue.template)
+    !loadIssues.some((loadIssue) =>
+      loadIssue.code === issue.code && loadIssue.template === issue.template
+    )
   );
   return {
     diagnostics: validation.diagnostics,
@@ -252,10 +253,13 @@ async function collectLoadedConfigurationValidation(
         isSecretAvailable,
       ),
     );
+    const isFallback = settings?.unmatchedRepositories === "fallback" &&
+      settings.fallbackTemplate === name;
     const intersection = effectiveRepositorySelectorIntersection(
       scope,
       template,
       name,
+      isFallback,
     );
     intersections.push(intersection);
     const repository = intersection.semanticWitness;
@@ -336,18 +340,23 @@ export async function validateLoadedConfiguration(
 export function templateCanMatchScope(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
+  ignoreTemplateMatch = false,
 ): boolean {
-  if (template.match === undefined) return false;
-  const positiveSelectors = [
+  if (template.match === undefined && !ignoreTemplateMatch) return false;
+  const positiveSelectors: RepositorySelector[] = [
     scope.include === "all" ? {} : scope.include,
-    template.match.include === "all" ? {} : template.match.include,
   ];
-  const negativeSelectors = [
-    scope.exclude,
-    template.match.exclude,
-  ].filter(
-    (selector): selector is RepositorySelector => selector !== undefined,
-  );
+  const negativeSelectors: RepositorySelector[] = scope.exclude === undefined
+    ? []
+    : [scope.exclude];
+  if (!ignoreTemplateMatch && template.match !== undefined) {
+    positiveSelectors.push(
+      template.match.include === "all" ? {} : template.match.include,
+    );
+    if (template.match.exclude !== undefined) {
+      negativeSelectors.push(template.match.exclude);
+    }
+  }
 
   return scopeIntersectionWitness(
     positiveSelectors,
@@ -361,27 +370,31 @@ export function effectiveRepositorySelectorIntersection(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
   templateIdentity: string,
+  ignoreTemplateMatch = false,
 ): EffectiveRepositorySelectorIntersection {
-  const match = template.match ?? { include: "all" as const };
-  const include = [
-    {
-      path: "repositories.scope.include",
-      selector: scope.include === "all" ? {} : scope.include,
-    },
-    {
+  const include: EffectiveRepositorySelectorConstraint[] = [{
+    path: "repositories.scope.include",
+    selector: scope.include === "all" ? {} : scope.include,
+  }];
+  const exclude: EffectiveRepositorySelectorConstraint[] = [];
+  if (scope.exclude !== undefined) {
+    exclude.push({
+      path: "repositories.scope.exclude",
+      selector: scope.exclude,
+    });
+  }
+  if (!ignoreTemplateMatch && template.match !== undefined) {
+    include.push({
       path: "templates." + templateIdentity + ".match.include",
-      selector: match.include === "all" ? {} : match.include,
-    },
-  ];
-  const exclude = [
-    scope.exclude === undefined
-      ? undefined
-      : { path: "repositories.scope.exclude", selector: scope.exclude },
-    match.exclude === undefined ? undefined : {
-      path: "templates." + templateIdentity + ".match.exclude",
-      selector: match.exclude,
-    },
-  ].filter((constraint) => constraint !== undefined);
+      selector: template.match.include === "all" ? {} : template.match.include,
+    });
+    if (template.match.exclude !== undefined) {
+      exclude.push({
+        path: "templates." + templateIdentity + ".match.exclude",
+        selector: template.match.exclude,
+      });
+    }
+  }
   const witness = scopeIntersectionWitness(
     include.map((constraint) => constraint.selector),
     exclude.map((constraint) => constraint.selector),
