@@ -66,8 +66,8 @@ invocations.
 Failed preflight specifications produce an unresolved preview with the original
 structured choices, diagnostic codes, and validation details, and no bootstrap
 or resource plan. Hosts should return failure when `preview.ready` is false. The
-CLI performs real creation without `--dry-run`. Git content bootstrap (#111),
-bootstrap commands, and assisted choices are not implemented.
+CLI performs end-to-end creation without `--dry-run`. Post-create commands and
+assisted choices are not implemented.
 
 ### Repository creation lifecycle
 
@@ -75,6 +75,7 @@ bootstrap commands, and assisted choices are not implemented.
 import {
   createRepository,
   FetchGitHubClient,
+  LocalGitBootstrap,
   MissingRuntimeValueError,
   renderRepositoryCreationResult,
 } from "jsr:@octosmith/octosmith@0";
@@ -86,6 +87,9 @@ const result = await createRepository({
   visibility: "internal",
 }, {
   client: new FetchGitHubClient({ token: Deno.env.get("GITHUB_TOKEN")! }),
+  bootstrap: new LocalGitBootstrap({
+    token: () => Deno.env.get("GITHUB_TOKEN")!,
+  }),
   values: (name) => {
     const value = Deno.env.get(name);
     if (value === undefined) throw new MissingRuntimeValueError(name);
@@ -110,7 +114,7 @@ builders. The reusable `scope: "github-only"` option on the state reader,
 planner/evaluations and mutation sink excludes GitHub file reads/delivery,
 bootstrap operations and PR finishing without stripping files from desired
 state. On empty history, default-branch changes, rulesets and archival
-(`archived: true`) are deferred until #111 bootstrap; API settings, teams,
+(`archived: true`) are deferred until Git bootstrap; API settings, teams,
 properties, Actions, Dependabot and environments otherwise reconcile normally.
 The result exposes safe deferred targets/reasons, not executable operations or
 secret/file contents.
@@ -120,19 +124,52 @@ so metadata, runtime-value and state-read failures preserve bootstrap recovery
 information. Unarchiving remains applicable before bootstrap, and an
 already-satisfied `archived: false` is not reported as deferred.
 
-#111 should consume the retained identity without generating another name,
-bootstrap content once, then re-read and build a fresh GitHub-only plan. Deltas
-make completed operations idempotent; deferred work is never marked applied.
-Ordinary plan/apply defaults remain unchanged.
+`RepositoryGitBootstrap` is an injectable library transport; `LocalGitBootstrap`
+uses a temporary workspace, exactly one initial commit and at most one push. It
+consumes `DesiredFile[]` from **the same `resolveDesiredState` transformation
+used by ordinary reconciliation**, after template/fragment composition and
+runtime preflight. There is no second file resolver. Raw Git blobs avoid
+attributes/ignore transformations; absent files are omitted, and no-files
+repositories receive an empty commit. The commit identity is
+`Octosmith <octosmith@users.noreply.github.com>` for both author and committer,
+and its message is `Initial repository bootstrap`.
+
+Branch precedence is template `default_branch`, GitHub's organization/enterprise
+default exposed as the new repository's `default_branch`, then documented
+`main`. No extra organization API permission or invented branch policy is
+needed. That resolved branch is explicitly pushed and configured as default.
+Re-read classification/history/current state and a fresh `github-only` plan
+finish default-branch settings and rulesets, with archival last. Successful API
+deltas are not replayed; confirmed opaque secret deliveries still present
+remotely are preserved within this invocation. Ordinary plan/apply defaults
+remain unchanged.
+
+The default HTTPS transport obtains a token lazily from the host, using a static
+temporary askpass helper and an isolated push environment. It never writes the
+token to disk or includes it in URLs/arguments. Raw Git diagnostics are captured
+and discarded; configuration, prompts, inherited credential helpers, hooks and
+global/system Git settings are isolated. Git Contents: write and workflow
+authorization are required independently of API creation permissions. Hosts can
+inject authentication, Git execution and temporary-directory/cleanup services.
+Tests use fake execution or local bare repositories, never real GitHub creation.
 
 Lifecycle statuses distinguish `preflight_rejected`, `name_collision`,
 `creation_failed`, `metadata_failed`, `classification_failed`,
-`reconciliation_failed`, `awaiting_bootstrap`, and `completed`. Completed
-stages, failed stage, metadata assignment outcomes and the URL are preserved
-when available. Reports exist only after normal reconciliation is attempted.
-Repositories are never automatically deleted. Metadata/classification failures
-may leave repositories outside discovery scope and require manual repair;
-verified repositories can recover through ordinary plan/apply.
+`reconciliation_failed`, `bootstrap_failed`, `bootstrapped_not_reconciled`, and
+`completed` (`awaiting_bootstrap` remains a legacy status in the type).
+Completed stages, failed stage, metadata assignment outcomes and the URL are
+preserved when available. Reports exist only after normal reconciliation is
+attempted. Repositories are never automatically deleted. Metadata/classification
+failures may leave repositories outside discovery scope and require manual
+repair; verified repositories can recover through ordinary plan/apply after
+content and default-branch verification. `bootstrap` separately reports branch,
+file count, preparation, commit SHA, push attempt/confirmation, safe failure
+category and cleanup failure. `push_unknown` explicitly means remote changes may
+have occurred. `deferredReconciliationAttempted` and `deferredReport`
+distinguish successful content delivery from complete creation. Never rerun
+create for a retained repository; inspect uncertain pushes against the SHA,
+repair content manually if needed, then create a fresh ordinary plan. See the
+[CLI recovery guidance](../cli/README.md#resource-create).
 
 `requiredPermissionsForRepositoryCreation` separates creation authorization,
 selector metadata and API reconciliation permissions, without changing ordinary

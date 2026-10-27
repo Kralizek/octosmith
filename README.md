@@ -83,11 +83,11 @@ octosmith plan --path .
 octosmith apply --path .
 ```
 
-Provision an empty organization repository from a selected template with
+Provision an organization repository from a selected template with
 `octosmith resource create services --name team-orders-svcs --visibility internal`.
-This performs real GitHub mutations and API-side reconciliation; add `--dry-run`
-for a completely offline, read-only preview. Managed files and branch-dependent
-work await content bootstrap (#111). See the
+This performs GitHub creation, API reconciliation and one local Git bootstrap
+commit/push, then finishes deferred branch settings, rulesets and archival. Add
+`--dry-run` for a completely offline, read-only preview. See the
 [CLI creation guide](packages/cli/README.md#resource-create) for lifecycle
 reporting, permissions and partial-failure recovery.
 

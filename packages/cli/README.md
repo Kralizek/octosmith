@@ -212,20 +212,21 @@ octosmith resource create services --dry-run --format json
 Without `--dry-run`, creation **mutates GitHub** using the same authentication
 as plan/apply. It creates an empty repository in the configured organization,
 assigns required teams/custom properties, re-reads metadata and verifies scope
-and unique template classification, then reconciles GitHub-side resources.
-`--dry-run` remains an offline, read-only preview. Both paths use the same
-reusable library specification, which resolves the template, validates it with
-the same semantic checks as `template validate`, and reports the effective name,
-visibility, team, and custom-property constraints. If scope/template
-intersection yields one constructible naming pattern, an omitted name is
-generated from it; patterns with no `*` or `?` use their literal name. Use
-`--name` to override generation, or to select among multiple patterns.
-Visibility is inferred when uniquely constrained; use `--visibility` when
-multiple valid values remain. Ambiguities and configuration errors are returned
-as structured diagnostics (including in JSON output) and exit unsuccessfully
-before any GitHub access. No prompting is performed. Names are generated once
-per execution; a collision fails without adopting an existing repository or
-generating a replacement name.
+and unique template classification, then reconciles safe GitHub-side resources.
+It then bootstraps all composed managed files in one local Git commit and one
+push, re-reads GitHub state and finishes deferred reconciliation. `--dry-run`
+remains an offline, read-only preview. Both paths use the same reusable library
+specification, which resolves the template, validates it with the same semantic
+checks as `template validate`, and reports the effective name, visibility, team,
+and custom-property constraints. If scope/template intersection yields one
+constructible naming pattern, an omitted name is generated from it; patterns
+with no `*` or `?` use their literal name. Use `--name` to override generation,
+or to select among multiple patterns. Visibility is inferred when uniquely
+constrained; use `--visibility` when multiple valid values remain. Ambiguities
+and configuration errors are returned as structured diagnostics (including in
+JSON output) and exit unsuccessfully before any GitHub access. No prompting is
+performed. Names are generated once per execution; a collision fails without
+adopting an existing repository or generating a replacement name.
 
 Immediate reconciliation includes repository settings (except deferred fields),
 team permissions, custom properties, Actions settings/OIDC/variables/secrets,
@@ -238,16 +239,47 @@ receive read access, followed by declared permissions through normal
 reconciliation. Strict collections cannot remove metadata needed for
 scope/classification; declare required entries explicitly.
 
-**Transitional limitation (#111):** repository files are not bootstrapped yet.
-Creation never initializes Git history, sends Contents API writes, or creates
-file-update PRs under either delivery mode. While history is empty, the default
-branch setting, all rulesets (including push rulesets) and archival
-(`archived: true`) are explicitly deferred: references do not exist yet, and
-policies/archival could block the first push. No default branch is fabricated.
-#111 should bootstrap contents once, then re-read current state and rebuild a
-`github-only` plan against the same desired state. Replanning avoids replaying
-completed operations. Later ordinary plan/apply retains its existing
-initialization and file-delivery behavior.
+Git bootstrap uses a private temporary workspace and Git installed on `PATH`. It
+creates exactly one commit, authored and committed by
+`Octosmith <octosmith@users.noreply.github.com>`, with message
+`Initial repository bootstrap`. Identity/configuration is repository-local;
+global/system configuration and hooks are isolated. With no present managed
+files it creates an empty commit, not a placeholder file. `exists` and `exact`
+files use normal desired-state content resolution (including fragments and
+overrides); `absent` files are omitted. Raw blobs preserve resolved UTF-8 bytes
+and line endings even with `.gitattributes` or `.gitignore`. Invalid/escaping
+paths and `.git` aliases are rejected before push. Temporary files are cleaned
+up on success and failure; cleanup errors are reported separately.
+
+The branch is the template-managed `repository.settings.default_branch`, then
+the organization/enterprise default resolved by GitHub on the newly created
+repository's `default_branch`, then GitHub's documented `main` fallback if
+unavailable
+([GitHub branch defaults](https://docs.github.com/en/pull-requests/reference/branches#about-the-default-branch)).
+The same branch becomes the repository default after push, even when ongoing
+default-branch drift enforcement is disabled. Slash-containing branches are
+supported. Existing history or unexpected branches stop bootstrap; there is no
+adoption, force push or automatic push retry.
+
+Creation never sends Contents API writes or creates file-update PRs under either
+delivery mode. Both API reconciliation passes use `github-only`; managed files
+are delivered only by the initial commit, avoiding per-file commits and partial
+content. Default-branch changes, all rulesets (including push rulesets) and
+archival wait until after push. Metadata/classification and current state are
+re-read, a fresh ordinary plan is built, and archival is applied last. Completed
+API deltas are not replayed; opaque secrets already delivered and still present
+are preserved within this lifecycle. Ordinary plan/apply behavior is unchanged.
+
+Git-over-HTTPS uses the same explicit/environment/`gh auth token` authentication
+as API access. Tokens are never embedded in remote URLs, command arguments,
+configuration, diagnostics or output. A static temporary askpass helper reads
+the token from the isolated push child's environment; credential helpers and
+interactive prompts are disabled. The token must have Git Contents: write and,
+for workflow files, Workflows: write (classic PATs need the appropriate
+`repo`/`public_repo` and `workflow` scopes). API creation authorization does not
+guarantee push authorization: installation selection, SSO, Actions token scope,
+organization policies and GitHub App permissions still apply. Git failures are
+reported with safe categories, never raw credential-bearing diagnostics.
 
 An already-satisfied `archived: false` does not trigger a deferral; unarchiving
 can proceed before bootstrap. Post-creation failures retain configured deferred
@@ -255,18 +287,29 @@ work even if runtime resolution or state reading fails. Deferred settings are
 explicitly named in the regular text report.
 
 Text and JSON separate lifecycle status/stages, identity/URL, metadata
-assignment outcomes, deferred work and the ordinary reconciliation report.
-`completed` and `awaiting_bootstrap` exit 0; the latter does **not** mean
-deferred work was applied. Preflight rejection, name collision, creation,
-assignment, classification or reconciliation failure exit 1. No reconciliation
-report is invented before reconciliation is attempted. API/provider error bodies
-are omitted to avoid exposing runtime values.
+assignment outcomes, branch, prepared/commit/push progress, initial SHA, managed
+file count, deferred work, and both ordinary reconciliation reports. Only
+`completed` exits 0. `bootstrap_failed` and `bootstrapped_not_reconciled`, as
+well as preflight, collision, creation, assignment, classification or
+reconciliation failures, exit 1. No reconciliation report is invented before
+reconciliation is attempted. API/provider error bodies are omitted to avoid
+exposing runtime values.
 
 Creation is not transactional: Octosmith never deletes a partially created
 repository. Failed metadata assignments or classification require manual repair
-and verification; ordinary apply cannot discover an out-of-scope repository.
-Once metadata is correct, normal plan/apply can reconcile it, although running
-ordinary apply before #111 bootstrap invokes the existing API bootstrap flow.
+and verification; ordinary apply cannot discover an out-of-scope repository. Do
+**not** rerun `resource create` for a retained repository: its name will
+collide. Before a push attempt, no bootstrap content was sent; correct the
+failure and initialize the retained repository manually, then run ordinary
+plan/apply. For a rejected push, repair the permissions/policy and inspect
+remote state before manually pushing the intended initial commit. For
+`push_unknown` (for example a lost connection after sending), remote changes are
+uncertain: compare the reported initial SHA with GitHub's branch head before
+taking any action. Never force-push or assume the repository is empty. After a
+confirmed push with failed deferred work, repair the reported failure and run
+fresh plan/apply; verify/set the resolved default branch first if that operation
+failed and ongoing drift enforcement is disabled. Unarchive manually if needed
+before repairs. A cleanup warning requires inspecting local temporary storage.
 After a lost creation response, inspect GitHub before explicitly retrying.
 
 `--dry-run` extends preflight with a creation preview, not a drift report
@@ -299,9 +342,8 @@ generate a different name unless you pass the displayed name explicitly with
 it reports prospective naming patterns and diagnostics instead of generating a
 name just for display. It still fails with a nonzero exit status; JSON remains
 structured on failures. No filesystem writes, Git commands, commits, pushes, or
-bootstrap commands are executed by preview. Content bootstrap and assisted
-prompting remain future milestones; non-preview creation now provisions API
-resources.
+bootstrap commands are executed by preview. Post-create commands (#112) and
+assisted prompting (#113) remain future milestones.
 
 Preview JSON uses `kind: repository_creation_preview` and `version: 1`,
 including unresolved preflight results (`ready: false`). If configuration cannot

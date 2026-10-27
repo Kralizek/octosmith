@@ -1,4 +1,4 @@
-#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run=gh
+#!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run=gh,git
 
 /**
  * Octosmith command-line host for validating, planning, and applying GitHub
@@ -70,6 +70,7 @@ export const VERSION = cliMetadata.version;
 /** Describes cli execution options. */
 export interface CliExecutionOptions {
   readonly runtime?: ApplyRuntime;
+  readonly bootstrap?: import("@octosmith/octosmith").RepositoryGitBootstrap;
   readonly credentials?: GitHubTokenOptions;
   readonly fetch?: typeof globalThis.fetch;
   readonly write?: (value: string) => void;
@@ -522,6 +523,7 @@ function createCli(
               }),
             };
             if (!commandOptions.dryRun) {
+              let creationRuntime: ApplyRuntime | undefined;
               const result = await createRepository(
                 {
                   ...input,
@@ -538,6 +540,7 @@ function createCli(
                         options.credentials,
                         options.fetch,
                       );
+                    creationRuntime = runtime;
                     if (!runtime.client) {
                       throw new Error(
                         "Creation requires a GitHub client in the injected runtime",
@@ -546,10 +549,21 @@ function createCli(
                     return runtime.client;
                   },
                   values: options.runtime?.value ?? environmentValue,
+                  bootstrap: {
+                    bootstrap: (request) => {
+                      const transport = options.bootstrap ??
+                        creationRuntime?.bootstrap;
+                      if (!transport) {
+                        throw new Error(
+                          "Creation requires an authenticated Git bootstrap transport",
+                        );
+                      }
+                      return transport.bootstrap(request);
+                    },
+                  },
                 },
               );
-              const success = result.status === "completed" ||
-                result.status === "awaiting_bootstrap";
+              const success = result.status === "completed";
               const rendered = renderOutput(
                 format,
                 result,
@@ -730,6 +744,8 @@ function createCli(
                   renderPermissionRequirements(value.selectorMetadata),
                   "Post-creation reconciliation (including deferred API work):",
                   renderPermissionRequirements(value.reconciliation),
+                  "Initial Git bootstrap:",
+                  renderPermissionRequirements(value.gitBootstrap),
                   ...value.constraints,
                 ].join("\n")));
               return;

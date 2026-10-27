@@ -18,14 +18,14 @@ Deno.test("version comes from package metadata", async () => {
   assertEquals(VERSION, metadata.version);
 });
 
-Deno.test("CLI shebang permits running gh for local authentication", async () => {
+Deno.test("CLI shebang permits gh authentication and local Git bootstrap", async () => {
   const entrypoint = await Deno.readTextFile(
     new URL("./mod.ts", import.meta.url),
   );
   assertStringIncludes(entrypoint.split("\n", 1)[0], "--allow-run=gh");
   assertEquals(
     entrypoint.split("\n", 1)[0].includes("--allow-run=gh,git"),
-    false,
+    true,
   );
 });
 

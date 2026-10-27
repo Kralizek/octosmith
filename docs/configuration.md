@@ -295,12 +295,15 @@ then reconciled normally. With strict collections, explicitly declare required
 teams/properties rather than configuring collections that would remove them.
 Creation rejects a reconciliation plan that would invalidate classification.
 
-Managed files remain part of composed configuration but are not delivered during
-creation, under either direct or PR delivery. Until Git bootstrap (#111),
-default-branch changes, rulesets and archival (`archived: true`) are deferred on
-empty repositories. No initial commit or branch is fabricated.
-`awaiting_bootstrap` explicitly reports unfinished work. Ordinary plan/apply
-still uses the existing automatic initialization behavior described above. An
+Managed files remain part of composed configuration and are bootstrapped during
+creation by one local Git commit/push, never Contents writes or file PRs under
+either delivery mode. Default-branch changes, rulesets and archival
+(`archived: true`) wait for the confirmed push and a fresh `github-only` plan;
+archival runs last. Branch precedence is composed template, GitHub-resolved
+organization default on the new repository, then documented `main`. Empty file
+sets produce an empty commit without a placeholder. See
+[creation and recovery](../packages/cli/README.md#resource-create). Ordinary
+plan/apply still uses the existing initialization behavior above. An
 already-satisfied `archived: false` is not pending work, and unarchiving is
 allowed before bootstrap. Configured deferred work is retained on post-creation
 failures, including missing runtime values and failed metadata/state reads;

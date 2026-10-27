@@ -81,8 +81,12 @@ analyzes creation separately from ordinary plan/apply. The output separates:
   property assignment requires Custom properties: write. Definitions must
   already exist, allow the chosen values, and permit repository-level editing.
 - **Reconciliation:** normal configured resource permissions, including deferred
-  API work, plus Contents: read to inspect history. Creation never requests
-  Contents: write or Pull requests: write just to bootstrap content.
+  API work, plus Contents: read to inspect history.
+- **Initial Git bootstrap:** Contents: write, plus Workflows: write for present
+  workflow files. Classic PATs also need the appropriate `repo`/`public_repo`
+  and `workflow` scopes. No Pull requests: write is needed for creation, even
+  when ongoing file delivery uses pull requests. The same token conventions
+  apply, but API creation authorization does not guarantee Git push access.
 
 Organization/enterprise restrictions, SAML SSO authorization, visibility policy,
 enterprise-only internal visibility and installation repository selection can
@@ -95,9 +99,12 @@ After creation, missing teams/properties or failed classification may leave the
 repository outside management scope. Repair these manually before relying on
 ordinary discovery/apply. Reconciliation failures after successful verification
 can be repaired by fresh plan/apply. Repositories are never automatically
-deleted. Until #111 implements content bootstrap, `resource create` reports
-pending files, default-branch work, rulesets and archival rather than creating
-commits or PRs. Ordinary apply retains its existing bootstrap behavior.
+deleted. Creation makes one local Git commit and at most one push;
+default-branch work, all rulesets and archival follow a confirmed push, with
+archival last. Inspect branch/SHA before recovering an uncertain push; never
+rerun create for a retained repository. See
+[creation recovery](../packages/cli/README.md#resource-create). Ordinary apply
+retains its existing bootstrap behavior.
 
 ## Generated workflows
 

@@ -167,15 +167,25 @@ commands:
 
   octosmith resource create:
     kind: action
-    summary: Create an empty organization repository and reconcile GitHub resources; --dry-run remains an offline read-only preview.
+    summary: Create, bootstrap in one local Git commit and push, and reconcile an organization repository; --dry-run remains offline.
     description: |
       Validates once, creates without initial content, assigns selector metadata,
       verifies scope and unique classification, then uses ordinary reconciliation.
-      Files, default-branch initialization, rulesets and archival await bootstrap
-      (#111). No commits, branches, pushes or file pull requests are created.
-      Partial failures retain the repository and exit unsuccessfully.
-      Awaiting-bootstrap is an explicit successful API-side lifecycle outcome,
-      not a claim that deferred work was applied.
+      Resolves composed files through ordinary desired-state semantics and creates
+      one local commit (empty if no files) and at most one explicit branch push.
+      Branch precedence is template, organization default exposed on the new
+      repository, then GitHub's main fallback. Identity is repository-local
+      Octosmith <octosmith@users.noreply.github.com>; the commit message is
+      Initial repository bootstrap. Authenticated HTTPS uses isolated askpass,
+      never credential-bearing URLs or arguments. Git push requires Contents write
+      and workflow authorization where applicable. No Contents API writes or file
+      pull requests occur. Fresh GitHub-only reconciliation finishes branch
+      settings and all rulesets after push, with archival last.
+      Only completed exits successfully. Bootstrap and post-push failures retain
+      the repository and report branch/SHA, push attempt/confirmation, safe failure
+      category and deferred work. Uncertain push outcomes may have remote changes;
+      inspect the remote SHA before manual recovery and fresh plan/apply. Never
+      rerun create for a retained repository, force push or automatically delete it.
     args:
       - name: template
         type: string

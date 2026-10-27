@@ -29,6 +29,7 @@ import type {
 } from "../state/types.ts";
 import type { LoadedConfiguration } from "./load.ts";
 import { assertNoBootstrapFileDeclarations } from "../state/bootstrap.ts";
+import { assertManagedFilePath } from "../state/file_path.ts";
 
 /** Describes repository metadata. */
 export interface RepositoryMetadata {
@@ -40,6 +41,17 @@ export interface RepositoryMetadata {
 
 /** Describes runtime value provider. */
 export type RuntimeValueProvider = (name: string) => string;
+
+/** A managed file could not be validated or resolved; source contents are omitted. */
+export class ManagedFileResolutionError extends Error {
+  constructor(cause: unknown) {
+    super(
+      cause instanceof Error
+        ? cause.message
+        : "Managed file could not be resolved.",
+    );
+  }
+}
 
 /** Classifies a resource independently of its reconciliation outcome. */
 export type ResourceTemplateClassification =
@@ -219,15 +231,20 @@ export async function resolveDesiredState(
     ...(template.repository.files && {
       files: await Promise.all(
         Object.entries(template.repository.files).map(async ([path, file]) => {
-          if (file.ensure === "absent") {
-            return { path, ensure: "absent" } satisfies DesiredFile;
-          }
+          try {
+            assertManagedFilePath(path);
+            if (file.ensure === "absent") {
+              return { path, ensure: "absent" } satisfies DesiredFile;
+            }
 
-          return {
-            path,
-            ensure: file.ensure,
-            content: await readSource(file.source),
-          } satisfies DesiredFile;
+            return {
+              path,
+              ensure: file.ensure,
+              content: await readSource(file.source),
+            } satisfies DesiredFile;
+          } catch (error) {
+            throw new ManagedFileResolutionError(error);
+          }
         }),
       ),
     }),

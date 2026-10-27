@@ -149,17 +149,77 @@ The explicit `github-only` reconciliation scope is shared by state reading,
 planning/evaluations and the mutation sink. Desired files remain configured, but
 no file operations, snapshots, bootstrap commits or PR finishing occur. Empty
 history defers default-branch settings, all rulesets and archival until content
-bootstrap (#111); these are reported as pending, not applied. Normal plan/apply
-keeps its default scope and existing bootstrap behavior.
+bootstrap; these are reported as pending, not applied. Normal plan/apply keeps
+its default scope and existing bootstrap behavior.
 
-#111 resumes by consuming the exact created identity, bootstrapping once, then
-re-reading current state and rebuilding a GitHub-only plan from the composed
-desired state. It must not replay old operations or deliver files again.
-Required selector metadata is verified before reconciliation; plans that would
-remove that metadata (for example strict collection deletions) are rejected.
-Assignment/classification failures can require manual recovery outside scope.
+Creation resumes by consuming the exact created identity, bootstrapping once,
+then re-reading current state and rebuilding a GitHub-only plan from the
+composed desired state. It must not replay old operations or deliver files
+again. Required selector metadata is verified before reconciliation; plans that
+would remove that metadata (for example strict collection deletions) are
+rejected. Assignment/classification failures can require manual recovery outside
+scope.
+
+`LocalGitBootstrap` implements the injectable `RepositoryGitBootstrap` boundary.
+It receives already composed/resolved `DesiredFile[]` from
+`resolveDesiredState`, the same source-reader/normalization/runtime pipeline
+used by ordinary apply. There is no new file reconciliation or selector engine.
+Path validation is shared with managed-file PR delivery and protects `.git`
+aliases. The private temporary worktree stages raw blobs, bypassing
+`.gitignore`, attributes and line-ending conversion, then creates one commit
+(including an empty commit when no files are present). No placeholder, Contents
+writes or bootstrap PRs occur. Author and committer are repository-local
+`Octosmith <octosmith@users.noreply.github.com>`; the stable message is
+`Initial repository bootstrap`. Global/system configuration and hooks are
+isolated, not modified. Cleanup runs even when Git fails and cannot mask the
+primary failure.
+
+Branch precedence is composed template `repository.settings.default_branch`,
+then GitHub's organization/enterprise default already reflected in the empty
+repository's `default_branch`, then GitHub's documented `main` fallback. There
+is no REST organization-default-branch field to query. Creation explicitly
+configures this same branch after pushing, independently of ongoing drift
+enforcement. Before push it verifies empty history and no existing branches; Git
+receives direct argument arrays, an explicit destination ref, no force option,
+and at most one push invocation.
+
+HTTPS authentication uses the CLI's existing token conventions via an injected
+provider. A static askpass helper contains no token; only the isolated push
+child's environment receives it. No token is stored in the URL or Git config,
+passed in arguments, or exposed in diagnostics/reports. Credential helpers,
+interactive prompts, HTTP redirects and inherited tracing are disabled. API
+creation permissions and Git push authorization are distinct, including
+workflow, SSO and installation restrictions.
+
+Safe API settings, teams, properties, Actions, Dependabot and environments run
+before push; default-branch changes, **all** rulesets and archival run
+afterward. The second pass re-verifies classification and initial SHA, re-reads
+state, resolves composed desired state and builds a fresh `github-only` plan. A
+verified sole bootstrap branch can now be configured as default even if GitHub's
+metadata still names a missing branch. Archival is split out and ordered last.
+Opaque secrets successfully delivered earlier and still present are preserved
+using existing planner reference-preservation semantics, not blindly replayed.
+Files remain excluded for both delivery modes.
+
+Creation results distinguish API reconciliation, preparation, commit creation,
+push attempted/confirmed and deferred reconciliation. `bootstrap_failed` may
+include `push_unknown`: a failed/lost push response is **not** evidence that the
+remote is unchanged. `bootstrapped_not_reconciled` preserves confirmed content
+and reports remaining deferred targets plus normal partial-application reports.
+Neither condition permits automatic deletion, retry, force push or adoption.
+Recovery inspects the reported SHA/branch, completes content/default-branch
+repair manually if necessary, then uses ordinary plan/apply, not another create.
+
+Future #112 can extend this library boundary with a controlled hook between
+materialization and staging in the same workspace, before the sole commit/push.
+It must reuse the resolved identity, branch, content and cleanup/result
+handling, not invoke preflight, creation, or bootstrap again. No hook or command
+execution is implemented here.
 
 ### Repository bootstrap
+
+The following describes the existing **ordinary plan/apply** API bootstrap for
+uninitialized repositories, not the one-commit creation path above.
 
 The state source probes repository history separately from the managed-file
 branch. Only GitHub's specific empty-repository response means uninitialized;
