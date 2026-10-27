@@ -1350,6 +1350,40 @@ Deno.test("custom-property comparison preserves multiplicity, exact scalars and 
   assertEquals(equalCustomPropertyValues(null, null), true);
 });
 
+for (const collectionManagement of ["explicit", "strict"] as const) {
+  Deno.test(`empty rulesets do not defer creation under ${collectionManagement} management`, async () => {
+    const github = new GitHub();
+    const loaded = configuration({ rulesets: [] });
+    const result = await run(github, {
+      ...loaded,
+      configuration: {
+        ...loaded.configuration,
+        repositories: {
+          ...loaded.configuration.repositories,
+          settings: { collectionManagement },
+        },
+      },
+    });
+    assertEquals(result.status, "completed");
+    assertEquals(result.deferred, []);
+    assertEquals(
+      result.report?.repositories[0].items.some(({ details }) =>
+        details.deferred === true
+      ),
+      false,
+    );
+    assertEquals(
+      renderRepositoryCreationResult(result).includes("Deferred rulesets"),
+      false,
+    );
+    assertEquals(JSON.parse(JSON.stringify(result)).status, "completed");
+    assertEquals(
+      github.mutations().some(({ path }) => path.includes("/rulesets")),
+      false,
+    );
+  });
+}
+
 Deno.test("metadata verification permission errors retain identity and failed stage", async () => {
   const github = new GitHub();
   github.override = ({ method, path }) =>

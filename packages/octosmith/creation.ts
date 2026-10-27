@@ -473,7 +473,7 @@ function creationDeferredWork(
           "The branch has no reference before bootstrap; do not fabricate one.",
       }]
       : []),
-    ...(empty && desired.rulesets !== undefined
+    ...(empty && desired.rulesets?.length
       ? [{
         resource: "rulesets" as const,
         targets: desired.rulesets.map((ruleset) => ruleset.name),
