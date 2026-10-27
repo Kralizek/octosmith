@@ -140,7 +140,7 @@ Deno.test("OpenCLI contract exposes explicit resource creation visibility", asyn
   const command = document.commands["octosmith resource create"];
   assertEquals(
     command.flags?.map((flag) => flag.name),
-    ["name", "visibility", "path", "format"],
+    ["name", "visibility", "dry-run", "path", "format"],
   );
   assertEquals(
     command.flags?.[1].choices?.map(({ value }) => value),
@@ -149,6 +149,10 @@ Deno.test("OpenCLI contract exposes explicit resource creation visibility", asyn
   assertStringIncludes(
     command.examples?.map(({ content }) => content).join("\n") ?? "",
     "--visibility private",
+  );
+  assertStringIncludes(
+    command.examples?.map(({ content }) => content).join("\n") ?? "",
+    "--dry-run --format json",
   );
 });
 

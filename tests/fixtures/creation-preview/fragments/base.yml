@@ -1,0 +1,45 @@
+version: 1
+kind: fragment
+resource: repository
+repository:
+  settings:
+    default_branch: trunk
+    has_issues: true
+  teams:
+    - name: platform
+      permission: push
+  custom_properties:
+    tier: backend
+  actions:
+    enabled: true
+    variables:
+      - name: LITERAL
+        value: PRIVATE_LITERAL_SENTINEL
+      - from: BUILD_VALUE
+        to: BUILD
+    secrets:
+      - from: TOKEN_SOURCE
+        to: TOKEN
+  dependabot:
+    secrets: [DEPENDABOT_TOKEN]
+  environments:
+    - name: production
+      variables: [DEPLOY_REGION]
+      secrets: [DEPLOY_TOKEN]
+  rulesets:
+    - name: protected
+      target: branch
+      enforcement: active
+      conditions:
+        ref_name:
+          include: ["~DEFAULT_BRANCH"]
+          exclude: []
+      rules:
+        - type: deletion
+  files:
+    README.md:
+      ensure: exists
+      source: files/README.txt
+    .editorconfig:
+      ensure: exists
+      source: files/README.txt

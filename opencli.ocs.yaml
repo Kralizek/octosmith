@@ -167,7 +167,7 @@ commands:
 
   octosmith resource create:
     kind: action
-    summary: Preflight repository creation from a template without GitHub mutations.
+    summary: Offline creation preflight, or a read-only creation preview with --dry-run; execution is not yet implemented.
     args:
       - name: template
         type: string
@@ -184,6 +184,9 @@ commands:
           - value: private
           - value: internal
         summary: Explicit visibility when selector constraints leave multiple choices.
+      - name: dry-run
+        type: boolean
+        summary: Preview resolved identity, bootstrap files, desired resources, and deferred work without GitHub access or local writes.
       - name: path
         aliases: [p]
         type: string
@@ -197,9 +200,15 @@ commands:
           - value: json
         summary: Output format.
     examples:
-      - title: Create a resource from a template
+      - title: Preflight a resource from a template (no creation yet)
         content: |
           $ octosmith resource create teams/backend --visibility private
+      - title: Preview creation and bootstrap intent
+        content: |
+          $ octosmith resource create services --name team-orders-svcs --visibility internal --dry-run
+      - title: Preview with a provisional generated name as structured JSON
+        content: |
+          $ octosmith resource create services --dry-run --format json
 
   octosmith template:
     kind: group

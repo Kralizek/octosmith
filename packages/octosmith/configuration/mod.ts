@@ -6,6 +6,7 @@ export {
 export * from "./resolve.ts";
 export * from "./types.ts";
 export * from "./creation.ts";
+export * from "./creation_preview.ts";
 export {
   type ConfigurationValidationIssue,
   type ConfigurationValidationIssueCode,

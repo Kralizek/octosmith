@@ -1,0 +1,10 @@
+version: 1
+organization: acme
+repositories:
+  scope:
+    include:
+      names: [team-*-svcs]
+      visibility: [private, internal]
+      teams: [platform]
+      properties:
+        tier: backend

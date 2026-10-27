@@ -1,0 +1,15 @@
+version: 1
+kind: repository
+match:
+  include:
+    names: [team-*-svcs]
+includes: [../fragments/base.yml]
+repository:
+  settings:
+    has_issues: false
+  files:
+    README.md:
+      ensure: exact
+      source: files/README.txt
+    obsolete.txt:
+      ensure: absent
