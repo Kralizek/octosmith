@@ -144,9 +144,10 @@ not read desired-state values, managed-file contents, or reconciliation state.
 ```text
 TYPE        NAME                 TEMPLATE                  STATUS
 repository  acme/api-service     repository:teams/backend  matched
+repository  acme/core-service    repository:baseline       fallback
 repository  acme/legacy-service  -                         unmatched
 
-Summary: 1 matched, 1 unmatched
+Summary: 1 matched, 1 fallback, 1 unmatched
 ```
 
 JSON preserves every discovered in-scope resource and uses canonical template
@@ -163,21 +164,31 @@ identities:
     },
     {
       "type": "repository",
+      "name": "acme/core-service",
+      "template": "repository:baseline",
+      "status": "fallback"
+    },
+    {
+      "type": "repository",
       "name": "acme/legacy-service",
       "template": null,
       "status": "unmatched"
     }
   ],
-  "summary": { "matched": 1, "unmatched": 1 }
+  "summary": { "matched": 1, "fallback": 1, "unmatched": 1 }
 }
 ```
 
 Unmatched resources are shown before the command exits with code `1` by default.
 For repository resources, `repositories.settings.unmatched_repositories: ignore`
-allows success while retaining `template: null` and `status: "unmatched"`.
-Multiple template matches remain an error, not an inspection status. Discovery
-failures also fail the command and are diagnosed on stderr; successfully
-discovered resources are still reported.
+allows success while retaining `template: null` and `status: "unmatched"`. With
+`unmatched_repositories: fallback`, unmatched repositories instead show the
+configured template with `status: "fallback"`; they participate in normal
+planning and apply. `--template repository:baseline` includes repositories
+selected through that fallback. Inspection and plan/apply summaries count
+fallback selections separately. Multiple template matches remain an error, not
+an inspection status. Discovery failures also fail the command and are diagnosed
+on stderr; successfully discovered resources are still reported.
 
 ### plan
 
@@ -237,7 +248,7 @@ Warnings:
   Existing destination values will not be modified or deleted.
 
 Summary:
-  Repositories: 21 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 3 unmatched
+  Repositories: 21 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 0 fallback, 3 unmatched
   Operations:   87 planned, 0 applied, 0 failed, 0 skipped
   Exclusions:   42 skipped runtime bindings
 ```
@@ -246,9 +257,11 @@ Fresh plan/apply JSON reports include an `inspection` object with the same
 `resources` and `summary` shape as `resource list`. Classification is
 independent of execution outcomes: under the default policy an unmatched
 resource also has a failed execution report; under `ignore` it has no execution
-report but remains visible in inspection. Ignored resources do not generate
-execution events or persisted operations. Applying a persisted plan reports only
-its stored resource set, without a new scope-wide inspection.
+report but remains visible in inspection. Fallback-selected repositories have
+normal execution reports and persisted operations under the fallback template.
+Ignored resources do not generate execution events or persisted operations.
+Applying a persisted plan reports only its stored resource set, without a new
+scope-wide inspection.
 
 Use `--out <file>` to persist the exact executable operations:
 

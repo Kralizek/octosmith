@@ -88,7 +88,10 @@ Deno.test("resource list uses the GitHub CLI token without leaking it", async ()
       "cli-secret",
     ]);
     assertEquals(authorizations[0].startsWith("Bearer "), true);
-    assertStringIncludes(output.join("\n"), "0 matched, 0 unmatched");
+    assertStringIncludes(
+      output.join("\n"),
+      "0 matched, 0 fallback, 0 unmatched",
+    );
     assertEquals(output.join("\n").includes("cli-secret"), false);
     assertEquals(errors.join("\n").includes("cli-secret"), false);
   } finally {

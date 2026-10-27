@@ -136,10 +136,35 @@
           "type": "string",
           "enum": [
             "error",
-            "ignore"
+            "ignore",
+            "fallback"
           ]
+        },
+        "fallback_template": {
+          "type": "string",
+          "pattern": "^repository:.+$"
         }
-      }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "unmatched_repositories": {
+                "const": "fallback"
+              }
+            },
+            "required": ["unmatched_repositories"]
+          },
+          "then": {
+            "required": ["fallback_template"]
+          },
+          "else": {
+            "not": {
+              "required": ["fallback_template"]
+            }
+          }
+        }
+      ]
     },
     "fileChanges": {
       "oneOf": [

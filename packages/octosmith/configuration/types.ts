@@ -57,7 +57,8 @@ export interface RepositoryManagementSettings {
   readonly defaultBranchDrift?: "ignore" | "enforce";
   readonly secrets?: "automatic" | "manual";
   readonly collectionManagement?: CollectionManagementMode;
-  readonly unmatchedRepositories?: "error" | "ignore";
+  readonly unmatchedRepositories?: "error" | "ignore" | "fallback";
+  readonly fallbackTemplate?: string;
 }
 
 /** Describes the inclusive side of a selection scope. */
@@ -82,7 +83,7 @@ export interface RepositoryTemplate {
   readonly version: 1;
   readonly kind: "repository";
   readonly name?: string;
-  readonly match: Scope<RepositorySelector>;
+  readonly match?: Scope<RepositorySelector>;
   readonly includes?: readonly string[];
   readonly repository: RepositoryConfiguration;
 }

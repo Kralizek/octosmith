@@ -62,6 +62,102 @@ Deno.test("default branch drift validates ignore and enforce and preserves omitt
   }
 });
 
+Deno.test("fallback templates validate references and may omit match", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.mkdir(join(root, "fragments"));
+    const writeConfiguration = async (settings: Record<string, unknown>) => {
+      await Deno.writeTextFile(
+        join(root, "octosmith.yml"),
+        JSON.stringify({
+          ...configuration,
+          repositories: { ...configuration.repositories, settings },
+        }),
+      );
+    };
+    await Deno.writeTextFile(
+      join(root, "templates", "explicit.yml"),
+      JSON.stringify(template),
+    );
+    await Deno.writeTextFile(
+      join(root, "templates", "baseline.yml"),
+      JSON.stringify({
+        version: 1,
+        kind: "repository",
+        includes: ["../fragments/baseline.yml"],
+        repository: {},
+      }),
+    );
+    await Deno.writeTextFile(
+      join(root, "fragments", "baseline.yml"),
+      JSON.stringify({
+        version: 1,
+        kind: "fragment",
+        resource: "repository",
+        repository: { settings: { has_issues: false } },
+      }),
+    );
+
+    await writeConfiguration({
+      unmatched_repositories: "fallback",
+      fallback_template: "repository:baseline",
+    });
+    assertEquals(await validateConfigurationDirectory(root), []);
+    const loaded = await loadConfigurationDirectory(root);
+    assertEquals(loaded.templates["repository:baseline"].match, undefined);
+    assertEquals(
+      loaded.templates["repository:baseline"].repository.settings?.hasIssues,
+      false,
+    );
+
+    await writeConfiguration({
+      unmatched_repositories: "fallback",
+      fallback_template: "repository:missing",
+    });
+    await assertRejects(
+      () => validateConfigurationDirectory(root),
+      Error,
+      "Unknown fallback template",
+    );
+
+    await writeConfiguration({
+      unmatched_repositories: "fallback",
+      fallback_template: "fragment:baseline",
+    });
+    await assertRejects(() => loadConfigurationDirectory(root), Error);
+
+    await writeConfiguration({ unmatched_repositories: "fallback" });
+    await assertRejects(() => loadConfigurationDirectory(root), Error);
+
+    await writeConfiguration({
+      unmatched_repositories: "ignore",
+      fallback_template: "repository:baseline",
+    });
+    await assertRejects(() => loadConfigurationDirectory(root), Error);
+
+    await writeConfiguration({
+      unmatched_repositories: "fallback",
+      fallback_template: "repository:baseline",
+    });
+    await Deno.writeTextFile(
+      join(root, "templates", "orphan.yml"),
+      JSON.stringify({
+        version: 1,
+        kind: "repository",
+        repository: {},
+      }),
+    );
+    await assertRejects(
+      () => validateConfigurationDirectory(root),
+      Error,
+      "must define match",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("offline template validation rejects the internal bootstrap path", async () => {
   const root = await Deno.makeTempDir();
   try {
@@ -340,7 +436,7 @@ Deno.test("configuration accepts include all", async () => {
       const loaded = await loadConfigurationDirectory(root);
       assertEquals(loaded.configuration.repositories.scope.include, "all");
       assertEquals(
-        loaded.templates["repository:code"].match.include,
+        loaded.templates["repository:code"].match!.include,
         "all",
       );
     },

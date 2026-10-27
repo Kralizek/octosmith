@@ -239,7 +239,8 @@ async function inspectResource(
     const classification = classifyResource(loaded, metadata);
 
     if (
-      classification.status !== "matched" ||
+      (classification.status !== "matched" &&
+        classification.status !== "fallback") ||
       classification.template !== resource.template.id
     ) {
       return { state: "template" };

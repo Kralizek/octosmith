@@ -38,7 +38,7 @@ flowchart TD
     configuration["Configuration"]
     load["Load + validate"]
     discover["Discover repositories"]
-    resolve["Resolve one template per repository"]
+    resolve["Resolve explicit match or configured fallback"]
     current["Read current GitHub state"]
     plan["Build plan"]
     report["Plan report"]

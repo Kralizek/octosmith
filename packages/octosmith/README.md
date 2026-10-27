@@ -78,9 +78,11 @@ properties. Name selectors support `*` and `?` glob patterns.
 
 ### Repository templates
 
-Every repository in scope must resolve to exactly one template. Templates are
-discovered recursively and identified as
-`<kind>:<relative-path-without-extension>`. The optional `name` is display-only.
+Every repository in scope must resolve to exactly one template. Regular template
+matches take precedence; when none match, the configured unmatched policy can
+select an explicit fallback template. Templates are discovered recursively and
+identified as `<kind>:<relative-path-without-extension>`. The optional `name` is
+display-only.
 
 Example:
 

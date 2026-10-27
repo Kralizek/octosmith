@@ -36,6 +36,7 @@ export type ConfigurationValidationIssueCode =
   | "configuration_load_error"
   | "template_load_error"
   | "unknown_template"
+  | "template_match_required"
   | "template_unreachable"
   | "template_overlap"
   | "scope_repository_unmatched"
@@ -183,14 +184,43 @@ async function collectLoadedConfigurationValidation(
   const intersections: EffectiveRepositorySelectorIntersection[] = [];
 
   const scope = loaded.configuration.repositories.scope;
+  const settings = loaded.configuration.repositories.settings;
+  if (
+    selectedTemplate === undefined && templateSetComplete &&
+    settings?.unmatchedRepositories === "fallback" &&
+    settings.fallbackTemplate !== undefined &&
+    loaded.templates[settings.fallbackTemplate] === undefined
+  ) {
+    issues.push({
+      code: "unknown_template",
+      message: "Unknown fallback template: " + settings.fallbackTemplate,
+      template: settings.fallbackTemplate,
+      path: "repositories.settings.fallbackTemplate",
+    });
+  }
+  for (const [name, template] of Object.entries(loaded.templates)) {
+    if (
+      template.match === undefined &&
+      (settings?.unmatchedRepositories !== "fallback" ||
+        settings.fallbackTemplate !== name)
+    ) {
+      issues.push({
+        code: "template_match_required",
+        message: "Template " + name +
+          " must define match unless it is the configured fallback template",
+        template: name,
+        path: "templates." + name + ".match",
+      });
+    }
+  }
   if (selectedTemplate === undefined || validateRootTemplateOverlap) {
     issues.push(...findTemplateOverlapIssues(scope, loaded.templates));
   }
   if (
     (selectedTemplate === undefined || validateRootScopeCoverage) &&
     templateSetComplete &&
-    loaded.configuration.repositories.settings?.unmatchedRepositories !==
-      "ignore"
+    settings?.unmatchedRepositories !== "ignore" &&
+    settings?.unmatchedRepositories !== "fallback"
   ) {
     issues.push(...findScopeCoverageIssues(scope, loaded.templates));
   }
@@ -307,6 +337,7 @@ export function templateCanMatchScope(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
 ): boolean {
+  if (template.match === undefined) return false;
   const positiveSelectors = [
     scope.include === "all" ? {} : scope.include,
     template.match.include === "all" ? {} : template.match.include,
@@ -331,6 +362,7 @@ export function effectiveRepositorySelectorIntersection(
   template: RepositoryTemplate,
   templateIdentity: string,
 ): EffectiveRepositorySelectorIntersection {
+  const match = template.match ?? { include: "all" as const };
   const include = [
     {
       path: "repositories.scope.include",
@@ -338,16 +370,16 @@ export function effectiveRepositorySelectorIntersection(
     },
     {
       path: "templates." + templateIdentity + ".match.include",
-      selector: template.match.include === "all" ? {} : template.match.include,
+      selector: match.include === "all" ? {} : match.include,
     },
   ];
   const exclude = [
     scope.exclude === undefined
       ? undefined
       : { path: "repositories.scope.exclude", selector: scope.exclude },
-    template.match.exclude === undefined ? undefined : {
+    match.exclude === undefined ? undefined : {
       path: "templates." + templateIdentity + ".match.exclude",
-      selector: template.match.exclude,
+      selector: match.exclude,
     },
   ].filter((constraint) => constraint !== undefined);
   const witness = scopeIntersectionWitness(
@@ -436,6 +468,7 @@ function findTemplateOverlapIssues(
 
   for (let leftIndex = 0; leftIndex < entries.length; leftIndex++) {
     const [leftName, left] = entries[leftIndex];
+    if (left.match === undefined) continue;
 
     for (
       let rightIndex = leftIndex + 1;
@@ -443,6 +476,7 @@ function findTemplateOverlapIssues(
       rightIndex++
     ) {
       const [rightName, right] = entries[rightIndex];
+      if (right.match === undefined) continue;
       const leftInclude = left.match.include === "all"
         ? {}
         : left.match.include;
@@ -521,6 +555,7 @@ function findScopeCoverageIssues(
 
     const literalName: RepositorySelector = { names: [name] };
     const possible = entries.some(([templateName, template]) => {
+      if (template.match === undefined) return false;
       const templateInclude = template.match.include === "all"
         ? {}
         : template.match.include;
@@ -557,6 +592,7 @@ function findScopeCoverageIssues(
   }
 
   const anyTemplateReachable = entries.some(([templateName, template]) => {
+    if (template.match === undefined) return false;
     const templateInclude = template.match.include === "all"
       ? {}
       : template.match.include;

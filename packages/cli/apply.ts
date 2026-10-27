@@ -202,7 +202,8 @@ export function createGitHubRuntime(
       const metadata = discovery.repositories[0];
       const classification = classifyResource(loadedConfiguration, metadata);
       if (
-        classification.status !== "matched" ||
+        (classification.status !== "matched" &&
+          classification.status !== "fallback") ||
         classification.template !== resource.desired.template
       ) {
         throw new Error("Resource template changed after apply preparation");
@@ -300,7 +301,8 @@ export async function apply(
     ? discovery.repositories
     : discovery.repositories.filter((repository) => {
       const classification = classifyResource(loaded, repository);
-      return classification.status === "matched" &&
+      return (classification.status === "matched" ||
+        classification.status === "fallback") &&
         classification.template === template;
     });
   const values = options.values ?? runtime.value ?? environmentValue;
@@ -336,7 +338,9 @@ export async function apply(
       }
       let runtimeValues = values;
 
-      if (inspection.status === "matched") {
+      if (
+        inspection.status === "matched" || inspection.status === "fallback"
+      ) {
         template = inspection.template;
         runtimeValues = preflightRuntimeReferences(
           template,

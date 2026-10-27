@@ -2313,6 +2313,40 @@ Deno.test("configuration precondition normalizes execution defaults", async () =
   const right = await createPersistedPlanArtifact(explicitLoaded, []);
 
   assertEquals(left.configuration, right.configuration);
+
+  const fallbackLoaded: LoadedConfiguration = {
+    ...baseLoaded,
+    configuration: {
+      ...baseLoaded.configuration,
+      repositories: {
+        ...baseLoaded.configuration.repositories,
+        settings: {
+          unmatchedRepositories: "fallback",
+          fallbackTemplate: "repository:baseline",
+        },
+      },
+    },
+  };
+  const changedFallbackLoaded: LoadedConfiguration = {
+    ...fallbackLoaded,
+    configuration: {
+      ...fallbackLoaded.configuration,
+      repositories: {
+        ...fallbackLoaded.configuration.repositories,
+        settings: {
+          unmatchedRepositories: "fallback",
+          fallbackTemplate: "repository:other",
+        },
+      },
+    },
+  };
+  const fallback = await createPersistedPlanArtifact(fallbackLoaded, []);
+  const changedFallback = await createPersistedPlanArtifact(
+    changedFallbackLoaded,
+    [],
+  );
+  assertNotEquals(left.configuration, fallback.configuration);
+  assertNotEquals(fallback.configuration, changedFallback.configuration);
 });
 
 Deno.test("configuration precondition treats pull-request labels as an unordered set", async () => {

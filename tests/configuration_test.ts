@@ -67,6 +67,63 @@ Deno.test("canonical classification distinguishes single, missing, and multiple 
     status: "invalid",
     templates: ["repository:primary", "repository:duplicate"],
   });
+  const withFallback: LoadedConfiguration = {
+    ...loaded,
+    configuration: {
+      ...loaded.configuration,
+      repositories: {
+        ...loaded.configuration.repositories,
+        settings: {
+          unmatchedRepositories: "fallback",
+          fallbackTemplate: "repository:baseline",
+        },
+      },
+    },
+    templates: {
+      ...loaded.templates,
+      "repository:baseline": {
+        version: 1,
+        kind: "repository",
+        repository: { settings: { description: "baseline" } },
+      },
+    },
+  };
+  assertEquals(classifyResource(withFallback, metadata), {
+    status: "matched",
+    template: "repository:primary",
+  });
+  assertEquals(
+    (await resolveDesiredState(withFallback, metadata, () => "unused"))
+      .template,
+    "repository:primary",
+  );
+  assertEquals(classifyResource(withFallback, { ...metadata, name: "other" }), {
+    status: "fallback",
+    template: "repository:baseline",
+  });
+  const fallbackDesired = await resolveDesiredState(
+    withFallback,
+    { ...metadata, name: "other" },
+    () => "unused",
+  );
+  assertEquals(fallbackDesired.template, "repository:baseline");
+  assertEquals(fallbackDesired.settings?.description, "baseline");
+  const overlappingFallback: LoadedConfiguration = {
+    ...withFallback,
+    templates: {
+      ...withFallback.templates,
+      "repository:duplicate": primary,
+    },
+  };
+  assertEquals(classifyResource(overlappingFallback, metadata), {
+    status: "invalid",
+    templates: ["repository:primary", "repository:duplicate"],
+  });
+  await assertRejects(
+    () => resolveDesiredState(overlappingFallback, metadata, () => "unused"),
+    Error,
+    "Resource service-api matches multiple templates",
+  );
   await assertRejects(
     () => resolveDesiredState(overlapping, metadata, () => "unused"),
     Error,
@@ -763,7 +820,7 @@ Deno.test("preserves arbitrary configuration map keys", async () => {
         repository_type: "code",
       },
     });
-    assertEquals(loaded.templates["repository:code"].match.include, {
+    assertEquals(loaded.templates["repository:code"].match!.include, {
       properties: {
         repository_type: "code",
       },
