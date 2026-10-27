@@ -52,15 +52,15 @@ and preserved. See the
 [configuration guide](../../docs/configuration.md#default-branch-and-automatic-initialization)
 for protection, concurrency, and retry limitations.
 
-| Command                           | GitHub access | Mutates GitHub | Purpose                                                              |
-| --------------------------------- | ------------- | -------------- | -------------------------------------------------------------------- |
-| `template print <template>`       | No            | No             | Print a synthesized repository template                              |
-| `template validate`               | No            | No             | Validate configuration and static planner invariants                 |
-| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates      |
-| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                     |
-| `resource create <template>`      | No            | No             | Reserved command; currently reports that creation is not implemented |
-| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                      |
-| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                     |
+| Command                           | GitHub access | Mutates GitHub | Purpose                                                         |
+| --------------------------------- | ------------- | -------------- | --------------------------------------------------------------- |
+| `template print <template>`       | No            | No             | Print a synthesized repository template                         |
+| `template validate`               | No            | No             | Validate configuration and static planner invariants            |
+| `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates |
+| `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                |
+| `resource create <template>`      | No            | No             | Preflight a repository creation specification                   |
+| `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                 |
+| `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                |
 
 ### template print
 
@@ -189,6 +189,26 @@ selected through that fallback. Inspection and plan/apply summaries count
 fallback selections separately. Multiple template matches remain an error, not
 an inspection status. Discovery failures also fail the command and are diagnosed
 on stderr; successfully discovered resources are still reported.
+
+### resource create
+
+```sh
+octosmith resource create services --path ./configuration
+octosmith resource create services --name api-service --visibility private --path ./configuration
+octosmith resource create services --format json --path ./configuration
+```
+
+Creation currently performs an offline preflight only; it does not create a
+GitHub repository. The reusable library specification resolves the template,
+validates it with the same semantic checks as `template validate`, and reports
+the effective name, visibility, team, and custom-property constraints. If
+scope/template intersection yields one constructible naming pattern, an omitted
+name is generated from it; patterns with no `*` or `?` use their literal name.
+Use `--name` to override generation, or to select among multiple patterns.
+Visibility is inferred when uniquely constrained; use `--visibility` when
+multiple valid values remain. Ambiguities and configuration errors are returned
+as structured diagnostics (including in JSON output) and exit unsuccessfully. No
+prompt, credential lookup, GitHub access, or remote mutation occurs.
 
 ### plan
 

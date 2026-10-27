@@ -19,10 +19,12 @@ import {
   loadConfigurationDirectory,
   type LoadedConfiguration,
   parsePersistedPlanArtifact,
+  preflightRepositoryCreation,
   renderReport,
   renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
   type Report,
+  type RepositoryCreationSpecification,
   type RepositoryReport,
   requiredPermissionsForConfiguration,
   type ResourceInspection,
@@ -481,17 +483,46 @@ function createCli(
       .command(
         "create",
         new Command()
-          .description("Create a resource from a template.")
+          .description("Preflight repository creation from a template.")
           .arguments("<template:string>")
           .option("--name <name:string>", "Name for the new resource.")
+          .option(
+            "--visibility <visibility:string>",
+            "Visibility: public, private, or internal.",
+          )
           .option("-p, --path <path:string>", "Configuration directory.", {
             default: ".",
           })
           .option("--format <format:string>", "Output format: text or json.", {
             default: "text",
           })
-          .action((_commandOptions, _template: string) => {
-            throw new Error("resource create is not implemented yet");
+          .action(async (commandOptions, template: string) => {
+            const format = parseOutputFormat(commandOptions.format);
+            const loaded = await loadConfigurationDirectory(
+              commandOptions.path,
+            );
+            const specification = await preflightRepositoryCreation(loaded, {
+              template,
+              ...(commandOptions.name !== undefined && {
+                name: commandOptions.name,
+              }),
+              ...(commandOptions.visibility !== undefined && {
+                visibility: commandOptions.visibility,
+              }),
+            });
+            const rendered = renderOutput(
+              format,
+              specification,
+              renderRepositoryCreationPreflight,
+            );
+            if (format === "json" || specification.ready) {
+              write(rendered);
+            } else {
+              writeError(rendered);
+            }
+            if (!specification.ready) {
+              throw new ApplyFailedError();
+            }
           }),
       ),
   );
@@ -843,6 +874,39 @@ function renderValidationResult(
     ...errors,
     ...warnings,
   ].join("\n\n");
+}
+
+function renderRepositoryCreationPreflight(
+  specification: RepositoryCreationSpecification,
+): string {
+  const { choices } = specification;
+  const nameChoice = choices.name;
+  const visibilityChoice = choices.visibility;
+  const diagnostics = specification.diagnostics.map((diagnostic) =>
+    "Error [" + diagnostic.code + "] " +
+    (diagnostic.path === undefined ? "" : diagnostic.path + ": ") +
+    diagnostic.message
+  );
+
+  return [
+    "Repository creation preflight: " +
+    (specification.ready ? "ready" : "incomplete"),
+    "Template: " + specification.template,
+    "Name: " +
+    (nameChoice.value ??
+      (nameChoice.alternatives.map(({ pattern }) => pattern).join(" OR ") ||
+        "requires --name")),
+    "Visibility: " +
+    (visibilityChoice.value ??
+      (visibilityChoice.alternatives.join(", ") || "unavailable")),
+    "Required teams: " + (choices.teams.join(", ") || "none"),
+    "Required custom properties: " +
+    (Object.keys(choices.customProperties).length === 0
+      ? "none"
+      : JSON.stringify(choices.customProperties)),
+    ...diagnostics,
+    "No repository was created.",
+  ].join("\n");
 }
 
 function renderValidationDiagnostics(

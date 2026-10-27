@@ -135,6 +135,23 @@ Deno.test("OpenCLI contract gives resource list configuration and output flags",
   );
 });
 
+Deno.test("OpenCLI contract exposes explicit resource creation visibility", async () => {
+  const document = await loadContract();
+  const command = document.commands["octosmith resource create"];
+  assertEquals(
+    command.flags?.map((flag) => flag.name),
+    ["name", "visibility", "path", "format"],
+  );
+  assertEquals(
+    command.flags?.[1].choices?.map(({ value }) => value),
+    ["public", "private", "internal"],
+  );
+  assertStringIncludes(
+    command.examples?.map(({ content }) => content).join("\n") ?? "",
+    "--visibility private",
+  );
+});
+
 Deno.test("OpenCLI contract documents help alias and current exit behavior", async () => {
   const document = await loadContract();
   const globalFlags = document.global?.flags ?? [];
