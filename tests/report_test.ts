@@ -471,7 +471,7 @@ for (const unmatched of [undefined, 0, 2]) {
             template: null,
             status: "unmatched" as const,
           })),
-          summary: { matched: 0, unmatched },
+          summary: { matched: 0, fallback: 0, unmatched },
         },
       }),
     };
@@ -482,7 +482,9 @@ for (const unmatched of [undefined, 0, 2]) {
     assertEquals(
       repositorySummary,
       "  Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed" +
-        (unmatched === undefined ? "" : ", " + unmatched + " unmatched"),
+        (unmatched === undefined
+          ? ""
+          : ", 0 fallback, " + unmatched + " unmatched"),
     );
   });
 }
@@ -516,7 +518,7 @@ Deno.test("unmatched resources are grouped by type with redundant organization o
           status: "unmatched",
         },
       ],
-      summary: { matched: 0, unmatched: 3 },
+      summary: { matched: 0, fallback: 0, unmatched: 3 },
     },
   };
   const rendered = renderReport(report);
@@ -539,7 +541,7 @@ Deno.test("unmatched resources are grouped by type with redundant organization o
   assertStringIncludes(rendered, "Unmatched environments (1):");
   assertStringIncludes(
     rendered,
-    "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 2 unmatched",
+    "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 0 failed, 0 fallback, 2 unmatched",
   );
   assertEquals(rendered.includes("acme/repo-a"), false);
   assertEquals(rendered.includes("acme/repo-b"), false);
@@ -640,13 +642,19 @@ Deno.test("reports unmatched error policy and actual pull requests once", () => 
         name: "acme/legacy",
         template: null,
         status: "unmatched",
+      }, {
+        type: "repository",
+        name: "acme/baseline",
+        template: "repository:baseline",
+        status: "fallback",
       }],
-      summary: { matched: 1, unmatched: 1 },
+      summary: { matched: 1, fallback: 1, unmatched: 1 },
     },
   };
   const rendered = renderReport(report);
 
   assertStringIncludes(rendered, "Policy: error");
+  assertStringIncludes(rendered, "1 fallback, 1 unmatched");
   assertStringIncludes(rendered, "Apply cannot complete successfully.");
   assertStringIncludes(rendered, "Pull requests:");
   assertStringIncludes(

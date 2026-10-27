@@ -623,7 +623,7 @@ for (const policy of ["error", "ignore"] as const) {
             const result = JSON.parse(text);
             assertEquals(isList ? result : result.inspection, {
               resources: expectedResources,
-              summary: { matched: 2, unmatched: 1 },
+              summary: { matched: 2, fallback: 0, unmatched: 1 },
             });
             if (!isList) {
               assertEquals(
@@ -651,7 +651,10 @@ for (const policy of ["error", "ignore"] as const) {
                 ["repository", "acme/unmatched", "-", "unmatched"],
               ],
             );
-            assertStringIncludes(text, "Summary: 2 matched, 1 unmatched");
+            assertStringIncludes(
+              text,
+              "Summary: 2 matched, 0 fallback, 1 unmatched",
+            );
           } else {
             assertStringIncludes(
               text,
@@ -674,7 +677,7 @@ for (const policy of ["error", "ignore"] as const) {
               : 0;
             assertStringIncludes(
               text,
-              `Repositories: ${planned} planned, 0 unchanged, ${applied} applied, 0 partially-applied, ${failed} failed, 1 unmatched`,
+              `Repositories: ${planned} planned, 0 unchanged, ${applied} applied, 0 partially-applied, ${failed} failed, 0 fallback, 1 unmatched`,
             );
           }
           if (isList) {
@@ -780,6 +783,7 @@ Deno.test("resource list traces discovery separately from JSON and does not reso
     );
     assertEquals(JSON.parse(output.join("\n")).summary, {
       matched: 2,
+      fallback: 0,
       unmatched: 1,
     });
     assertStringIncludes(errors.join("\n"), "GET /orgs/acme/repos");
@@ -812,12 +816,12 @@ for (const format of ["text", "json"] as const) {
       if (format === "json") {
         assertEquals(JSON.parse(output.join("\n")), {
           resources: [],
-          summary: { matched: 0, unmatched: 0 },
+          summary: { matched: 0, fallback: 0, unmatched: 0 },
         });
       } else {
         assertStringIncludes(
           output.join("\n"),
-          "Summary: 0 matched, 0 unmatched",
+          "Summary: 0 matched, 0 fallback, 0 unmatched",
         );
         assertEquals(output[0].split("\n")[0].split(/\s+/), [
           "TYPE",
@@ -852,7 +856,7 @@ Deno.test("resource list reports discovered resources but fails on discovery err
       1,
     );
     const result = JSON.parse(output.join("\n"));
-    assertEquals(result.summary, { matched: 1, unmatched: 0 });
+    assertEquals(result.summary, { matched: 1, fallback: 0, unmatched: 0 });
     assertEquals(
       result.resources.map((resource: { name: string }) => resource.name),
       ["acme/sample"],
@@ -865,7 +869,7 @@ Deno.test("resource list reports discovered resources but fails on discovery err
 });
 
 async function inspectionConfigurationDirectory(
-  policy: "error" | "ignore",
+  policy: "error" | "ignore" | "fallback",
 ): Promise<string> {
   const root = await Deno.makeTempDir();
   await Deno.mkdir(root + "/templates");
@@ -876,8 +880,14 @@ async function inspectionConfigurationDirectory(
       organization: "acme",
       repositories: {
         scope: { include: "all", exclude: { names: ["excluded"] } },
-        ...(policy === "ignore" &&
-          { settings: { unmatched_repositories: "ignore" } }),
+        ...(policy !== "error" && {
+          settings: {
+            unmatched_repositories: policy,
+            ...(policy === "fallback" && {
+              fallback_template: "repository:baseline",
+            }),
+          },
+        }),
       },
     }),
   );
@@ -902,6 +912,16 @@ async function inspectionConfigurationDirectory(
       repository: { settings: { has_issues: false } },
     }),
   );
+  if (policy === "fallback") {
+    await Deno.writeTextFile(
+      root + "/templates/baseline.yml",
+      stringify({
+        version: 1,
+        kind: "repository",
+        repository: { settings: { has_issues: false } },
+      }),
+    );
+  }
   return root;
 }
 
@@ -933,9 +953,12 @@ function fakeInspectionGitHub(
         ),
       );
     }
+    if (method === "GET" && path === "/repos/acme/excluded") {
+      return Promise.resolve(json(repository("excluded")));
+    }
     if (
       (method === "GET" || method === "PATCH") &&
-      /^\/repos\/acme\/sample(?:-legacy)?$/.test(path)
+      /^\/repos\/acme\/(?:sample(?:-legacy)?|unmatched)$/.test(path)
     ) {
       return Promise.resolve(json(repository(path.split("/").at(-1))));
     }
@@ -944,6 +967,75 @@ function fakeInspectionGitHub(
     );
   };
 }
+
+Deno.test("fallback selections appear in inspection and template-scoped plans", async () => {
+  const root = await inspectionConfigurationDirectory("fallback");
+  try {
+    const listOutput: string[] = [];
+    const listRuntime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeInspectionGitHub([]),
+    });
+    assertEquals(
+      await main(
+        ["resource", "list", "--path", root, "--format", "text"],
+        { runtime: listRuntime, write: (value) => listOutput.push(value) },
+      ),
+      0,
+    );
+    assertStringIncludes(
+      listOutput.join("\n"),
+      "acme/unmatched      repository:baseline  fallback",
+    );
+    assertStringIncludes(
+      listOutput.join("\n"),
+      "Summary: 2 matched, 1 fallback, 0 unmatched",
+    );
+
+    const planOutput: string[] = [];
+    const planErrors: string[] = [];
+    const planRuntime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeInspectionGitHub([]),
+    });
+    const planExit = await main(
+      [
+        "plan",
+        "--path",
+        root,
+        "--template",
+        "repository:baseline",
+        "--format",
+        "json",
+      ],
+      {
+        runtime: planRuntime,
+        write: (value) => planOutput.push(value),
+        writeError: (value) => planErrors.push(value),
+      },
+    );
+    assertEquals(planExit, 0, planErrors.join("\n") + planOutput.join("\n"));
+    const report = JSON.parse(planOutput.join("\n"));
+    assertEquals(
+      report.repositories.map((
+        resource: { repository: string; template: string },
+      ) => [
+        resource.repository,
+        resource.template,
+      ]),
+      [["unmatched", "repository:baseline"]],
+    );
+    assertEquals(report.inspection.summary, {
+      matched: 0,
+      fallback: 1,
+      unmatched: 0,
+    });
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 Deno.test("template-scoped plan and apply succeed when no repositories match", async () => {
   const root = await inspectionConfigurationDirectory("error");
@@ -986,7 +1078,7 @@ Deno.test("template-scoped plan and apply succeed when no repositories match", a
       assertEquals(report.repositories, []);
       assertEquals(report.inspection, {
         resources: [],
-        summary: { matched: 0, unmatched: 0 },
+        summary: { matched: 0, fallback: 0, unmatched: 0 },
       });
       assertEquals(
         requests.map(({ method, url }) => [method, url.pathname]),
@@ -1360,6 +1452,48 @@ Deno.test("CLI reports an out-of-scope targeted repository without mutation", as
       rendered,
       "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 1 failed",
     );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI does not select fallback for an excluded target", async () => {
+  const root = await inspectionConfigurationDirectory("fallback");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeInspectionGitHub(requests),
+    });
+    assertEquals(
+      await main(
+        ["apply", "excluded", "--path", root, "--format", "json"],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    const report = JSON.parse(output.join("\n"));
+    assertEquals(report.repositories.length, 1);
+    assertEquals(report.repositories[0].repository, "excluded");
+    assertEquals(report.repositories[0].items, []);
+    assertStringIncludes(
+      report.repositories[0].error,
+      "outside the configured scope",
+    );
+    assertEquals(report.inspection.summary, {
+      matched: 0,
+      fallback: 0,
+      unmatched: 0,
+    });
+    assertEquals(
+      requests.map(({ method, url }) => [method, url.pathname]),
+      [["GET", "/api/v3/repos/acme/excluded"]],
+    );
+    assertEquals(mutations(requests), []);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -2368,6 +2502,139 @@ Deno.test("persisted apply reports template drift before state drift", async () 
   }
 });
 
+Deno.test("persisted fallback plans reject baseline drift before mutation", async () => {
+  const root = await inspectionConfigurationDirectory("fallback");
+  const planPath = await Deno.makeTempFile({ suffix: ".json" });
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeInspectionGitHub(requests),
+    });
+    assertEquals(
+      await main(
+        [
+          "plan",
+          "--path",
+          root,
+          "--template",
+          "repository:baseline",
+          "--out",
+          planPath,
+        ],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      0,
+    );
+
+    const baselinePath = root + "/templates/baseline.yml";
+    const baseline = await Deno.readTextFile(baselinePath);
+    await Deno.writeTextFile(
+      baselinePath,
+      baseline.replace("has_issues: false", "has_issues: true"),
+    );
+    requests.length = 0;
+    output.length = 0;
+
+    assertEquals(
+      await main(
+        ["apply", "--plan", planPath, "--path", root],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+    assertStringIncludes(output.join("\n"), "Configuration: valid");
+    assertStringIncludes(output.join("\n"), "repository  unmatched  template");
+    assertEquals(mutations(requests), []);
+  } finally {
+    await Deno.remove(root, { recursive: true });
+    await Deno.remove(planPath);
+  }
+});
+
+for (const drift of ["policy", "identity"] as const) {
+  Deno.test(`persisted fallback plans reject ${drift} drift before mutation`, async () => {
+    const root = await inspectionConfigurationDirectory("fallback");
+    const planPath = await Deno.makeTempFile({ suffix: ".json" });
+    const requests: CapturedRequest[] = [];
+    const output: string[] = [];
+
+    try {
+      await Deno.writeTextFile(
+        root + "/templates/baseline.yml",
+        stringify({
+          version: 1,
+          kind: "repository",
+          match: { include: { names: ["baseline-only"] } },
+          repository: { settings: { has_issues: false } },
+        }),
+      );
+      await Deno.writeTextFile(
+        root + "/templates/baseline-copy.yml",
+        stringify({
+          version: 1,
+          kind: "repository",
+          match: { include: { names: ["baseline-copy-only"] } },
+          repository: { settings: { has_issues: false } },
+        }),
+      );
+
+      const runtime = createGitHubRuntime({
+        token: "test-token",
+        baseUrl: "https://github.example.test/api/v3",
+        fetch: fakeInspectionGitHub(requests),
+      });
+      assertEquals(
+        await main(
+          [
+            "plan",
+            "--path",
+            root,
+            "--template",
+            "repository:baseline",
+            "--out",
+            planPath,
+          ],
+          { runtime, write: (value) => output.push(value) },
+        ),
+        0,
+      );
+
+      const configPath = root + "/octosmith.yml";
+      const configuration = parse(await Deno.readTextFile(configPath)) as {
+        repositories: { settings: Record<string, unknown> };
+      };
+      configuration.repositories.settings = drift === "policy"
+        ? { unmatched_repositories: "ignore" }
+        : {
+          ...configuration.repositories.settings,
+          fallback_template: "repository:baseline-copy",
+        };
+      await Deno.writeTextFile(configPath, stringify(configuration));
+      requests.length = 0;
+      output.length = 0;
+
+      assertEquals(
+        await main(
+          ["apply", "--plan", planPath, "--path", root],
+          { runtime, write: (value) => output.push(value) },
+        ),
+        1,
+      );
+      const rendered = output.join("\n");
+      assertStringIncludes(rendered, "Configuration: changed");
+      assertStringIncludes(rendered, "repository  unmatched  template");
+      assertEquals(mutations(requests), []);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+      await Deno.remove(planPath);
+    }
+  });
+}
+
 Deno.test("persisted apply reports root configuration drift independently", async () => {
   const root = await configurationDirectory();
   const planPath = await Deno.makeTempFile({ suffix: ".json" });
@@ -2722,7 +2989,7 @@ Deno.test("CLI JSON apply preserves the structured report shape", async () => {
         template: "repository:code",
         status: "matched",
       }],
-      summary: { matched: 1, unmatched: 0 },
+      summary: { matched: 1, fallback: 0, unmatched: 0 },
     });
     assertEquals(report.repositories.length, 1);
     assertEquals(report.repositories[0].repository, "sample");

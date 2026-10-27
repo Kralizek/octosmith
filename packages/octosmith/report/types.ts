@@ -26,7 +26,7 @@ export interface Report {
   readonly repositories: readonly RepositoryReport[];
   readonly inspection?: ResourceInspectionResult;
   readonly mode?: "plan" | "apply";
-  readonly unmatchedPolicy?: "error" | "ignore";
+  readonly unmatchedPolicy?: "error" | "ignore" | "fallback";
   readonly pullRequests?: readonly PullRequestResult[];
 }
 

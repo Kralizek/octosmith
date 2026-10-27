@@ -12,6 +12,7 @@ export type ResourceInspection =
   }
   & (
     | { readonly template: string; readonly status: "matched" }
+    | { readonly template: string; readonly status: "fallback" }
     | { readonly template: null; readonly status: "unmatched" }
   );
 
@@ -20,6 +21,7 @@ export interface ResourceInspectionResult {
   readonly resources: readonly ResourceInspection[];
   readonly summary: {
     readonly matched: number;
+    readonly fallback: number;
     readonly unmatched: number;
   };
 }
@@ -49,6 +51,8 @@ export function summarizeResourceInspection(
     summary: {
       matched:
         resources.filter((resource) => resource.status === "matched").length,
+      fallback:
+        resources.filter((resource) => resource.status === "fallback").length,
       unmatched:
         resources.filter((resource) => resource.status === "unmatched").length,
     },
@@ -80,6 +84,7 @@ export function renderResourceInspection(
     ),
     "",
     "Summary: " + result.summary.matched + " matched, " +
+    result.summary.fallback + " fallback, " +
     result.summary.unmatched + " unmatched",
   ].join("\n");
 }

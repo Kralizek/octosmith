@@ -56,7 +56,9 @@ export async function discoverRepositories(
     : normalizeRepositoryTarget(repository, organization);
   const scopes = [
     loaded.configuration.repositories.scope,
-    ...Object.values(loaded.templates).map((template) => template.match),
+    ...Object.values(loaded.templates).flatMap((template) =>
+      template.match === undefined ? [] : [template.match]
+    ),
   ];
   const selectors = scopes.flatMap((scope) => [
     ...(scope.include === "all" ? [] : [scope.include]),

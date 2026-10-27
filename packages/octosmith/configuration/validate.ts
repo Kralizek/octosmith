@@ -36,6 +36,7 @@ export type ConfigurationValidationIssueCode =
   | "configuration_load_error"
   | "template_load_error"
   | "unknown_template"
+  | "template_match_required"
   | "template_unreachable"
   | "template_overlap"
   | "scope_repository_unmatched"
@@ -122,8 +123,10 @@ async function validateDirectoryDetailed(
       path: issue.path,
     }));
   const issues = validation.issues.filter((issue) =>
-    issue.code !== "unknown_template" ||
-    !loadIssues.some((loadIssue) => loadIssue.template === issue.template)
+    !loadIssues.some((loadIssue) =>
+      loadIssue.template === issue.template &&
+      (loadIssue.code === issue.code || issue.code === "unknown_template")
+    )
   );
   return {
     diagnostics: validation.diagnostics,
@@ -183,23 +186,53 @@ async function collectLoadedConfigurationValidation(
   const intersections: EffectiveRepositorySelectorIntersection[] = [];
 
   const scope = loaded.configuration.repositories.scope;
+  const settings = loaded.configuration.repositories.settings;
+  const selectedIdentity = selectedTemplate === undefined
+    ? undefined
+    : selectedTemplate.startsWith("repository:")
+    ? selectedTemplate
+    : "repository:" + selectedTemplate;
+  if (
+    selectedTemplate === undefined && templateSetComplete &&
+    settings?.unmatchedRepositories === "fallback" &&
+    settings.fallbackTemplate !== undefined &&
+    loaded.templates[settings.fallbackTemplate] === undefined
+  ) {
+    issues.push({
+      code: "unknown_template",
+      message: "Unknown fallback template: " + settings.fallbackTemplate,
+      template: settings.fallbackTemplate,
+      path: "repositories.settings.fallbackTemplate",
+    });
+  }
+  for (const [name, template] of Object.entries(loaded.templates)) {
+    if (selectedIdentity !== undefined && name !== selectedIdentity) continue;
+    if (
+      template.match === undefined &&
+      (settings?.unmatchedRepositories !== "fallback" ||
+        settings.fallbackTemplate !== name)
+    ) {
+      issues.push({
+        code: "template_match_required",
+        message: "Template " + name +
+          " must define match unless it is the configured fallback template",
+        template: name,
+        path: "templates." + name + ".match",
+      });
+    }
+  }
   if (selectedTemplate === undefined || validateRootTemplateOverlap) {
     issues.push(...findTemplateOverlapIssues(scope, loaded.templates));
   }
   if (
     (selectedTemplate === undefined || validateRootScopeCoverage) &&
     templateSetComplete &&
-    loaded.configuration.repositories.settings?.unmatchedRepositories !==
-      "ignore"
+    settings?.unmatchedRepositories !== "ignore" &&
+    settings?.unmatchedRepositories !== "fallback"
   ) {
     issues.push(...findScopeCoverageIssues(scope, loaded.templates));
   }
 
-  const selectedIdentity = selectedTemplate === undefined
-    ? undefined
-    : selectedTemplate.startsWith("repository:")
-    ? selectedTemplate
-    : "repository:" + selectedTemplate;
   if (
     selectedIdentity !== undefined &&
     loaded.templates[selectedIdentity] === undefined
@@ -222,10 +255,13 @@ async function collectLoadedConfigurationValidation(
         isSecretAvailable,
       ),
     );
+    const isFallback = settings?.unmatchedRepositories === "fallback" &&
+      settings.fallbackTemplate === name;
     const intersection = effectiveRepositorySelectorIntersection(
       scope,
       template,
       name,
+      isFallback,
     );
     intersections.push(intersection);
     const repository = intersection.semanticWitness;
@@ -306,17 +342,23 @@ export async function validateLoadedConfiguration(
 export function templateCanMatchScope(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
+  ignoreTemplateMatch = false,
 ): boolean {
-  const positiveSelectors = [
+  if (template.match === undefined && !ignoreTemplateMatch) return false;
+  const positiveSelectors: RepositorySelector[] = [
     scope.include === "all" ? {} : scope.include,
-    template.match.include === "all" ? {} : template.match.include,
   ];
-  const negativeSelectors = [
-    scope.exclude,
-    template.match.exclude,
-  ].filter(
-    (selector): selector is RepositorySelector => selector !== undefined,
-  );
+  const negativeSelectors: RepositorySelector[] = scope.exclude === undefined
+    ? []
+    : [scope.exclude];
+  if (!ignoreTemplateMatch && template.match !== undefined) {
+    positiveSelectors.push(
+      template.match.include === "all" ? {} : template.match.include,
+    );
+    if (template.match.exclude !== undefined) {
+      negativeSelectors.push(template.match.exclude);
+    }
+  }
 
   return scopeIntersectionWitness(
     positiveSelectors,
@@ -330,26 +372,31 @@ export function effectiveRepositorySelectorIntersection(
   scope: Scope<RepositorySelector>,
   template: RepositoryTemplate,
   templateIdentity: string,
+  ignoreTemplateMatch = false,
 ): EffectiveRepositorySelectorIntersection {
-  const include = [
-    {
-      path: "repositories.scope.include",
-      selector: scope.include === "all" ? {} : scope.include,
-    },
-    {
+  const include: EffectiveRepositorySelectorConstraint[] = [{
+    path: "repositories.scope.include",
+    selector: scope.include === "all" ? {} : scope.include,
+  }];
+  const exclude: EffectiveRepositorySelectorConstraint[] = [];
+  if (scope.exclude !== undefined) {
+    exclude.push({
+      path: "repositories.scope.exclude",
+      selector: scope.exclude,
+    });
+  }
+  if (!ignoreTemplateMatch && template.match !== undefined) {
+    include.push({
       path: "templates." + templateIdentity + ".match.include",
       selector: template.match.include === "all" ? {} : template.match.include,
-    },
-  ];
-  const exclude = [
-    scope.exclude === undefined
-      ? undefined
-      : { path: "repositories.scope.exclude", selector: scope.exclude },
-    template.match.exclude === undefined ? undefined : {
-      path: "templates." + templateIdentity + ".match.exclude",
-      selector: template.match.exclude,
-    },
-  ].filter((constraint) => constraint !== undefined);
+    });
+    if (template.match.exclude !== undefined) {
+      exclude.push({
+        path: "templates." + templateIdentity + ".match.exclude",
+        selector: template.match.exclude,
+      });
+    }
+  }
   const witness = scopeIntersectionWitness(
     include.map((constraint) => constraint.selector),
     exclude.map((constraint) => constraint.selector),
@@ -436,6 +483,7 @@ function findTemplateOverlapIssues(
 
   for (let leftIndex = 0; leftIndex < entries.length; leftIndex++) {
     const [leftName, left] = entries[leftIndex];
+    if (left.match === undefined) continue;
 
     for (
       let rightIndex = leftIndex + 1;
@@ -443,6 +491,7 @@ function findTemplateOverlapIssues(
       rightIndex++
     ) {
       const [rightName, right] = entries[rightIndex];
+      if (right.match === undefined) continue;
       const leftInclude = left.match.include === "all"
         ? {}
         : left.match.include;
@@ -521,6 +570,7 @@ function findScopeCoverageIssues(
 
     const literalName: RepositorySelector = { names: [name] };
     const possible = entries.some(([templateName, template]) => {
+      if (template.match === undefined) return false;
       const templateInclude = template.match.include === "all"
         ? {}
         : template.match.include;
@@ -557,6 +607,7 @@ function findScopeCoverageIssues(
   }
 
   const anyTemplateReachable = entries.some(([templateName, template]) => {
+    if (template.match === undefined) return false;
     const templateInclude = template.match.include === "all"
       ? {}
       : template.match.include;

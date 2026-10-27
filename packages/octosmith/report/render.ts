@@ -142,6 +142,12 @@ export function renderReport(
   }
 
   const summary = summarize(report);
+  const fallbackCount = report.inspection?.resources.filter((resource) =>
+    resource.type === "repository" && resource.status === "fallback"
+  ).length;
+  const unmatchedCount = report.inspection?.resources.filter((resource) =>
+    resource.type === "repository" && resource.status === "unmatched"
+  ).length;
   lines.push(
     "",
     "Summary:",
@@ -151,11 +157,8 @@ export function renderReport(
       summary.applied + " applied, " +
       summary.partiallyApplied + " partially-applied, " +
       summary.failed + " failed" +
-      (report.inspection === undefined ? "" : ", " +
-        report.inspection.resources.filter((resource) =>
-          resource.type === "repository" && resource.status === "unmatched"
-        ).length +
-        " unmatched"),
+      (report.inspection === undefined ? "" : ", " + fallbackCount +
+        " fallback, " + unmatchedCount + " unmatched"),
     "  Operations:   " +
       summary.operations.planned + " planned, " +
       summary.operations.applied + " applied, " +

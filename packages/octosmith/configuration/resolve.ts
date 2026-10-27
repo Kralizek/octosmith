@@ -43,6 +43,7 @@ export type RuntimeValueProvider = (name: string) => string;
 /** Classifies a resource independently of its reconciliation outcome. */
 export type ResourceTemplateClassification =
   | { readonly status: "matched"; readonly template: string }
+  | { readonly status: "fallback"; readonly template: string }
   | { readonly status: "unmatched"; readonly template: null }
   | { readonly status: "invalid"; readonly templates: readonly string[] };
 
@@ -52,10 +53,24 @@ export function classifyResource(
   resource: RepositoryMetadata,
 ): ResourceTemplateClassification {
   const templates = Object.entries(loaded.templates)
-    .filter(([, template]) => matchesScope(template.match, resource))
+    .filter(([, template]) =>
+      template.match !== undefined && matchesScope(template.match, resource)
+    )
     .map(([name]) => name);
 
   if (templates.length === 0) {
+    const settings = loaded.configuration.repositories.settings;
+    if (
+      settings?.unmatchedRepositories === "fallback" &&
+      settings.fallbackTemplate !== undefined
+    ) {
+      if (loaded.templates[settings.fallbackTemplate] === undefined) {
+        throw new Error(
+          "Unknown fallback template: " + settings.fallbackTemplate,
+        );
+      }
+      return { status: "fallback", template: settings.fallbackTemplate };
+    }
     return { status: "unmatched", template: null };
   }
   if (templates.length === 1) {
@@ -103,7 +118,10 @@ export async function resolveDesiredState(
 ): Promise<DesiredState> {
   const classification = classifyResource(loaded, repository);
 
-  if (classification.status !== "matched") {
+  if (
+    classification.status === "unmatched" ||
+    classification.status === "invalid"
+  ) {
     throw new Error(
       classification.status === "unmatched"
         ? "Resource " + repository.name + " does not match any template"

@@ -71,9 +71,33 @@ selectors support `*` and `?` glob patterns.
 `exclude` narrows it. `exclude` always uses the repository selector shape.
 
 By default, every repository discovered in scope must match exactly one
-template. Set `repositories.settings.unmatched_repositories` to `ignore` to
-allow a broader scope where repositories without a matching template are left
-unmanaged. Repositories that match more than one template are always rejected.
+template. `unmatched_repositories: ignore` leaves unmatched repositories
+unmanaged. Use `unmatched_repositories: fallback` with a canonical
+`fallback_template` identity to apply an ordinary repository template to
+repositories without an explicit match:
+
+```yaml
+repositories:
+  scope:
+    include:
+      teams:
+        - cloud-services
+
+  settings:
+    collection_management: explicit
+    unmatched_repositories: fallback
+    fallback_template: repository:baseline
+```
+
+The referenced template can omit `match` when it is used only as a fallback. It
+remains real managed desired state: its settings, permissions, rulesets, and
+other declarations are reconciled normally. A fallback is not merged into
+templates that match explicitly. Exactly one explicit match always wins, and
+multiple explicit matches remain an error.
+
+Review the scope carefully before applying a baseline that grants broad team
+access. Scope exclusions are applied before matching; sensitive repositories
+must be explicitly matched to an appropriate template or excluded from scope.
 
 Use `octosmith resource list` to inspect the remaining in-scope resources and
 their template matches. Ignored unmatched resources remain visible in inspection
@@ -84,13 +108,30 @@ and exit behavior.
 ## Templates
 
 Each repository in scope that is managed must resolve to exactly one template.
-When `repositories.settings.unmatched_repositories` is `ignore`, repositories
-without a matching template are left unmanaged.
+Regular template selectors are evaluated first. If none match, the configured
+unmatched policy errors, ignores the repository, or selects the fallback
+template. A fallback template may define `match`; that selector still
+participates in regular matching, and the template can also be selected as the
+fallback when no regular template matches.
 
 Templates are discovered recursively under `templates/`. Their canonical
 identity is `<kind>:<relative-path-without-extension>`, so
 `templates/team-a/backend.yml` is `repository:team-a/backend`. The optional
 `name` field is display-only and does not participate in identity.
+
+A fallback-only template can omit `match` and compose fragments like any other
+template:
+
+```yaml
+version: 1
+kind: repository
+
+includes:
+  - ../fragments/repository-baseline.yml
+  - ../fragments/default-branch-protection.yml
+
+repository: {}
+```
 
 ```yaml
 version: 1

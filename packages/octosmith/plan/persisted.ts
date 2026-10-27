@@ -209,6 +209,9 @@ function normalizeConfigurationForHash(
           "explicit",
         unmatchedRepositories: repositories.settings?.unmatchedRepositories ??
           "error",
+        ...(repositories.settings?.fallbackTemplate !== undefined && {
+          fallbackTemplate: repositories.settings.fallbackTemplate,
+        }),
       },
       fileChanges: effectiveFileChanges,
     },
@@ -260,12 +263,14 @@ function normalizeTemplateForHash(
 
   return {
     ...template,
-    match: {
-      include: normalizeSelectorForHash(template.match.include),
-      ...(template.match.exclude !== undefined && {
-        exclude: normalizeSelectorForHash(template.match.exclude),
-      }),
-    },
+    ...(template.match !== undefined && {
+      match: {
+        include: normalizeSelectorForHash(template.match.include),
+        ...(template.match.exclude !== undefined && {
+          exclude: normalizeSelectorForHash(template.match.exclude),
+        }),
+      },
+    }),
     repository: {
       ...repository,
       ...(repository.settings?.topics !== undefined && {

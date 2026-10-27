@@ -59,7 +59,10 @@ export interface LoadedConfiguration {
 
 /** Describes an independently detected template loading problem. */
 export interface ConfigurationLoadIssue {
-  readonly code: "template_load_error" | "unknown_template";
+  readonly code:
+    | "template_load_error"
+    | "unknown_template"
+    | "template_match_required";
   readonly message: string;
   readonly template: string;
   readonly path: string;
@@ -195,6 +198,45 @@ async function loadConfigurationDirectoryInternal(
         message,
         template: selectedIdentity,
         path: "templates." + selectedIdentity,
+      });
+    } else {
+      throw new Error(message);
+    }
+  }
+
+  const settings = configuration.repositories.settings;
+  const fallbackIdentity = settings?.unmatchedRepositories === "fallback"
+    ? settings.fallbackTemplate
+    : undefined;
+  if (
+    selectedIdentity === undefined && fallbackIdentity !== undefined &&
+    templates[fallbackIdentity] === undefined &&
+    !issues.some((issue) => issue.template === fallbackIdentity)
+  ) {
+    const message = "Unknown fallback template: " + fallbackIdentity;
+    if (collectTemplateIssues) {
+      issues.push({
+        code: "unknown_template",
+        message,
+        template: fallbackIdentity,
+        path: "repositories.settings.fallbackTemplate",
+      });
+    } else {
+      throw new Error(message);
+    }
+  }
+
+  for (const [identity, template] of Object.entries(templates)) {
+    if (template.match !== undefined || identity === fallbackIdentity) continue;
+
+    const message = "Template " + identity +
+      " must define match unless it is the configured fallback template";
+    if (collectTemplateIssues) {
+      issues.push({
+        code: "template_match_required",
+        message,
+        template: identity,
+        path: "templates." + identity + ".match",
       });
     } else {
       throw new Error(message);
