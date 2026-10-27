@@ -953,6 +953,9 @@ function fakeInspectionGitHub(
         ),
       );
     }
+    if (method === "GET" && path === "/repos/acme/excluded") {
+      return Promise.resolve(json(repository("excluded")));
+    }
     if (
       (method === "GET" || method === "PATCH") &&
       /^\/repos\/acme\/(?:sample(?:-legacy)?|unmatched)$/.test(path)
@@ -1449,6 +1452,48 @@ Deno.test("CLI reports an out-of-scope targeted repository without mutation", as
       rendered,
       "Repositories: 0 planned, 0 unchanged, 0 applied, 0 partially-applied, 1 failed",
     );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+Deno.test("CLI does not select fallback for an excluded target", async () => {
+  const root = await inspectionConfigurationDirectory("fallback");
+  const requests: CapturedRequest[] = [];
+  const output: string[] = [];
+
+  try {
+    const runtime = createGitHubRuntime({
+      token: "test-token",
+      baseUrl: "https://github.example.test/api/v3",
+      fetch: fakeInspectionGitHub(requests),
+    });
+    assertEquals(
+      await main(
+        ["apply", "excluded", "--path", root, "--format", "json"],
+        { runtime, write: (value) => output.push(value) },
+      ),
+      1,
+    );
+
+    const report = JSON.parse(output.join("\n"));
+    assertEquals(report.repositories.length, 1);
+    assertEquals(report.repositories[0].repository, "excluded");
+    assertEquals(report.repositories[0].items, []);
+    assertStringIncludes(
+      report.repositories[0].error,
+      "outside the configured scope",
+    );
+    assertEquals(report.inspection.summary, {
+      matched: 0,
+      fallback: 0,
+      unmatched: 0,
+    });
+    assertEquals(
+      requests.map(({ method, url }) => [method, url.pathname]),
+      [["GET", "/api/v3/repos/acme/excluded"]],
+    );
+    assertEquals(mutations(requests), []);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -2509,6 +2554,86 @@ Deno.test("persisted fallback plans reject baseline drift before mutation", asyn
     await Deno.remove(planPath);
   }
 });
+
+for (const drift of ["policy", "identity"] as const) {
+  Deno.test(`persisted fallback plans reject ${drift} drift before mutation`, async () => {
+    const root = await inspectionConfigurationDirectory("fallback");
+    const planPath = await Deno.makeTempFile({ suffix: ".json" });
+    const requests: CapturedRequest[] = [];
+    const output: string[] = [];
+
+    try {
+      await Deno.writeTextFile(
+        root + "/templates/baseline.yml",
+        stringify({
+          version: 1,
+          kind: "repository",
+          match: { include: { names: ["baseline-only"] } },
+          repository: { settings: { has_issues: false } },
+        }),
+      );
+      await Deno.writeTextFile(
+        root + "/templates/baseline-copy.yml",
+        stringify({
+          version: 1,
+          kind: "repository",
+          match: { include: { names: ["baseline-copy-only"] } },
+          repository: { settings: { has_issues: false } },
+        }),
+      );
+
+      const runtime = createGitHubRuntime({
+        token: "test-token",
+        baseUrl: "https://github.example.test/api/v3",
+        fetch: fakeInspectionGitHub(requests),
+      });
+      assertEquals(
+        await main(
+          [
+            "plan",
+            "--path",
+            root,
+            "--template",
+            "repository:baseline",
+            "--out",
+            planPath,
+          ],
+          { runtime, write: (value) => output.push(value) },
+        ),
+        0,
+      );
+
+      const configPath = root + "/octosmith.yml";
+      const configuration = parse(await Deno.readTextFile(configPath)) as {
+        repositories: { settings: Record<string, unknown> };
+      };
+      configuration.repositories.settings = drift === "policy"
+        ? { unmatched_repositories: "ignore" }
+        : {
+          ...configuration.repositories.settings,
+          fallback_template: "repository:baseline-copy",
+        };
+      await Deno.writeTextFile(configPath, stringify(configuration));
+      requests.length = 0;
+      output.length = 0;
+
+      assertEquals(
+        await main(
+          ["apply", "--plan", planPath, "--path", root],
+          { runtime, write: (value) => output.push(value) },
+        ),
+        1,
+      );
+      const rendered = output.join("\n");
+      assertStringIncludes(rendered, "Configuration: changed");
+      assertStringIncludes(rendered, "repository  unmatched  template");
+      assertEquals(mutations(requests), []);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+      await Deno.remove(planPath);
+    }
+  });
+}
 
 Deno.test("persisted apply reports root configuration drift independently", async () => {
   const root = await configurationDirectory();
