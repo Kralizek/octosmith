@@ -221,7 +221,7 @@ Deno.test("template list reports configured templates with source paths", async 
       [
         "TEMPLATE                     NAME              PATH",
         "repository:Alpha             Uppercase         templates/Alpha.yml",
-        "repository:alpha             -                 templates/alpha.yml",
+        "repository:alpha-lower       -                 templates/alpha-lower.yml",
         "repository:services/backend  Backend Services  templates/services/backend.yml",
         "repository:éclair            Éclair            templates/éclair.yml",
         "",
@@ -254,9 +254,9 @@ Deno.test("template list emits deterministic JSON", async () => {
           path: "templates/Alpha.yml",
         },
         {
-          identity: "repository:alpha",
+          identity: "repository:alpha-lower",
           name: null,
-          path: "templates/alpha.yml",
+          path: "templates/alpha-lower.yml",
         },
         {
           identity: "repository:services/backend",
@@ -313,7 +313,7 @@ Deno.test("template list does not resolve credentials or access GitHub", async (
     assertEquals(envReads, 0);
     assertEquals(ghCalls, 0);
     assertEquals(fetchCalls, 0);
-    assertStringIncludes(output.join("\n"), "repository:alpha");
+    assertStringIncludes(output.join("\n"), "repository:alpha-lower");
   } finally {
     await Deno.remove(root, { recursive: true });
   }
@@ -418,7 +418,7 @@ async function templateListConfigurationDirectory(): Promise<string> {
     ].join("\n"),
   );
   await Deno.writeTextFile(
-    root + "/templates/alpha.yml",
+    root + "/templates/alpha-lower.yml",
     [
       "version: 1",
       "kind: repository",

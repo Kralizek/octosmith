@@ -491,7 +491,7 @@ Deno.test("create scaffolder does not create invalid target directories", async 
       "must not contain wildcard characters",
     );
 
-    await assertRejects(() => Deno.stat(target), Deno.errors.NotFound);
+    assertEquals(Array.from(Deno.readDirSync(root)), []);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
