@@ -8,16 +8,21 @@ import sodium from "libsodium-wrappers";
 import {
   buildApplyEvaluations,
   buildPlan,
+  classifyResource,
   createRepository,
+  discoverRepositories,
   FetchGitHubClient,
   GitHubRepositoryMutationSink,
+  GitHubRepositoryStateSource,
   loadConfigurationDirectory,
   type LoadedConfiguration,
+  readCurrentState,
   renderRepositoryCreationResult,
   type RepositoryConfiguration,
   type RepositoryCreationRequest,
   requiredPermissionsForConfiguration,
   requiredPermissionsForRepositoryCreation,
+  resolveDesiredState,
 } from "@octosmith/octosmith";
 import { main } from "../../packages/cli/mod.ts";
 import { currentState } from "../plan/fixtures.ts";
@@ -754,30 +759,136 @@ Deno.test("strict reconciliation cannot discard required selector metadata", asy
   );
 });
 
-Deno.test("creation writes boolean selector properties using GitHub string representation", async () => {
-  const loaded = configuration();
-  const github = new GitHub();
-  const result = await run(github, {
-    ...loaded,
-    configuration: {
-      ...loaded.configuration,
-      repositories: {
-        scope: {
-          include: {
-            names: ["api-*"],
-            visibility: "internal",
-            properties: { enabled: true },
+for (const enabled of [true, false]) {
+  Deno.test(`creation writes boolean selector ${enabled} using GitHub string representation`, async () => {
+    const loaded = configuration();
+    const github = new GitHub();
+    const result = await run(github, {
+      ...loaded,
+      configuration: {
+        ...loaded.configuration,
+        repositories: {
+          scope: {
+            include: {
+              names: ["api-*"],
+              visibility: "internal",
+              properties: { enabled },
+            },
           },
         },
       },
-    },
+    });
+    assertEquals(result.status, "completed");
+    assertEquals(github.properties, [{
+      property_name: "enabled",
+      value: String(enabled),
+    }]);
   });
-  assertEquals(result.status, "completed");
-  assertEquals(github.properties, [{
-    property_name: "enabled",
-    value: "true",
-  }]);
-});
+}
+
+for (const enabled of [true, false]) {
+  Deno.test(`creation preserves boolean selector ${enabled} through planned updates and refreshed classification`, async () => {
+    const base = configuration({
+      customProperties: { enabled: String(enabled) },
+    });
+    const loaded: LoadedConfiguration = {
+      ...base,
+      configuration: {
+        ...base.configuration,
+        repositories: {
+          scope: { include: { properties: { enabled } } },
+        },
+      },
+      templates: {
+        "repository:services": {
+          ...base.templates["repository:services"],
+          match: { include: { properties: { enabled } } },
+        },
+      },
+    };
+    const github = new GitHub();
+    let propertyReads = 0;
+    github.override = ({ method, path }) => {
+      if (method === "GET" && path.endsWith("/properties/values")) {
+        // Simulate drift after classification so normal reconciliation must restore the value.
+        if (++propertyReads === 2) {
+          github.properties = [];
+          return Response.json([]);
+        }
+      }
+    };
+
+    const result = await run(github, loaded);
+    assertEquals(result.status, "completed", JSON.stringify(result));
+    assertEquals(result.metadataAssignments, [{
+      kind: "custom_property",
+      target: "enabled",
+      status: "applied",
+    }]);
+    assertEquals(
+      github.mutations().filter(({ path }) =>
+        path.endsWith("/properties/values")
+      ).map(({ body }) => body),
+      [
+        { properties: [{ property_name: "enabled", value: String(enabled) }] },
+        { properties: [{ property_name: "enabled", value: String(enabled) }] },
+      ],
+    );
+    assertEquals(result.report?.repositories[0].items, [{
+      type: "custom-property",
+      status: "applied",
+      details: {
+        name: "enabled",
+        value: String(enabled),
+        action: "set",
+      },
+    }]);
+
+    const discovery = await discoverRepositories(
+      github.client(),
+      loaded,
+      github.name,
+    );
+    assertEquals(discovery.failures, []);
+    assertEquals(discovery.repositories[0].properties, {
+      enabled: String(enabled),
+    });
+    const metadata = discovery.repositories[0];
+    assertEquals(classifyResource(loaded, metadata), {
+      status: "matched",
+      template: "repository:services",
+    });
+    const desired = await resolveDesiredState(loaded, metadata, () => "");
+    const current = await readCurrentState(
+      new GitHubRepositoryStateSource(github.client(), "acme"),
+      desired,
+      undefined,
+      { scope: "github-only" },
+    );
+    assertEquals(
+      buildPlan(current, desired, { scope: "github-only" }).operations,
+      [],
+    );
+  });
+}
+
+for (const value of ["false", "TRUE", null, ["true"]]) {
+  Deno.test(`creation rejects incompatible boolean selector value ${JSON.stringify(value)}`, async () => {
+    const base = configuration({ customProperties: { enabled: value } });
+    const github = new GitHub();
+    const result = await run(github, {
+      ...base,
+      configuration: {
+        ...base.configuration,
+        repositories: {
+          scope: { include: { properties: { enabled: true } } },
+        },
+      },
+    });
+    assertEquals(result.status, "preflight_rejected");
+    assertEquals(github.calls, []);
+  });
+}
 
 Deno.test("creation permissions distinguish creation, selector metadata and reconciliation", () => {
   const loaded = configuration();
