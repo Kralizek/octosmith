@@ -1,4 +1,5 @@
 import type { PropertyValue, RepositoryVisibility } from "../types.ts";
+import { normalizeCustomPropertyValue } from "../state/resources.ts";
 import type { LoadedConfiguration } from "./load.ts";
 import {
   classifyResource,
@@ -791,6 +792,6 @@ function propertyValuesEqual(
     return left.length === right.length &&
       left.every((value, index) => value === right[index]);
   }
-  return (typeof left === "boolean" ? String(left) : left) ===
-    (typeof right === "boolean" ? String(right) : right);
+  return normalizeCustomPropertyValue(left) ===
+    normalizeCustomPropertyValue(right);
 }

@@ -20,6 +20,7 @@ import type {
   DesiredRepositorySettings,
 } from "../state/repository.ts";
 import type { DesiredActions } from "../state/resources.ts";
+import { normalizeCustomPropertyValue } from "../state/resources.ts";
 import type { DesiredRuleset, DesiredRulesetRule } from "../state/rulesets.ts";
 import type {
   DesiredEnvironment,
@@ -372,11 +373,9 @@ function equalPropertyValue(
       actual.every((value, index) => value === expected[index]);
   }
 
-  // GitHub represents boolean custom property values as strings.
-  if (typeof expected === "boolean" && typeof actual === "string") {
-    return actual === String(expected);
-  }
-  return actual === expected;
+  return actual !== undefined &&
+    normalizeCustomPropertyValue(actual) ===
+      normalizeCustomPropertyValue(expected);
 }
 
 /** Normalize repository settings configuration into planner-ready desired settings. */

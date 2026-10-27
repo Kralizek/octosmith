@@ -14,6 +14,7 @@ import {
   type Scope,
 } from "../mod.ts";
 import { loadConfigurationDirectoryCollectingIssues } from "./load.ts";
+import { normalizeCustomPropertyValue } from "../state/resources.ts";
 
 /**
  * Validate a configuration directory without consulting GitHub.
@@ -964,7 +965,8 @@ function equalPropertyValue(
       left.every((value, index) => value === right[index]);
   }
 
-  return left === right;
+  return normalizeCustomPropertyValue(left) ===
+    normalizeCustomPropertyValue(right);
 }
 
 function globPatternsCanOverlap(...patterns: readonly string[]): boolean {

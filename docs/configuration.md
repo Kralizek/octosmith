@@ -281,7 +281,11 @@ Creation uses `repositories.scope` intersected with the selected template's
 GitHub access. Teams and properties inferred by preflight are assigned and
 re-read, then the actual repository must be in scope and uniquely classified.
 Boolean selector properties use GitHub's string representation
-(`"true"`/`"false"`).
+(`"true"`/`"false"`). A selector `enabled: true` is compatible with a managed
+custom property `enabled: "true"` (and likewise for `false`). Assignment,
+selector intersection, creation preflight and classification use the same exact
+representation; discovery preserves the strings returned by GitHub. Other
+strings, numbers and arrays are not coerced into boolean matches.
 
 Required team membership initially uses read access; declared permissions are
 then reconciled normally. With strict collections, explicitly declare required
