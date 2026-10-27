@@ -101,12 +101,14 @@ console.log(renderRepositoryCreationResult(result));
 
 `RepositoryCreationRequest` and `RepositoryCreationResult` are reusable library
 contracts. A lazy `client` factory can postpone authentication until preflight
-succeeds. The validated name is resolved once, checked remotely, then submitted
-unchanged to `createOrganizationRepository`, with only name, visibility and
-`auto_init: false`. No README, license, Gitignore or commit is created. Required
-teams/custom properties are assigned through the existing mutation sink and
-actually re-read through discovery. Only an in-scope, unique match for the
-explicitly selected template proceeds.
+succeeds. The bootstrap transport is checked before invoking that factory or
+accessing GitHub; omitting it returns `preflight_rejected` without creating a
+repository. The validated name is resolved once, checked remotely, then
+submitted unchanged to `createOrganizationRepository`, with only name,
+visibility and `auto_init: false`. No README, license, Gitignore or commit is
+created. Required teams/custom properties are assigned through the existing
+mutation sink and actually re-read through discovery. Only an in-scope, unique
+match for the explicitly selected template proceeds.
 
 Creation reuses runtime-reference/secret policies, composed desired-state
 resolution, `readCurrentState`, `buildPlan`, `applyPlan` and regular report
@@ -148,11 +150,15 @@ The default HTTPS transport obtains a token lazily from the host, using a static
 temporary askpass helper and an isolated push environment. It never writes the
 token to disk or includes it in URLs/arguments. Raw Git diagnostics are captured
 and discarded; configuration, prompts, inherited credential helpers, hooks and
-global/system Git settings are isolated. Git Contents: write and workflow
-authorization are required independently of API creation permissions. Hosts can
-inject authentication, Git execution and temporary-directory/cleanup services.
-Pass the API `baseUrl` to `LocalGitBootstrap` when using GitHub Enterprise; the
-Git remote uses that server's HTTPS origin rather than its `/api/v3` path.
+global/system Git settings are isolated. POSIX uses a shell helper; native
+Windows uses a `.cmd` helper invoking the system Windows PowerShell to read the
+token directly from the environment, without expanding it into command text. The
+static `x-access-token` username is configured locally so the Windows helper
+only supplies the password. Git Contents: write and workflow authorization are
+required independently of API creation permissions. Hosts can inject
+authentication, Git execution and temporary-directory/cleanup services. Pass the
+API `baseUrl` to `LocalGitBootstrap` when using GitHub Enterprise; the Git
+remote uses that server's HTTPS origin rather than its `/api/v3` path.
 `createGitHubRuntime` passes the same base URL to both API and Git transports.
 Credential-bearing or non-HTTPS base URLs are rejected before Git execution.
 Tests use fake execution or local bare repositories, never real GitHub creation.

@@ -546,6 +546,11 @@ function createCli(
                         "Creation requires a GitHub client in the injected runtime",
                       );
                     }
+                    if (!(options.bootstrap ?? runtime.bootstrap)) {
+                      throw new Error(
+                        "Creation requires an authenticated Git bootstrap transport",
+                      );
+                    }
                     return runtime.client;
                   },
                   values: options.runtime?.value ?? environmentValue,

@@ -193,6 +193,12 @@ export async function createRepository(
         ),
       );
     }
+    const transport = options.bootstrap;
+    if (!transport || typeof transport.bootstrap !== "function") {
+      throw new CreationStageError(
+        "Git bootstrap transport is required; provide an authenticated RepositoryGitBootstrap before creating a repository.",
+      );
+    }
     completedStages.push(stage);
     const metadata = specification.repository;
     const visibility = specification.repository.visibility;
@@ -593,14 +599,9 @@ export async function createRepository(
       outcome: "failed",
       failure: "preparation",
     };
-    if (!options.bootstrap) {
-      throw new CreationStageError(
-        "Git bootstrap transport is required; provide an authenticated RepositoryGitBootstrap.",
-      );
-    }
     completedStages.push(stage);
     stage = "git_bootstrap";
-    bootstrap = await options.bootstrap.bootstrap({
+    bootstrap = await transport.bootstrap({
       organization,
       repository: repository.name,
       branch,

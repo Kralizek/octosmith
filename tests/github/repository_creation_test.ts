@@ -1116,7 +1116,11 @@ Deno.test("reconciliation partial failure keeps normal report and redacts runtim
     }),
     template: "services",
     name: "api-orders",
-  }, { client: github.client(), values: () => "PRIVATE-RUNTIME-VALUE" });
+  }, {
+    client: github.client(),
+    bootstrap: github.bootstrap,
+    values: () => "PRIVATE-RUNTIME-VALUE",
+  });
   assertEquals(result.status, "reconciliation_failed");
   assertEquals(result.report?.repositories[0].status, "partially-applied");
   assertEquals(
@@ -1921,6 +1925,40 @@ Deno.test("metadata verification permission errors retain identity and failed st
   assertEquals(JSON.stringify(result).includes("private-body"), false);
 });
 
+Deno.test("missing bootstrap transport is rejected before credentials, API access or remote creation", async () => {
+  const github = new GitHub();
+  let credentialCalls = 0;
+  for (
+    const client of [
+      github.client(),
+      () => {
+        credentialCalls++;
+        return Promise.resolve(github.client());
+      },
+    ]
+  ) {
+    const result = await createRepository({
+      configuration: configuration({
+        settings: { description: "must-not-apply" },
+      }),
+      template: "services",
+      name: "api-orders",
+    }, { client });
+    assertEquals(result.status, "preflight_rejected");
+    assertEquals(result.failedStage, "preflight");
+    assertEquals(result.repository, undefined);
+    assertEquals(result.report, undefined);
+    assertEquals(result.bootstrap, undefined);
+    assertStringIncludes(
+      result.error!.message,
+      "Git bootstrap transport is required",
+    );
+    assertEquals(github.calls, []);
+    assertEquals(github.exists, false);
+  }
+  assertEquals(credentialCalls, 0);
+});
+
 Deno.test("creation library configuration and authentication failures have structured results", async () => {
   const github = new GitHub();
   const missing = await createRepository({
@@ -1935,6 +1973,7 @@ Deno.test("creation library configuration and authentication failures have struc
     template: "services",
     name: "api-orders",
   }, {
+    bootstrap: github.bootstrap,
     client: () => {
       throw new Error("PRIVATE-AUTH-DETAIL");
     },

@@ -10,6 +10,20 @@ permissions:
   contents: read
 
 jobs:
+  windows-bootstrap:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+          cache: true
+      - name: Test native Windows Git bootstrap and askpass
+        shell: bash
+        run: |
+          deno task sync:schemas
+          deno test -A tests/git_bootstrap_test.ts
+
   validate:
     runs-on: ubuntu-latest
 

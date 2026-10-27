@@ -77,11 +77,13 @@ for (
     const previousGlobalConfig = Deno.env.get("GIT_CONFIG_GLOBAL");
     Deno.env.set("GIT_CONFIG_GLOBAL", globalConfig);
     const commands: GitCommand[] = [];
-    const token = "CREDENTIAL-SENTINEL";
+    const token = "CREDENTIAL-SENTINEL&|%!^<>()";
     const env = {
       PATH: Deno.env.get("PATH") ?? "",
       GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_GLOBAL: Deno.build.os === "windows" ? "NUL" : "/dev/null",
+      ...(Deno.build.os === "windows" &&
+        { SYSTEMROOT: Deno.env.get("SYSTEMROOT") ?? "" }),
     };
     const inspect = async (...args: string[]) => {
       const output = await runGitCommand({ cwd: root, args, env });
@@ -135,7 +137,7 @@ for (
           commands.push(command);
           assert(!command.args.join(" ").includes(token));
           assertEquals(command.env.GIT_CONFIG_NOSYSTEM, "1");
-          assertEquals(command.env.GIT_CONFIG_GLOBAL, "/dev/null");
+          assertEquals(command.env.GIT_CONFIG_GLOBAL, env.GIT_CONFIG_GLOBAL);
           assertEquals(command.env.GIT_TRACE, undefined);
           if (command.args[0] === "remote") {
             assertEquals(
@@ -154,21 +156,33 @@ for (
             const askpass = await Deno.readTextFile(command.env.GIT_ASKPASS);
             assert(!config.includes(token));
             assert(!askpass.includes(token));
-            const credential = await new Deno.Command(
-              command.env.GIT_ASKPASS,
+            assert(command.env.GIT_ASKPASS.endsWith(
+              Deno.build.os === "windows" ? ".cmd" : ".sh",
+            ));
+            const credentialProcess = new Deno.Command(
+              "git",
               {
-                args: ["Password for test host"],
+                args: ["credential", "fill"],
+                cwd: command.cwd,
                 clearEnv: true,
-                env: { OCTOSMITH_GIT_TOKEN: token },
+                env: command.env,
+                stdin: "piped",
                 stdout: "piped",
                 stderr: "piped",
               },
-            ).output();
+            ).spawn();
+            const input = credentialProcess.stdin.getWriter();
+            await input.write(new TextEncoder().encode(
+              "protocol=https\nhost=credential-test.invalid\n\n",
+            ));
+            await input.close();
+            const credential = await credentialProcess.output();
             assertEquals(credential.code, 0);
-            assertEquals(
-              new TextDecoder().decode(credential.stdout).trim(),
-              token,
+            const credentialOutput = new TextDecoder().decode(
+              credential.stdout,
             );
+            assert(credentialOutput.includes("username=x-access-token"));
+            assert(credentialOutput.includes("password=" + token));
             assertEquals(command.env.OCTOSMITH_GIT_TOKEN, token);
             assertEquals(
               command.args.at(-1),

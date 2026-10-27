@@ -168,6 +168,7 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
           ["core.autocrlf", "false"],
           ["core.hooksPath", join(workspace, "no-hooks")],
           ["credential.helper", ""],
+          ["credential.username", "x-access-token"],
         ]
       ) {
         await git(["config", "--local", key, value]);
@@ -219,11 +220,14 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
       }
       failure = "preparation";
       // Static askpass contains no credential. Only the push child receives it.
-      const askpass = join(workspace, "askpass.sh");
+      const windows = Deno.build.os === "windows";
+      const askpass = join(workspace, windows ? "askpass.cmd" : "askpass.sh");
       await Deno.writeTextFile(
         askpass,
-        '#!/bin/sh\ncase "$1" in\n*Username*) printf "%s\\n" "x-access-token" ;;\n*Password*) printf "%s\\n" "$OCTOSMITH_GIT_TOKEN" ;;\n*) exit 1 ;;\nesac\n',
-        { mode: 0o700 },
+        windows
+          ? '@echo off\r\n@"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe" -NoLogo -NoProfile -NonInteractive -Command "[Console]::Out.WriteLine([Environment]::GetEnvironmentVariable(\'OCTOSMITH_GIT_TOKEN\'))"\r\n'
+          : '#!/bin/sh\ncase "$1" in\n*Username*) printf "%s\\n" "x-access-token" ;;\n*Password*) printf "%s\\n" "$OCTOSMITH_GIT_TOKEN" ;;\n*) exit 1 ;;\nesac\n',
+        windows ? {} : { mode: 0o700 },
       );
       failure = "initialization";
       await git([
