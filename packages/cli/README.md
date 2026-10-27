@@ -58,7 +58,7 @@ for protection, concurrency, and retry limitations.
 | `template validate`               | No            | No             | Validate configuration and static planner invariants            |
 | `template permissions [template]` | No            | No             | Calculate worst-case GitHub permissions for reachable templates |
 | `resource list`                   | Yes           | No             | Inspect in-scope resources and template coverage                |
-| `resource create <template>`      | No            | No             | Preflight a repository creation specification                   |
+| `resource create <template>`      | No            | No             | Offline preflight, or creation preview with `--dry-run`         |
 | `plan [repository]`               | Yes           | No             | Compare current GitHub state with desired state                 |
 | `apply [repository]`              | Yes           | Yes            | Build or execute a plan and apply its operations                |
 
@@ -196,19 +196,66 @@ on stderr; successfully discovered resources are still reported.
 octosmith resource create services --path ./configuration
 octosmith resource create services --name api-service --visibility private --path ./configuration
 octosmith resource create services --format json --path ./configuration
+octosmith resource create services --dry-run --path ./configuration
+octosmith resource create services --name team-orders-svcs --visibility internal --dry-run
+octosmith resource create services --dry-run --format json
 ```
 
-Creation currently performs an offline preflight only; it does not create a
-GitHub repository. The reusable library specification resolves the template,
-validates it with the same semantic checks as `template validate`, and reports
-the effective name, visibility, team, and custom-property constraints. If
-scope/template intersection yields one constructible naming pattern, an omitted
-name is generated from it; patterns with no `*` or `?` use their literal name.
-Use `--name` to override generation, or to select among multiple patterns.
-Visibility is inferred when uniquely constrained; use `--visibility` when
-multiple valid values remain. Ambiguities and configuration errors are returned
-as structured diagnostics (including in JSON output) and exit unsuccessfully. No
-prompt, credential lookup, GitHub access, or remote mutation occurs.
+Without `--dry-run`, creation currently performs an offline preflight only; it
+does not create a GitHub repository. This is transitional: future releases will
+execute creation by default, while `--dry-run` will remain the explicit
+read-only preview. Both paths use the same reusable library specification, which
+resolves the template, validates it with the same semantic checks as
+`template validate`, and reports the effective name, visibility, team, and
+custom-property constraints. If scope/template intersection yields one
+constructible naming pattern, an omitted name is generated from it; patterns
+with no `*` or `?` use their literal name. Use `--name` to override generation,
+or to select among multiple patterns. Visibility is inferred when uniquely
+constrained; use `--visibility` when multiple valid values remain. Ambiguities
+and configuration errors are returned as structured diagnostics (including in
+JSON output) and exit unsuccessfully. No prompt, credential lookup, GitHub
+access, or remote mutation occurs.
+
+`--dry-run` extends preflight with a creation preview, not a drift report
+against an imaginary repository. Text and JSON report:
+
+- Resolved organization, canonical template, name origin, visibility, and
+  selector-required team/custom-property assignments.
+- Bootstrap default branch when template-managed, and composed managed-file
+  paths with intended presence/absence. The planned file count counts only
+  present files, not absence declarations. File contents are never printed.
+- Concise desired-resource summaries for settings, teams, custom properties,
+  Actions, Dependabot, environments, and rulesets. `resolved` means configured
+  intent is known, not that any API operation has been calculated or performed.
+  `not_applicable` means there is no configured work in that category beyond
+  separately reported creation requirements. Collection and secret policies are
+  included; manual-policy secrets remain excluded unless execution opts in.
+- Deferred execution-time work: name availability, remote classification
+  verification, exact GitHub reconciliation, and runtime-backed values. Secret
+  and variable values, runtime credentials, and managed-file contents are
+  omitted.
+
+Default-branch precedence is template `repository.settings.default_branch`, then
+the organization's default repository branch, then GitHub's documented fallback.
+Offline preview cannot inspect the organization default, so without a
+template-managed branch it reports **deferred**, not an invented branch name.
+
+A **generated preview name is provisional and not reserved**. Execution may
+generate a different name unless you pass the displayed name explicitly with
+`--name`. Preview does not cache or persist names. When choices are unresolved,
+it reports prospective naming patterns and diagnostics instead of generating a
+name just for display. It still fails with a nonzero exit status; JSON remains
+structured on failures. No filesystem writes, Git commands, commits, pushes, or
+bootstrap commands are executed. Actual creation, content bootstrap, and
+assisted prompting remain future milestones.
+
+Preview JSON uses `kind: repository_creation_preview` and `version: 1`,
+including unresolved preflight results (`ready: false`). If configuration cannot
+be loaded at all, JSON instead uses
+`kind: repository_creation_configuration_error` with a
+`configuration_load_error` diagnostic. Raw parser errors are not echoed because
+they may contain sensitive configuration snippets; use `template validate` to
+investigate the configuration.
 
 ### plan
 

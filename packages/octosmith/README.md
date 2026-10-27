@@ -13,8 +13,10 @@ model directly. For day-to-day command-line usage, use
 ```ts
 import {
   buildPlan,
+  buildRepositoryCreationPreview,
   loadConfigurationDirectory,
   preflightRepositoryCreation,
+  renderRepositoryCreationPreview,
   validateConfigurationDirectory,
 } from "jsr:@octosmith/octosmith@0";
 ```
@@ -33,7 +35,40 @@ const specification = await preflightRepositoryCreation(loaded, {
   template: "services",
   name: "api-service",
 });
+const preview = buildRepositoryCreationPreview(loaded, specification);
+console.log(renderRepositoryCreationPreview(preview));
+// Or serialize the same typed projection for automation:
+console.log(JSON.stringify(preview));
 ```
+
+`RepositoryCreationSpecification` is the validated input shared by preview and
+future execution. `buildRepositoryCreationPreview` takes that specification and
+the **same loaded configuration** and projects the existing composed template
+(fragments included) into a versioned `RepositoryCreationPreview`. It does not
+re-run name generation, selectors, or classification, create another
+desired-state model, or plan against fictitious current state. Keep the
+specification for execution; the preview is a safe reporting projection, not an
+executable plan.
+
+The builder and separate text renderer do not access GitHub, credentials,
+runtime value providers, Git, or the filesystem. Preflight still performs normal
+offline validation, including checking local managed-file sources. Preview
+exposes paths and presence/absence, never file contents or variable/secret
+values. Resource summaries describe resolved configured intent, not exact API
+deltas; unconfigured categories are `not_applicable`. Name availability, remote
+classification verification, precise reconciliation, and runtime values are
+deferred. Template-managed default branches resolve offline; otherwise execution
+must consult the organization default and then GitHub's documented fallback.
+Generated preview names are provisional, unreserved, and never persisted;
+callers must explicitly supply a name to preserve it across separate
+invocations.
+
+Failed preflight specifications produce an unresolved preview with the original
+structured choices, diagnostic codes, and validation details, and no bootstrap
+or resource plan. Hosts should return failure when `preview.ready` is false. The
+CLI currently retains preflight-only behavior without `--dry-run`; actual
+creation, Git bootstrap, bootstrap commands, and assisted choices are not
+implemented.
 
 For deeper guidance, see the repository documentation for
 [configuration](../../docs/configuration.md) and

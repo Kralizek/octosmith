@@ -10,6 +10,7 @@
 import { Command } from "@cliffy/command";
 import { stringify } from "@std/yaml";
 import {
+  buildRepositoryCreationPreview,
   type ConfigurationValidationIssue,
   createPersistedPlanArtifact,
   describeRuntimeReferenceDiagnostic,
@@ -21,6 +22,7 @@ import {
   parsePersistedPlanArtifact,
   preflightRepositoryCreation,
   renderReport,
+  renderRepositoryCreationPreview,
   renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
   type Report,
@@ -483,12 +485,18 @@ function createCli(
       .command(
         "create",
         new Command()
-          .description("Preflight repository creation from a template.")
+          .description(
+            "Preflight creation, or preview with --dry-run (no creation yet).",
+          )
           .arguments("<template:string>")
           .option("--name <name:string>", "Name for the new resource.")
           .option(
             "--visibility <visibility:string>",
             "Visibility: public, private, or internal.",
+          )
+          .option(
+            "--dry-run",
+            "Preview resolved creation and bootstrap intent offline.",
           )
           .option("-p, --path <path:string>", "Configuration directory.", {
             default: ".",
@@ -498,9 +506,32 @@ function createCli(
           })
           .action(async (commandOptions, template: string) => {
             const format = parseOutputFormat(commandOptions.format);
-            const loaded = await loadConfigurationDirectory(
-              commandOptions.path,
-            );
+            let loaded: LoadedConfiguration;
+            try {
+              loaded = await loadConfigurationDirectory(commandOptions.path);
+            } catch {
+              const failure = {
+                kind: commandOptions.dryRun
+                  ? "repository_creation_configuration_error"
+                  : "repository_creation_preflight",
+                version: 1,
+                ready: false,
+                diagnostics: [{
+                  code: "configuration_load_error",
+                  message:
+                    "Cannot load configuration. Check the directory, YAML syntax, schema, and fragment includes with template validate.",
+                }],
+              };
+              const rendered = renderOutput(
+                format,
+                failure,
+                (value) => value.diagnostics[0].message,
+              );
+              // Parser errors may contain source snippets, including sensitive values.
+              if (format === "json") write(rendered);
+              else writeError(rendered);
+              throw new ApplyFailedError();
+            }
             const specification = await preflightRepositoryCreation(loaded, {
               template,
               ...(commandOptions.name !== undefined && {
@@ -510,11 +541,17 @@ function createCli(
                 visibility: commandOptions.visibility,
               }),
             });
-            const rendered = renderOutput(
-              format,
-              specification,
-              renderRepositoryCreationPreflight,
-            );
+            const rendered = commandOptions.dryRun
+              ? renderOutput(
+                format,
+                buildRepositoryCreationPreview(loaded, specification),
+                renderRepositoryCreationPreview,
+              )
+              : renderOutput(
+                format,
+                specification,
+                renderRepositoryCreationPreflight,
+              );
             if (format === "json" || specification.ready) {
               write(rendered);
             } else {
