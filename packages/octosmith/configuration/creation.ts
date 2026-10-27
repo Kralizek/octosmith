@@ -273,6 +273,8 @@ export async function preflightRepositoryCreation(
       ...(input.teams ?? []),
     ]),
   ].sort();
+  const explicitNameIsValid = input.name !== undefined &&
+    validateRepositoryName(input.name) === undefined;
   const desiredVisibility = template.repository.settings?.visibility;
   let constructibleVisibilities = [...effective.visibility];
   if (desiredVisibility !== undefined) {
@@ -287,6 +289,26 @@ export async function preflightRepositoryCreation(
       constructibleVisibilities = [];
     } else {
       constructibleVisibilities = [desiredVisibility];
+    }
+  }
+  if (explicitNameIsValid && propertiesValid) {
+    constructibleVisibilities = constructibleVisibilities.filter(
+      (candidateVisibility) =>
+        matchesEffectiveRepositorySelectorIntersection(intersection, {
+          name: input.name!,
+          teams,
+          visibility: candidateVisibility,
+          properties,
+        }),
+    );
+    if (constructibleVisibilities.length === 0) {
+      diagnostics.push({
+        code: "metadata_outside_intersection",
+        message: "Repository name and metadata do not satisfy all effective " +
+          "include and exclude constraints",
+        template: resolvedIdentity,
+        path: "metadata",
+      });
     }
   }
 
@@ -309,20 +331,26 @@ export async function preflightRepositoryCreation(
     input.visibility !== undefined &&
     !constructibleVisibilities.includes(input.visibility)
   ) {
-    const code = desiredVisibility !== undefined &&
-        input.visibility !== desiredVisibility
-      ? "incompatible_constraints"
-      : "invalid_visibility";
-    diagnostics.push({
-      code,
-      message: code === "incompatible_constraints"
-        ? "Explicit visibility conflicts with template-managed visibility " +
-          desiredVisibility
-        : "Visibility " + input.visibility +
-          " does not satisfy the effective selector constraints",
-      template: resolvedIdentity,
-      path: "visibility",
-    });
+    if (
+      !diagnostics.some((issue) =>
+        issue.code === "metadata_outside_intersection"
+      )
+    ) {
+      const code = desiredVisibility !== undefined &&
+          input.visibility !== desiredVisibility
+        ? "incompatible_constraints"
+        : "invalid_visibility";
+      diagnostics.push({
+        code,
+        message: code === "incompatible_constraints"
+          ? "Explicit visibility conflicts with template-managed visibility " +
+            desiredVisibility
+          : "Visibility " + input.visibility +
+            " does not satisfy the effective selector constraints",
+        template: resolvedIdentity,
+        path: "visibility",
+      });
+    }
     visibility = {
       status: "invalid",
       alternatives: constructibleVisibilities,
@@ -354,7 +382,10 @@ export async function preflightRepositoryCreation(
     };
   } else {
     if (
-      !diagnostics.some((issue) => issue.code === "incompatible_constraints")
+      !diagnostics.some((issue) =>
+        issue.code === "incompatible_constraints" ||
+        issue.code === "metadata_outside_intersection"
+      )
     ) {
       diagnostics.push({
         code: "incompatible_constraints",
@@ -451,11 +482,24 @@ export async function preflightRepositoryCreation(
           };
           break;
         }
+        if (
+          diagnostics.some((issue) =>
+            issue.code === "template_overlap" ||
+            issue.code === "template_mismatch"
+          )
+        ) {
+          break;
+        }
       }
     } catch {
       repository = undefined;
     }
-    if (repository === undefined) {
+    if (
+      repository === undefined &&
+      !diagnostics.some((issue) =>
+        issue.code === "template_overlap" || issue.code === "template_mismatch"
+      )
+    ) {
       diagnostics.push({
         code: "name_generation_failed",
         message: "Could not generate a valid name from pattern " +
@@ -524,7 +568,6 @@ export async function preflightRepositoryCreation(
     const classification = classifyResource(loaded, candidate);
     if (classification.status === "invalid") {
       if (
-        reportFailure &&
         !diagnostics.some((issue) => issue.code === "template_overlap")
       ) {
         diagnostics.push({
@@ -543,7 +586,6 @@ export async function preflightRepositoryCreation(
       classification.template !== resolvedIdentity
     ) {
       if (
-        reportFailure &&
         !diagnostics.some((issue) => issue.code === "template_mismatch")
       ) {
         diagnostics.push({

@@ -413,6 +413,57 @@ Deno.test("creation preflight handles visibility ambiguity and template settings
   );
 });
 
+Deno.test("creation preflight filters visibility for the explicit candidate name", async () => {
+  const loaded = configuration(
+    {
+      include: {
+        names: ["team-*"],
+        visibility: ["private", "internal"],
+      },
+      exclude: {
+        names: ["team-secret"],
+        visibility: "private",
+      },
+    },
+    {
+      "repository:services": repositoryTemplate({
+        include: { names: ["team-*"] },
+      }),
+    },
+  );
+
+  const inferred = await preflightRepositoryCreation(loaded, {
+    template: "services",
+    name: "team-secret",
+  });
+  assertEquals(inferred.ready, true);
+  assertEquals(inferred.choices.visibility.value, "internal");
+  assertEquals(inferred.choices.visibility.alternatives, ["internal"]);
+
+  const forbidden = await preflightRepositoryCreation(loaded, {
+    template: "services",
+    name: "team-secret",
+    visibility: "private",
+  });
+  assertEquals(forbidden.ready, false);
+  assertEquals(forbidden.choices.visibility.alternatives, ["internal"]);
+  assertEquals(
+    forbidden.diagnostics.some(({ code }) => code === "invalid_visibility"),
+    true,
+  );
+
+  const stillAmbiguous = await preflightRepositoryCreation(loaded, {
+    template: "services",
+    name: "team-api",
+  });
+  assertEquals(stillAmbiguous.ready, false);
+  assertEquals(stillAmbiguous.choices.visibility.status, "ambiguous");
+  assertEquals(stillAmbiguous.choices.visibility.alternatives, [
+    "private",
+    "internal",
+  ]);
+});
+
 Deno.test("creation preflight requires a name when selectors do not constrain naming", async () => {
   const loaded = configuration(
     { include: "all" },
@@ -504,6 +555,43 @@ Deno.test("creation preflight rejects cross-template overlap for explicit metada
   assertEquals(
     result.diagnostics.some(({ code }) => code === "template_overlap"),
     true,
+  );
+});
+
+Deno.test("creation preflight preserves overlap diagnostics for generated names", async () => {
+  const loaded = configuration(
+    {
+      include: {
+        names: ["team-*-svcs"],
+        visibility: "private",
+      },
+    },
+    {
+      "repository:first": repositoryTemplate({
+        include: { names: ["team-*-svcs"] },
+      }),
+      "repository:second": repositoryTemplate({
+        include: { names: ["team-*-svcs"] },
+      }),
+    },
+  );
+
+  const result = await preflightRepositoryCreation(
+    loaded,
+    { template: "first" },
+    {
+      randomBytes: (length) => new Uint8Array(length),
+    },
+  );
+
+  assertEquals(result.ready, false);
+  assertEquals(
+    result.diagnostics.some(({ code }) => code === "template_overlap"),
+    true,
+  );
+  assertEquals(
+    result.diagnostics.some(({ code }) => code === "name_generation_failed"),
+    false,
   );
 });
 
