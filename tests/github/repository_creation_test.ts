@@ -11,6 +11,7 @@ import {
   classifyResource,
   createRepository,
   discoverRepositories,
+  equalCustomPropertyValues,
   FetchGitHubClient,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
@@ -1130,6 +1131,10 @@ Deno.test("creation deferral result is explicit and fresh plans resume only rema
   );
   const text = renderRepositoryCreationResult(result);
   assertStringIncludes(text, "until Git content bootstrap completes");
+  assertStringIncludes(
+    text,
+    "Repository settings (defaultBranch, archived) - deferred until Git content bootstrap completes",
+  );
   assertEquals(text.includes("cleanup is merged"), false);
   const desired = {
     repository: "sample",
@@ -1156,6 +1161,193 @@ Deno.test("creation deferral result is explicit and fresh plans resume only rema
     { scope: "github-only" },
   );
   assertEquals(resumed.operations.map(({ type }) => type), ["create-ruleset"]);
+});
+
+for (const failure of ["runtime", "state_read", "metadata"] as const) {
+  Deno.test(`creation retains configured deferred recovery work after ${failure} failure`, async () => {
+    const github = new GitHub();
+    github.override = ({ method, path }) => {
+      if (failure === "state_read" && path.includes("/git/ref/")) {
+        return Response.json({ message: "Forbidden" }, { status: 403 });
+      }
+      if (
+        failure === "metadata" && method === "PUT" && path.includes("/teams/")
+      ) {
+        return Response.json({ message: "Forbidden" }, { status: 403 });
+      }
+    };
+    const result = await run(
+      github,
+      configuration({
+        settings: { defaultBranch: "trunk", archived: true },
+        files: { "obsolete.txt": { ensure: "absent" } },
+        rulesets: [{
+          name: "protect",
+          target: "branch",
+          enforcement: "active",
+          conditions: {
+            refName: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+          },
+          rules: [],
+        }],
+        ...(failure === "runtime" && {
+          actions: { variables: [{ from: "MISSING", to: "RUNTIME" }] },
+        }),
+      }),
+    );
+    assertEquals(
+      result.status,
+      failure === "metadata" ? "metadata_failed" : "reconciliation_failed",
+    );
+    assertEquals(result.deferred.map(({ resource }) => resource), [
+      "files",
+      "default_branch",
+      "rulesets",
+      "archival",
+    ]);
+    assertEquals(result.deferred[0].targets, ["obsolete.txt"]);
+    assertEquals(result.repository?.name, "api-orders");
+    assertStringIncludes(
+      renderRepositoryCreationResult(result),
+      "Deferred files (obsolete.txt)",
+    );
+    assertEquals(JSON.parse(JSON.stringify(result)).deferred, result.deferred);
+    if (failure === "metadata") assertEquals(result.report, undefined);
+  });
+}
+
+Deno.test("creation does not defer already-satisfied archived false", async () => {
+  const result = await run(
+    new GitHub(),
+    configuration({ settings: { archived: false } }),
+  );
+  assertEquals(result.status, "completed");
+  assertEquals(result.deferred, []);
+  assertEquals(result.report?.repositories[0].status, "unchanged");
+  assertEquals(result.report?.repositories[0].items, [{
+    type: "repository-settings",
+    status: "unchanged",
+    details: {},
+  }]);
+});
+
+Deno.test("GitHub-only planning permits unarchival before bootstrap", () => {
+  const current = currentState({
+    history: { initialized: false },
+    settings: { ...currentState().settings, archived: true },
+  });
+  const desired = {
+    repository: "sample",
+    template: "repository:services",
+    settings: { archived: false },
+  };
+  const plan = buildPlan(current, desired, { scope: "github-only" });
+  assertEquals(plan.operations, [{
+    type: "update-repository-settings",
+    settings: { archived: false },
+  }]);
+  assertEquals(
+    buildApplyEvaluations(desired, plan.operations, current, {
+      scope: "github-only",
+    })
+      .some(({ details }) => details.deferred === true),
+    false,
+  );
+});
+
+Deno.test("creation uses unordered property comparison through intersection, reconciliation and discovery", async () => {
+  const base = configuration({ customProperties: { regions: ["eu", "us"] } });
+  const loaded: LoadedConfiguration = {
+    ...base,
+    configuration: {
+      ...base.configuration,
+      repositories: {
+        scope: {
+          include: {
+            names: ["api-*"],
+            visibility: "internal",
+            properties: { regions: ["us", "eu"] },
+          },
+        },
+      },
+    },
+    templates: {
+      "repository:services": {
+        ...base.templates["repository:services"],
+        match: { include: { properties: { regions: ["eu", "us"] } } },
+      },
+    },
+  };
+  const github = new GitHub();
+  github.override = ({ method, path }) => {
+    if (method === "GET" && path.endsWith("/properties/values")) {
+      return Response.json([{ property_name: "regions", value: ["us", "eu"] }]);
+    }
+  };
+  const result = await run(github, loaded, {
+    properties: { regions: ["us", "eu"] },
+  });
+  assertEquals(result.status, "completed");
+  assertEquals(result.report?.repositories[0].items, [{
+    type: "custom-property",
+    status: "unchanged",
+    details: { name: "regions", value: ["eu", "us"] },
+  }]);
+  assertEquals(
+    github.mutations().filter(({ path }) => path.endsWith("/properties/values"))
+      .length,
+    1,
+  );
+  const discovery = await discoverRepositories(
+    github.client(),
+    loaded,
+    "api-orders",
+  );
+  assertEquals(discovery.failures, []);
+  assertEquals(classifyResource(loaded, discovery.repositories[0]), {
+    status: "matched",
+    template: "repository:services",
+  });
+  assertEquals(
+    matchesSelector({
+      properties: { regions: ["eu", "us"] },
+    }, discovery.repositories[0]),
+    true,
+  );
+  assertEquals(
+    matchesSelector({
+      properties: { regions: ["eu", "us"] },
+    }, {
+      ...discovery.repositories[0],
+      properties: { regions: ["eu", "apac"] },
+    }),
+    false,
+  );
+  assertEquals(
+    matchesSelector({
+      properties: { regions: ["eu", "us"] },
+    }, { ...discovery.repositories[0], properties: { regions: ["eu"] } }),
+    false,
+  );
+  assertEquals(
+    matchesSelector({
+      properties: { regions: ["eu", "us"] },
+    }, { ...discovery.repositories[0], properties: { regions: "eu,us" } }),
+    false,
+  );
+});
+
+Deno.test("custom-property comparison preserves multiplicity, exact scalars and input arrays", () => {
+  const left = ["us", "eu"];
+  const right = ["eu", "us"];
+  assertEquals(equalCustomPropertyValues(left, right), true);
+  assertEquals(left, ["us", "eu"]);
+  assertEquals(right, ["eu", "us"]);
+  assertEquals(equalCustomPropertyValues(["eu", "eu"], ["eu", "us"]), false);
+  assertEquals(equalCustomPropertyValues(["eu"], ["eu", "eu"]), false);
+  assertEquals(equalCustomPropertyValues(true, "TRUE"), false);
+  assertEquals(equalCustomPropertyValues(undefined, null), false);
+  assertEquals(equalCustomPropertyValues(null, null), true);
 });
 
 Deno.test("metadata verification permission errors retain identity and failed stage", async () => {

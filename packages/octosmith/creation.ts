@@ -217,6 +217,11 @@ export async function createRepository(
       throw error;
     }
     completedStages.push(stage);
+    const configured = loaded.templates[specification.template].repository;
+    deferred.push(...creationDeferredWork({
+      ...configured,
+      files: Object.keys(configured.files ?? {}).map((path) => ({ path })),
+    }, true));
     stage = "metadata";
     const values = options.values ?? missingValue;
     const secretValues = options.secretValues ?? values;
@@ -331,7 +336,9 @@ export async function createRepository(
       const current = await readCurrentState(source, desired, undefined, {
         scope: "github-only",
       });
-      deferred.push(
+      deferred.splice(
+        0,
+        deferred.length,
         ...creationDeferredWork(
           desired,
           current.history?.initialized === false ||
@@ -439,7 +446,14 @@ function safeCreationError(error: unknown): string {
 class CreationStageError extends Error {}
 
 function creationDeferredWork(
-  desired: DesiredState,
+  desired: {
+    readonly files?: readonly { readonly path: string }[];
+    readonly settings?: Pick<
+      NonNullable<DesiredState["settings"]>,
+      "defaultBranch" | "archived"
+    >;
+    readonly rulesets?: readonly { readonly name: string }[];
+  },
   empty: boolean,
 ): RepositoryCreationDeferredWork[] {
   return [
@@ -467,7 +481,7 @@ function creationDeferredWork(
           "Defer all ruleset reconciliation until bootstrap provides branch references and avoids blocking the first push.",
       }]
       : []),
-    ...(empty && desired.settings?.archived !== undefined
+    ...(empty && desired.settings?.archived === true
       ? [{
         resource: "archival" as const,
         targets: ["archived"],

@@ -310,6 +310,19 @@ function describeItem(item: ApplyItemReport): string {
     case "repository-initialization":
       return "Initialize repository - branch: " + String(details.branch);
     case "repository-settings":
+      if (details.deferred === true) {
+        const fields = Array.isArray(details.fields)
+          ? details.fields.filter((field): field is string =>
+            typeof field === "string"
+          )
+          : [];
+        return "Repository settings" +
+          (fields.length > 0 ? " (" + fields.join(", ") + ")" : "") +
+          " - deferred" +
+          (typeof details.deferredReason === "string"
+            ? " " + details.deferredReason
+            : "");
+      }
       return "Repository settings" +
         settingsSuffix(item, details.settings);
     case "custom-property":

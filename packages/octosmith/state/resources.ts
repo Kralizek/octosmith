@@ -13,6 +13,21 @@ export function normalizeCustomPropertyValue(
   return typeof value === "boolean" ? String(value) : value;
 }
 
+/** Compare exact GitHub scalar representations and unordered multi-select values. */
+export function equalCustomPropertyValues(
+  left: CustomPropertyValue | boolean | undefined,
+  right: CustomPropertyValue | boolean,
+): boolean {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    if (left.length !== right.length) return false;
+    const sortedLeft = [...left].sort();
+    const sortedRight = [...right].sort();
+    return sortedLeft.every((value, index) => value === sortedRight[index]);
+  }
+  return left !== undefined &&
+    normalizeCustomPropertyValue(left) === normalizeCustomPropertyValue(right);
+}
+
 /** Describes allowed GitHub Actions setting. */
 export type ActionsAllowedActions = "all" | "local-only" | "selected";
 

@@ -285,7 +285,10 @@ Boolean selector properties use GitHub's string representation
 custom property `enabled: "true"` (and likewise for `false`). Assignment,
 selector intersection, creation preflight and classification use the same exact
 representation; discovery preserves the strings returned by GitHub. Other
-strings, numbers and arrays are not coerced into boolean matches.
+strings, numbers and arrays are not coerced into boolean matches. Multi-select
+custom-property arrays compare without regard to order across selector matching,
+intersection, preflight and reconciliation. Different values, lengths or
+duplicate counts still differ; comparisons do not reorder inputs.
 
 Required team membership initially uses read access; declared permissions are
 then reconciled normally. With strict collections, explicitly declare required
@@ -294,10 +297,14 @@ Creation rejects a reconciliation plan that would invalidate classification.
 
 Managed files remain part of composed configuration but are not delivered during
 creation, under either direct or PR delivery. Until Git bootstrap (#111),
-default-branch changes, rulesets and archival are deferred on empty
-repositories. No initial commit or branch is fabricated. `awaiting_bootstrap`
-explicitly reports unfinished work. Ordinary plan/apply still uses the existing
-automatic initialization behavior described above.
+default-branch changes, rulesets and archival (`archived: true`) are deferred on
+empty repositories. No initial commit or branch is fabricated.
+`awaiting_bootstrap` explicitly reports unfinished work. Ordinary plan/apply
+still uses the existing automatic initialization behavior described above. An
+already-satisfied `archived: false` is not pending work, and unarchiving is
+allowed before bootstrap. Configured deferred work is retained on post-creation
+failures, including missing runtime values and failed metadata/state reads;
+deferred settings are labeled with their field names and reason in text output.
 
 ### GitHub Actions permissions
 

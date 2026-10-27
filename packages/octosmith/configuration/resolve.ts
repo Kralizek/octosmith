@@ -20,7 +20,7 @@ import type {
   DesiredRepositorySettings,
 } from "../state/repository.ts";
 import type { DesiredActions } from "../state/resources.ts";
-import { normalizeCustomPropertyValue } from "../state/resources.ts";
+import { equalCustomPropertyValues } from "../state/resources.ts";
 import type { DesiredRuleset, DesiredRulesetRule } from "../state/rulesets.ts";
 import type {
   DesiredEnvironment,
@@ -346,7 +346,7 @@ export function matchesSelector(
   if (
     selector.properties &&
     !Object.entries(selector.properties).every(([name, expected]) =>
-      equalPropertyValue(repository.properties[name], expected)
+      equalCustomPropertyValues(repository.properties[name], expected)
     )
   ) {
     return false;
@@ -362,20 +362,6 @@ function matchesGlob(pattern: string, value: string): boolean {
     .replaceAll("?", ".");
 
   return new RegExp("^" + expression + "$").test(value);
-}
-
-function equalPropertyValue(
-  actual: PropertyValue | undefined,
-  expected: PropertyValue,
-): boolean {
-  if (Array.isArray(actual) && Array.isArray(expected)) {
-    return actual.length === expected.length &&
-      actual.every((value, index) => value === expected[index]);
-  }
-
-  return actual !== undefined &&
-    normalizeCustomPropertyValue(actual) ===
-      normalizeCustomPropertyValue(expected);
 }
 
 /** Normalize repository settings configuration into planner-ready desired settings. */

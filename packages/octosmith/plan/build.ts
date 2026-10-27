@@ -6,10 +6,10 @@ import type {
 } from "../types.ts";
 import type {
   CurrentActionsSettings,
-  CustomPropertyValue,
   DesiredActionsOidcSettings,
   DesiredActionsSettings,
 } from "../state/resources.ts";
+import { equalCustomPropertyValues } from "../state/resources.ts";
 import type {
   CurrentRepositorySettings,
   DesiredMergeSettings,
@@ -207,6 +207,7 @@ function planRepositorySettings(
       ...desired.settings,
       ...(githubOnly && (current.history?.initialized === false ||
         current.bootstrapBranchPending !== undefined) &&
+        desired.settings.archived === true &&
         {
           archived: undefined,
         }),
@@ -252,7 +253,7 @@ function planCustomProperties(
   }
 
   for (const [name, value] of Object.entries(desired.customProperties)) {
-    if (!equalCustomPropertyValue(current.customProperties[name], value)) {
+    if (!equalCustomPropertyValues(current.customProperties[name], value)) {
       operations.push({
         type: "set-custom-property",
         name,
@@ -771,13 +772,17 @@ export function buildApplyEvaluations(
       ...(desired.settings?.defaultBranch !== undefined
         ? ["defaultBranch"]
         : []),
-      ...(desired.settings?.archived !== undefined ? ["archived"] : []),
+      ...(desired.settings?.archived === true ? ["archived"] : []),
     ]
     : [];
   if (deferredSettings.length > 0) {
     evaluations.push({
       type: "repository-settings",
-      details: { fields: deferredSettings, deferred: true },
+      details: {
+        fields: deferredSettings,
+        deferred: true,
+        deferredReason: "until Git content bootstrap completes",
+      },
     });
   }
 
@@ -1913,17 +1918,6 @@ function equalPermission(
   right: RepositoryPermission,
 ): boolean {
   return left.kind === right.kind && left.name === right.name;
-}
-
-function equalCustomPropertyValue(
-  left: CustomPropertyValue | undefined,
-  right: CustomPropertyValue,
-): boolean {
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return equalUnorderedStrings(left, right);
-  }
-
-  return left === right;
 }
 
 function copyChangedScalar(

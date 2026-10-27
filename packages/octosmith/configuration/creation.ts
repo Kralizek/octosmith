@@ -1,5 +1,5 @@
 import type { PropertyValue, RepositoryVisibility } from "../types.ts";
-import { normalizeCustomPropertyValue } from "../state/resources.ts";
+import { equalCustomPropertyValues } from "../state/resources.ts";
 import type { LoadedConfiguration } from "./load.ts";
 import {
   classifyResource,
@@ -223,7 +223,7 @@ export async function preflightRepositoryCreation(
     }
     if (
       required !== undefined &&
-      !propertyValuesEqual(required, desired)
+      !equalCustomPropertyValues(required, desired)
     ) {
       propertiesValid = false;
       diagnostics.push({
@@ -238,7 +238,7 @@ export async function preflightRepositoryCreation(
   }
   for (const [property, value] of Object.entries(input.properties ?? {})) {
     const required = effective.requiredProperties[property];
-    if (required !== undefined && !propertyValuesEqual(required, value)) {
+    if (required !== undefined && !equalCustomPropertyValues(required, value)) {
       propertiesValid = false;
       diagnostics.push({
         code: "property_conflict",
@@ -252,7 +252,7 @@ export async function preflightRepositoryCreation(
     const desired = template.repository.customProperties?.[property];
     if (
       desired !== undefined &&
-      (desired === null || !propertyValuesEqual(desired, value))
+      (desired === null || !equalCustomPropertyValues(desired, value))
     ) {
       propertiesValid = false;
       diagnostics.push({
@@ -782,16 +782,4 @@ function validateRepositoryName(name: string): string | undefined {
 
 function isRepositoryVisibility(value: string): value is RepositoryVisibility {
   return REPOSITORY_VISIBILITIES.includes(value as RepositoryVisibility);
-}
-
-function propertyValuesEqual(
-  left: PropertyValue,
-  right: PropertyValue,
-): boolean {
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length &&
-      left.every((value, index) => value === right[index]);
-  }
-  return normalizeCustomPropertyValue(left) ===
-    normalizeCustomPropertyValue(right);
 }

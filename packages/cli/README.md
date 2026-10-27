@@ -241,13 +241,18 @@ scope/classification; declare required entries explicitly.
 **Transitional limitation (#111):** repository files are not bootstrapped yet.
 Creation never initializes Git history, sends Contents API writes, or creates
 file-update PRs under either delivery mode. While history is empty, the default
-branch setting, all rulesets (including push rulesets) and archival are
-explicitly deferred: references do not exist yet, and policies/archival could
-block the first push. No default branch is fabricated. #111 should bootstrap
-contents once, then re-read current state and rebuild a `github-only` plan
-against the same desired state. Replanning avoids replaying completed
-operations. Later ordinary plan/apply retains its existing initialization and
-file-delivery behavior.
+branch setting, all rulesets (including push rulesets) and archival
+(`archived: true`) are explicitly deferred: references do not exist yet, and
+policies/archival could block the first push. No default branch is fabricated.
+#111 should bootstrap contents once, then re-read current state and rebuild a
+`github-only` plan against the same desired state. Replanning avoids replaying
+completed operations. Later ordinary plan/apply retains its existing
+initialization and file-delivery behavior.
+
+An already-satisfied `archived: false` does not trigger a deferral; unarchiving
+can proceed before bootstrap. Post-creation failures retain configured deferred
+work even if runtime resolution or state reading fails. Deferred settings are
+explicitly named in the regular text report.
 
 Text and JSON separate lifecycle status/stages, identity/URL, metadata
 assignment outcomes, deferred work and the ordinary reconciliation report.

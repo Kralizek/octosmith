@@ -14,7 +14,7 @@ import {
   type Scope,
 } from "../mod.ts";
 import { loadConfigurationDirectoryCollectingIssues } from "./load.ts";
-import { normalizeCustomPropertyValue } from "../state/resources.ts";
+import { equalCustomPropertyValues } from "../state/resources.ts";
 
 /**
  * Validate a configuration directory without consulting GitHub.
@@ -946,7 +946,9 @@ function propertiesCanOverlap(
 
     for (const [name, value] of Object.entries(properties)) {
       const existing = required.get(name);
-      if (existing !== undefined && !equalPropertyValue(existing, value)) {
+      if (
+        existing !== undefined && !equalCustomPropertyValues(existing, value)
+      ) {
         return false;
       }
       required.set(name, value);
@@ -954,19 +956,6 @@ function propertiesCanOverlap(
   }
 
   return true;
-}
-
-function equalPropertyValue(
-  left: PropertyValue,
-  right: PropertyValue,
-): boolean {
-  if (Array.isArray(left) && Array.isArray(right)) {
-    return left.length === right.length &&
-      left.every((value, index) => value === right[index]);
-  }
-
-  return normalizeCustomPropertyValue(left) ===
-    normalizeCustomPropertyValue(right);
 }
 
 function globPatternsCanOverlap(...patterns: readonly string[]): boolean {

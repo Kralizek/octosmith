@@ -109,11 +109,16 @@ resolution, `readCurrentState`, `buildPlan`, `applyPlan` and regular report
 builders. The reusable `scope: "github-only"` option on the state reader,
 planner/evaluations and mutation sink excludes GitHub file reads/delivery,
 bootstrap operations and PR finishing without stripping files from desired
-state. On empty history, default-branch changes, rulesets and archival are
-deferred until #111 bootstrap; API settings, teams, properties, Actions,
-Dependabot and environments otherwise reconcile normally. The result exposes
-safe deferred targets/reasons, not executable operations or secret/file
-contents.
+state. On empty history, default-branch changes, rulesets and archival
+(`archived: true`) are deferred until #111 bootstrap; API settings, teams,
+properties, Actions, Dependabot and environments otherwise reconcile normally.
+The result exposes safe deferred targets/reasons, not executable operations or
+secret/file contents.
+
+Configured deferred targets are recorded immediately after repository creation
+so metadata, runtime-value and state-read failures preserve bootstrap recovery
+information. Unarchiving remains applicable before bootstrap, and an
+already-satisfied `archived: false` is not reported as deferred.
 
 #111 should consume the retained identity without generating another name,
 bootstrap content once, then re-read and build a fresh GitHub-only plan. Deltas
