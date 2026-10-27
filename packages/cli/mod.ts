@@ -13,6 +13,7 @@ import {
   buildRepositoryCreationPreview,
   type ConfigurationValidationIssue,
   createPersistedPlanArtifact,
+  createRepository,
   describeRuntimeReferenceDiagnostic,
   getGitHubPermissionDescriptor,
   type GitHubPermissionRequirement,
@@ -23,12 +24,13 @@ import {
   preflightRepositoryCreation,
   renderReport,
   renderRepositoryCreationPreview,
+  renderRepositoryCreationResult,
   renderResourceInspection,
   renderRuntimeReferenceDiagnostic,
   type Report,
-  type RepositoryCreationSpecification,
   type RepositoryReport,
   requiredPermissionsForConfiguration,
+  requiredPermissionsForRepositoryCreation,
   type ResourceInspection,
   type RuntimeReferenceDiagnostic,
   summarizeResourceInspection,
@@ -53,7 +55,7 @@ import {
   renderPermissionsGithubOutput,
 } from "./permissions_output.ts";
 import type { ApplyRuntime } from "./apply.ts";
-import { apply, createGitHubRuntime } from "./apply.ts";
+import { apply, createGitHubRuntime, environmentValue } from "./apply.ts";
 import { resolveTemplateIdentity } from "./template.ts";
 import {
   applyPersistedPlan,
@@ -147,12 +149,7 @@ function createCli(
   for (const mode of ["plan", "apply"] as const) {
     const command = new Command()
       .type("secret-boolean", ({ value }) => {
-        if (value !== "true" && value !== "false") {
-          throw new Error(
-            "--include-secrets requires a boolean value: true or false.",
-          );
-        }
-        return value === "true";
+        return parseSecretBoolean(value);
       })
       .description(
         mode === "plan" ? "Show required changes." : "Apply required changes.",
@@ -485,8 +482,9 @@ function createCli(
       .command(
         "create",
         new Command()
+          .type("secret-boolean", ({ value }) => parseSecretBoolean(value))
           .description(
-            "Preflight creation, or preview with --dry-run (no creation yet).",
+            "Create an empty GitHub repository and reconcile API resources; --dry-run is read-only.",
           )
           .arguments("<template:string>")
           .option("--name <name:string>", "Name for the new resource.")
@@ -498,6 +496,14 @@ function createCli(
             "--dry-run",
             "Preview resolved creation and bootstrap intent offline.",
           )
+          .option(
+            "--include-secrets [value:secret-boolean]",
+            "Include secrets; false honors configuration.",
+          )
+          .option(
+            "--skip-missing-values",
+            "Skip unavailable runtime values during reconciliation.",
+          )
           .option("-p, --path <path:string>", "Configuration directory.", {
             default: ".",
           })
@@ -506,14 +512,60 @@ function createCli(
           })
           .action(async (commandOptions, template: string) => {
             const format = parseOutputFormat(commandOptions.format);
+            const input = {
+              template,
+              ...(commandOptions.name !== undefined && {
+                name: commandOptions.name,
+              }),
+              ...(commandOptions.visibility !== undefined && {
+                visibility: commandOptions.visibility,
+              }),
+            };
+            if (!commandOptions.dryRun) {
+              const result = await createRepository(
+                {
+                  ...input,
+                  configuration: commandOptions.path,
+                  includeSecrets: commandOptions.includeSecrets,
+                  skipMissingValues: commandOptions.skipMissingValues,
+                },
+                {
+                  client: async () => {
+                    const runtime = options.runtime ??
+                      await createDefaultRuntime(
+                        false,
+                        writeError,
+                        options.credentials,
+                        options.fetch,
+                      );
+                    if (!runtime.client) {
+                      throw new Error(
+                        "Creation requires a GitHub client in the injected runtime",
+                      );
+                    }
+                    return runtime.client;
+                  },
+                  values: options.runtime?.value ?? environmentValue,
+                },
+              );
+              const success = result.status === "completed" ||
+                result.status === "awaiting_bootstrap";
+              const rendered = renderOutput(
+                format,
+                result,
+                renderRepositoryCreationResult,
+              );
+              if (format === "json" || success) write(rendered);
+              else writeError(rendered);
+              if (!success) throw new ApplyFailedError();
+              return;
+            }
             let loaded: LoadedConfiguration;
             try {
               loaded = await loadConfigurationDirectory(commandOptions.path);
             } catch {
               const failure = {
-                kind: commandOptions.dryRun
-                  ? "repository_creation_configuration_error"
-                  : "repository_creation_preflight",
+                kind: "repository_creation_configuration_error",
                 version: 1,
                 ready: false,
                 diagnostics: [{
@@ -532,26 +584,15 @@ function createCli(
               else writeError(rendered);
               throw new ApplyFailedError();
             }
-            const specification = await preflightRepositoryCreation(loaded, {
-              template,
-              ...(commandOptions.name !== undefined && {
-                name: commandOptions.name,
-              }),
-              ...(commandOptions.visibility !== undefined && {
-                visibility: commandOptions.visibility,
-              }),
-            });
-            const rendered = commandOptions.dryRun
-              ? renderOutput(
-                format,
-                buildRepositoryCreationPreview(loaded, specification),
-                renderRepositoryCreationPreview,
-              )
-              : renderOutput(
-                format,
-                specification,
-                renderRepositoryCreationPreflight,
-              );
+            const specification = await preflightRepositoryCreation(
+              loaded,
+              input,
+            );
+            const rendered = renderOutput(
+              format,
+              buildRepositoryCreationPreview(loaded, specification),
+              renderRepositoryCreationPreview,
+            );
             if (format === "json" || specification.ready) {
               write(rendered);
             } else {
@@ -658,6 +699,10 @@ function createCli(
               default: "text",
             },
           )
+          .option(
+            "--creation",
+            "Analyze creation authorization separately (requires a template).",
+          )
           .action(async (commandOptions, template?: string) => {
             const format = parsePermissionOutputFormat(commandOptions.format);
             const loaded = await loadConfigurationDirectory(
@@ -665,6 +710,30 @@ function createCli(
               template,
             );
             await validateLoadedConfiguration(loaded, template);
+            if (commandOptions.creation) {
+              if (!template) throw new Error("--creation requires a template");
+              const analysis = requiredPermissionsForRepositoryCreation(
+                loaded,
+                template,
+              );
+              if (format === "github-output") {
+                throw new Error(
+                  "Creation permissions have distinct lifecycle scopes; use --format text or json",
+                );
+              }
+              write(renderOutput(format, analysis, (value) =>
+                [
+                  `Creation target organization: ${value.organization}`,
+                  "Organization repository creation authorization:",
+                  renderPermissionRequirements(value.creation),
+                  "Selector metadata:",
+                  renderPermissionRequirements(value.selectorMetadata),
+                  "Post-creation reconciliation (including deferred API work):",
+                  renderPermissionRequirements(value.reconciliation),
+                  ...value.constraints,
+                ].join("\n")));
+              return;
+            }
             const requirements = requiredPermissionsForConfiguration(
               loaded,
               template,
@@ -893,6 +962,15 @@ function environmentHas(name: string): boolean {
   }
 }
 
+function parseSecretBoolean(value: string): boolean {
+  if (value !== "true" && value !== "false") {
+    throw new Error(
+      "--include-secrets requires a boolean value: true or false.",
+    );
+  }
+  return value === "true";
+}
+
 function renderValidationResult(
   valid: boolean,
   diagnostics: readonly RuntimeReferenceDiagnostic[],
@@ -911,39 +989,6 @@ function renderValidationResult(
     ...errors,
     ...warnings,
   ].join("\n\n");
-}
-
-function renderRepositoryCreationPreflight(
-  specification: RepositoryCreationSpecification,
-): string {
-  const { choices } = specification;
-  const nameChoice = choices.name;
-  const visibilityChoice = choices.visibility;
-  const diagnostics = specification.diagnostics.map((diagnostic) =>
-    "Error [" + diagnostic.code + "] " +
-    (diagnostic.path === undefined ? "" : diagnostic.path + ": ") +
-    diagnostic.message
-  );
-
-  return [
-    "Repository creation preflight: " +
-    (specification.ready ? "ready" : "incomplete"),
-    "Template: " + specification.template,
-    "Name: " +
-    (nameChoice.value ??
-      (nameChoice.alternatives.map(({ pattern }) => pattern).join(" OR ") ||
-        "requires --name")),
-    "Visibility: " +
-    (visibilityChoice.value ??
-      (visibilityChoice.alternatives.join(", ") || "unavailable")),
-    "Required teams: " + (choices.teams.join(", ") || "none"),
-    "Required custom properties: " +
-    (Object.keys(choices.customProperties).length === 0
-      ? "none"
-      : JSON.stringify(choices.customProperties)),
-    ...diagnostics,
-    "No repository was created.",
-  ].join("\n");
 }
 
 function renderValidationDiagnostics(

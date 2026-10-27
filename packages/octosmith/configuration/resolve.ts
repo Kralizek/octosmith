@@ -372,6 +372,10 @@ function equalPropertyValue(
       actual.every((value, index) => value === expected[index]);
   }
 
+  // GitHub represents boolean custom property values as strings.
+  if (typeof expected === "boolean" && typeof actual === "string") {
+    return actual === String(expected);
+  }
   return actual === expected;
 }
 

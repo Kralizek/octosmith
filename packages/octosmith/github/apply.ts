@@ -27,6 +27,7 @@ export interface ApplyPlanResult {
 export interface ApplyPlanOptions {
   readonly continueOnError?: boolean;
   readonly onPullRequest?: (result: PullRequestResult) => void | Promise<void>;
+  readonly formatError?: (error: unknown) => string;
 }
 
 /** Describes repository mutation sink. */
@@ -86,7 +87,8 @@ export async function applyPlan(
       results.push({
         operation,
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: options.formatError?.(error) ??
+          (error instanceof Error ? error.message : String(error)),
       });
     }
   }
@@ -96,7 +98,8 @@ export async function applyPlan(
     try {
       await preparedSink.finish(plan.repository);
     } catch (error) {
-      finishError = error instanceof Error ? error.message : String(error);
+      finishError = options.formatError?.(error) ??
+        (error instanceof Error ? error.message : String(error));
     }
   }
 

@@ -14,6 +14,9 @@ import type { DesiredRepositorySettings } from "../state/repository.ts";
 import type { DesiredRuleset, RulesetDefinition } from "../state/rulesets.ts";
 import type { DesiredEnvironment, DesiredFile } from "../state/types.ts";
 
+/** GitHub-only reconciliation excludes content delivery and defers initialization. */
+export type ReconciliationScope = "all" | "github-only";
+
 /** Describes plan. */
 export interface Plan {
   readonly repository: string;

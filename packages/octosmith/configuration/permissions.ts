@@ -7,9 +7,82 @@ import {
   requiredPermissionsForOperationType,
 } from "../plan/permissions.ts";
 import type { LoadedConfiguration } from "./load.ts";
-import { normalizeRepositorySettings } from "./resolve.ts";
-import { templateCanMatchScope } from "./validate.ts";
+import {
+  normalizeRepositorySettings,
+  resolveTemplateIdentity,
+} from "./resolve.ts";
+import {
+  effectiveRepositorySelectorIntersection,
+  templateCanMatchScope,
+} from "./validate.ts";
 import type { RepositoryConfiguration } from "./types.ts";
+
+/** Creation authorization is distinct from ongoing repository reconciliation. */
+export interface RepositoryCreationPermissionAnalysis {
+  readonly organization: string;
+  readonly creation: readonly GitHubPermissionRequirement[];
+  readonly selectorMetadata: readonly GitHubPermissionRequirement[];
+  readonly reconciliation: readonly GitHubPermissionRequirement[];
+  readonly constraints: readonly string[];
+}
+
+/** Analyze creation-only authorization without changing plan/apply requirements. */
+export function requiredPermissionsForRepositoryCreation(
+  loaded: LoadedConfiguration,
+  templateName: string,
+): RepositoryCreationPermissionAnalysis {
+  const identity = resolveTemplateIdentity(loaded, templateName);
+  const template = loaded.templates[identity];
+  const intersection = effectiveRepositorySelectorIntersection(
+    loaded.configuration.repositories.scope,
+    template,
+    identity,
+  );
+  const metadata: GitHubPermissionRequirement[] = [
+    { scope: "repository", permission: "metadata", access: "read" },
+  ];
+  if (
+    intersection.effective?.requiredTeams.length ||
+    template.repository.teams?.length
+  ) {
+    metadata.push(
+      ...requiredPermissionsForOperationType("set-team-permission"),
+    );
+  }
+  if (
+    Object.keys(intersection.effective?.requiredProperties ?? {}).length ||
+    Object.keys(template.repository.customProperties ?? {}).length
+  ) {
+    metadata.push(
+      ...requiredPermissionsForOperationType("set-custom-property"),
+    );
+  }
+  return {
+    organization: loaded.configuration.organization,
+    creation: [{
+      scope: "repository",
+      permission: "administration",
+      access: "write",
+    }],
+    selectorMetadata: aggregateGitHubPermissionRequirements(metadata),
+    reconciliation: aggregateGitHubPermissionRequirements([
+      { scope: "repository", permission: "contents", access: "read" },
+      ...potentialOperationTypes(
+        template.repository,
+        loaded.configuration.repositories.settings?.collectionManagement ===
+          "strict",
+      ).filter((type) => type !== "initialize-repository").flatMap((type) =>
+        requiredPermissionsForOperationType(type)
+      ),
+    ]),
+    constraints: [
+      "Organization repository creation requires Administration: write on a supported fine-grained token/GitHub App, or the appropriate classic PAT repo/public_repo scope, and an actor allowed to create the requested visibility in this organization.",
+      "Organization/enterprise policy, SSO authorization, internal-visibility availability and GitHub App repository installation access can prevent creation or access to the new repository.",
+      "Selector team assignments require repository Administration: write and organization Members: read. Custom property definitions and editing policy must allow repository value assignment.",
+      "Contents: read is used to detect empty history; no Contents: write, commits, branches or file pull requests are used during API-side creation.",
+    ],
+  };
+}
 
 /** Analyze the worst-case permissions of the reachable, composed templates. */
 export function requiredPermissionsForConfiguration(

@@ -30,6 +30,7 @@ import {
   type ApplyPlanResult,
   discoverRepositories,
   FetchGitHubClient,
+  type GitHubClient,
   GitHubRepositoryBootstrap,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
@@ -44,6 +45,7 @@ export type ApplyMode = "plan" | "apply";
 
 /** Describes apply runtime. */
 export interface ApplyRuntime {
+  readonly client?: GitHubClient;
   readonly value?: RuntimeValueProvider;
 
   discover(
@@ -98,6 +100,7 @@ export function createGitHubRuntime(
   >();
 
   return {
+    client,
     value: secretValue,
 
     async discover(loaded, repository) {
@@ -522,7 +525,8 @@ function validateFileDeliveryPreconditions(
   }
 }
 
-function environmentValue(name: string): string {
+/** Resolve runtime values consistently for CLI plan, apply and creation. */
+export function environmentValue(name: string): string {
   const value = Deno.env.get(name);
 
   if (value === undefined) {

@@ -272,6 +272,29 @@ repository:
       squash_commit_message: blank
 ```
 
+### Creation and selector-required metadata
+
+`resource create <template>` now creates an empty organization repository and
+reconciles API-side resources. `--dry-run` remains completely offline/read-only.
+Creation uses `repositories.scope` intersected with the selected template's
+`match`, including excludes; unresolved name/visibility choices fail before
+GitHub access. Teams and properties inferred by preflight are assigned and
+re-read, then the actual repository must be in scope and uniquely classified.
+Boolean selector properties use GitHub's string representation
+(`"true"`/`"false"`).
+
+Required team membership initially uses read access; declared permissions are
+then reconciled normally. With strict collections, explicitly declare required
+teams/properties rather than configuring collections that would remove them.
+Creation rejects a reconciliation plan that would invalidate classification.
+
+Managed files remain part of composed configuration but are not delivered during
+creation, under either direct or PR delivery. Until Git bootstrap (#111),
+default-branch changes, rulesets and archival are deferred on empty
+repositories. No initial commit or branch is fabricated. `awaiting_bootstrap`
+explicitly reports unfinished work. Ordinary plan/apply still uses the existing
+automatic initialization behavior described above.
+
 ### GitHub Actions permissions
 
 Actions permission settings (`allowed_actions`, `sha_pinning_required`, and

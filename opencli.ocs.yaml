@@ -167,7 +167,15 @@ commands:
 
   octosmith resource create:
     kind: action
-    summary: Offline creation preflight, or a read-only creation preview with --dry-run; execution is not yet implemented.
+    summary: Create an empty organization repository and reconcile GitHub resources; --dry-run remains an offline read-only preview.
+    description: |
+      Validates once, creates without initial content, assigns selector metadata,
+      verifies scope and unique classification, then uses ordinary reconciliation.
+      Files, default-branch initialization, rulesets and archival await bootstrap
+      (#111). No commits, branches, pushes or file pull requests are created.
+      Partial failures retain the repository and exit unsuccessfully.
+      Awaiting-bootstrap is an explicit successful API-side lifecycle outcome,
+      not a claim that deferred work was applied.
     args:
       - name: template
         type: string
@@ -187,6 +195,12 @@ commands:
       - name: dry-run
         type: boolean
         summary: Preview resolved identity, bootstrap files, desired resources, and deferred work without GitHub access or local writes.
+      - name: include-secrets
+        type: boolean
+        summary: Include secrets; explicit false honors configuration.
+      - name: skip-missing-values
+        type: boolean
+        summary: Skip unavailable runtime values during reconciliation.
       - name: path
         aliases: [p]
         type: string
@@ -200,7 +214,7 @@ commands:
           - value: json
         summary: Output format.
     examples:
-      - title: Preflight a resource from a template (no creation yet)
+      - title: Create an empty repository and reconcile API resources
         content: |
           $ octosmith resource create teams/backend --visibility private
       - title: Preview creation and bootstrap intent
@@ -309,6 +323,10 @@ commands:
       permission API name, and access level. github-output rejects permissions
       unsupported by actions/create-github-app-token, including Actions
       Variables.
+      With --creation and a template, text/JSON separate organization repository
+      creation authorization, selector metadata and post-creation reconciliation.
+      This does not change ordinary plan/apply permissions; github-output is
+      unavailable for this lifecycle analysis.
     args:
       - name: template
         type: string
@@ -328,6 +346,9 @@ commands:
           - value: json
           - value: github-output
         summary: Output format.
+      - name: creation
+        type: boolean
+        summary: Analyze creation authorization separately; requires a template and text or JSON output.
     examples:
       - title: Analyze a template as JSON
         content: |
@@ -335,3 +356,6 @@ commands:
       - title: Emit GitHub Actions outputs
         content: |
           $ octosmith template permissions teams/backend --format github-output
+      - title: Analyze repository creation authorization
+        content: |
+          $ octosmith template permissions services --creation --format json

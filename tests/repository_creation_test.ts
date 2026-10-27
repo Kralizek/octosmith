@@ -697,7 +697,7 @@ Deno.test("creation preflight validates templates composed from fragments", asyn
   }
 });
 
-Deno.test("resource create CLI preflights offline and emits JSON diagnostics", async () => {
+Deno.test("resource create CLI dry-run preflights offline and unresolved execution emits diagnostics", async () => {
   const root = await Deno.makeTempDir();
   try {
     await Deno.mkdir(join(root, "templates"));
@@ -734,6 +734,7 @@ Deno.test("resource create CLI preflights offline and emits JSON diagnostics", a
         "resource",
         "create",
         "services",
+        "--dry-run",
         "--name",
         "api-service",
         "--visibility",

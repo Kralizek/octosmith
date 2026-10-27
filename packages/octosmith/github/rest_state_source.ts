@@ -317,6 +317,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   async getRepositoryHistory(
     repository: string,
     defaultBranch: string,
+    options: { readonly allowEmptyBranchList?: boolean } = {},
   ): Promise<RepositoryHistory> {
     try {
       const head = await this.getBranchHead(repository, defaultBranch);
@@ -351,6 +352,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
             head: branches[0].commit.sha,
           };
         }
+        if (options.allowEmptyBranchList) return { initialized: false };
       }
       throw error;
     }

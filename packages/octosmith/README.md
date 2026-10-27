@@ -42,13 +42,13 @@ console.log(JSON.stringify(preview));
 ```
 
 `RepositoryCreationSpecification` is the validated input shared by preview and
-future execution. `buildRepositoryCreationPreview` takes that specification and
-the **same loaded configuration** and projects the existing composed template
+execution. `buildRepositoryCreationPreview` takes that specification and the
+**same loaded configuration** and projects the existing composed template
 (fragments included) into a versioned `RepositoryCreationPreview`. It does not
 re-run name generation, selectors, or classification, create another
 desired-state model, or plan against fictitious current state. Keep the
-specification for execution; the preview is a safe reporting projection, not an
-executable plan.
+specification as diagnostic output; the preview is a safe reporting projection,
+not an executable plan. Each separate execution runs preflight once.
 
 The builder and separate text renderer do not access GitHub, credentials,
 runtime value providers, Git, or the filesystem. Preflight still performs normal
@@ -66,9 +66,73 @@ invocations.
 Failed preflight specifications produce an unresolved preview with the original
 structured choices, diagnostic codes, and validation details, and no bootstrap
 or resource plan. Hosts should return failure when `preview.ready` is false. The
-CLI currently retains preflight-only behavior without `--dry-run`; actual
-creation, Git bootstrap, bootstrap commands, and assisted choices are not
-implemented.
+CLI performs real creation without `--dry-run`. Git content bootstrap (#111),
+bootstrap commands, and assisted choices are not implemented.
+
+### Repository creation lifecycle
+
+```ts
+import {
+  createRepository,
+  FetchGitHubClient,
+  MissingRuntimeValueError,
+  renderRepositoryCreationResult,
+} from "jsr:@octosmith/octosmith@0";
+
+const result = await createRepository({
+  configuration: loaded, // Or a configuration directory path.
+  template: "services",
+  name: "api-service",
+  visibility: "internal",
+}, {
+  client: new FetchGitHubClient({ token: Deno.env.get("GITHUB_TOKEN")! }),
+  values: (name) => {
+    const value = Deno.env.get(name);
+    if (value === undefined) throw new MissingRuntimeValueError(name);
+    return value;
+  },
+});
+console.log(renderRepositoryCreationResult(result));
+```
+
+`RepositoryCreationRequest` and `RepositoryCreationResult` are reusable library
+contracts. A lazy `client` factory can postpone authentication until preflight
+succeeds. The validated name is resolved once, checked remotely, then submitted
+unchanged to `createOrganizationRepository`, with only name, visibility and
+`auto_init: false`. No README, license, Gitignore or commit is created. Required
+teams/custom properties are assigned through the existing mutation sink and
+actually re-read through discovery. Only an in-scope, unique match for the
+explicitly selected template proceeds.
+
+Creation reuses runtime-reference/secret policies, composed desired-state
+resolution, `readCurrentState`, `buildPlan`, `applyPlan` and regular report
+builders. The reusable `scope: "github-only"` option on the state reader,
+planner/evaluations and mutation sink excludes GitHub file reads/delivery,
+bootstrap operations and PR finishing without stripping files from desired
+state. On empty history, default-branch changes, rulesets and archival are
+deferred until #111 bootstrap; API settings, teams, properties, Actions,
+Dependabot and environments otherwise reconcile normally. The result exposes
+safe deferred targets/reasons, not executable operations or secret/file
+contents.
+
+#111 should consume the retained identity without generating another name,
+bootstrap content once, then re-read and build a fresh GitHub-only plan. Deltas
+make completed operations idempotent; deferred work is never marked applied.
+Ordinary plan/apply defaults remain unchanged.
+
+Lifecycle statuses distinguish `preflight_rejected`, `name_collision`,
+`creation_failed`, `metadata_failed`, `classification_failed`,
+`reconciliation_failed`, `awaiting_bootstrap`, and `completed`. Completed
+stages, failed stage, metadata assignment outcomes and the URL are preserved
+when available. Reports exist only after normal reconciliation is attempted.
+Repositories are never automatically deleted. Metadata/classification failures
+may leave repositories outside discovery scope and require manual repair;
+verified repositories can recover through ordinary plan/apply.
+
+`requiredPermissionsForRepositoryCreation` separates creation authorization,
+selector metadata and API reconciliation permissions, without changing ordinary
+permission analysis. See the
+[permission guide](../../docs/automation.md#repository-creation-permissions).
 
 For deeper guidance, see the repository documentation for
 [configuration](../../docs/configuration.md) and

@@ -354,7 +354,10 @@ function describeItem(item: ApplyItemReport): string {
     case "ruleset":
       return "Ruleset " + String(details.name) +
         (details.deferred === true
-          ? " - deferred until bootstrap cleanup is merged"
+          ? " - deferred " +
+            (typeof details.deferredReason === "string"
+              ? details.deferredReason
+              : "until bootstrap cleanup is merged")
           : actionSuffix(details));
     case "environment":
       return "Environment " + String(details.name) + actionSuffix(details);

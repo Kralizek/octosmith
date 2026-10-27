@@ -83,6 +83,14 @@ octosmith plan --path .
 octosmith apply --path .
 ```
 
+Provision an empty organization repository from a selected template with
+`octosmith resource create services --name team-orders-svcs --visibility internal`.
+This performs real GitHub mutations and API-side reconciliation; add `--dry-run`
+for a completely offline, read-only preview. Managed files and branch-dependent
+work await content bootstrap (#111). See the
+[CLI creation guide](packages/cli/README.md#resource-create) for lifecycle
+reporting, permissions and partial-failure recovery.
+
 `template validate` and `template permissions` do not access GitHub.
 `template validate` treats environment-backed secrets already present in the
 process as available without reading their values. `resource list`, `plan`, and
