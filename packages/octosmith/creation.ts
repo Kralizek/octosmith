@@ -44,6 +44,7 @@ import {
 } from "./report/build.ts";
 import type { Report, RepositoryReport } from "./report/types.ts";
 import type { DesiredState } from "./state/types.ts";
+import { normalizeCustomPropertyValue } from "./state/resources.ts";
 
 /** Stages of the nontransactional repository creation lifecycle. */
 export type RepositoryCreationStage =
@@ -254,7 +255,7 @@ export async function createRepository(
       await sink.apply(repository.name, {
         type: "set-custom-property",
         name,
-        value: typeof value === "boolean" ? String(value) : value,
+        value: normalizeCustomPropertyValue(value),
       });
       assignment.status = "applied";
     }

@@ -6,6 +6,13 @@ export type CustomPropertyValue =
   | readonly string[]
   | null;
 
+/** Encode boolean selector values as GitHub's exact custom-property strings. */
+export function normalizeCustomPropertyValue(
+  value: CustomPropertyValue | boolean,
+): CustomPropertyValue {
+  return typeof value === "boolean" ? String(value) : value;
+}
+
 /** Describes allowed GitHub Actions setting. */
 export type ActionsAllowedActions = "all" | "local-only" | "selected";
 
