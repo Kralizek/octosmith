@@ -56,7 +56,9 @@ export function renderRepositoryCreationResult(
         "Complete or verify Git bootstrap, then re-read current state and build a fresh GitHub-only plan; completed operations are not replayed.",
       ]
       : []),
-    ...(result.report ? ["", renderReport(result.report)] : []),
+    ...(result.report
+      ? ["", "Pre-bootstrap reconciliation:", renderReport(result.report)]
+      : []),
     ...(result.deferredReport
       ? [
         "",

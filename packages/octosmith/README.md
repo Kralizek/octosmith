@@ -163,13 +163,13 @@ attempted. Repositories are never automatically deleted. Metadata/classification
 failures may leave repositories outside discovery scope and require manual
 repair; verified repositories can recover through ordinary plan/apply after
 content and default-branch verification. `bootstrap` separately reports branch,
-file count, preparation, commit SHA, push attempt/confirmation, safe failure
-category and cleanup failure. `push_unknown` explicitly means remote changes may
-have occurred. `deferredReconciliationAttempted` and `deferredReport`
-distinguish successful content delivery from complete creation. Never rerun
-create for a retained repository; inspect uncertain pushes against the SHA,
-repair content manually if needed, then create a fresh ordinary plan. See the
-[CLI recovery guidance](../cli/README.md#resource-create).
+file count, preparation, commit creation/SHA, push attempt/confirmation, safe
+failure category and cleanup failure. `push_unknown` explicitly means remote
+changes may have occurred. `deferredReconciliationAttempted` and
+`deferredReport` distinguish successful content delivery from complete creation.
+Never rerun create for a retained repository; inspect uncertain pushes against
+the SHA, repair content manually if needed, then create a fresh ordinary plan.
+See the [CLI recovery guidance](../cli/README.md#resource-create).
 
 `requiredPermissionsForRepositoryCreation` separates creation authorization,
 selector metadata and API reconciliation permissions, without changing ordinary

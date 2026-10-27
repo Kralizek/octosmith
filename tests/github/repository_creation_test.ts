@@ -641,6 +641,12 @@ for (const mode of ["direct", "pull_request"] as const) {
       assertEquals(result.status, "completed");
       assertEquals(result.repository?.name, "team-orders-svcs");
       assertEquals(result.deferred, []);
+      assertEquals(
+        result.deferredReport?.repositories[0].items.some(({ type }) =>
+          type === "file"
+        ),
+        false,
+      );
       assertEquals(github.bootstraps.length, 1);
       assertEquals(github.bootstraps[0].repository, "team-orders-svcs");
       assertEquals(github.bootstraps[0].branch, "trunk");
@@ -973,6 +979,36 @@ Deno.test("post-push classification is re-verified before any deferred mutations
   assertEquals(result.deferredReport, undefined);
   assertEquals(github.settings.archived, undefined);
   assertEquals(github.bootstraps.length, 1);
+});
+
+Deno.test("confirmed push with cleanup failure does not report files as remaining or retry", async () => {
+  const github = new GitHub();
+  const result = await createRepository({
+    configuration: configuration({
+      files: { "obsolete.txt": { ensure: "absent" } },
+      settings: { archived: true },
+    }),
+    template: "services",
+    name: "api-orders",
+  }, {
+    client: github.client(),
+    bootstrap: {
+      bootstrap: async (request) => ({
+        ...await github.bootstrap.bootstrap(request),
+        outcome: "failed",
+        failure: "cleanup",
+        cleanupFailed: true,
+      }),
+    },
+  });
+  assertEquals(result.status, "bootstrapped_not_reconciled");
+  assertEquals(result.bootstrap?.pushConfirmed, true);
+  assertEquals(result.deferredReconciliationAttempted, false);
+  assertEquals(result.deferred.map(({ resource }) => resource), ["archival"]);
+  assertStringIncludes(result.deferred[0].reason, "Git bootstrap completed");
+  assertEquals(github.bootstraps.length, 1);
+  assertStringIncludes(result.recovery!, "cleanup failure");
+  assertEquals(github.exists, true);
 });
 
 Deno.test("GitHub-only sink refuses accidental content operations and never runs PR finish", async () => {

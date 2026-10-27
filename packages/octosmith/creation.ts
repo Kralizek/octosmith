@@ -464,7 +464,7 @@ export async function createRepository(
           plan.operations,
           current,
           { scope: "github-only" },
-        );
+        ).filter((evaluation) => !afterPush || evaluation.type !== "file");
         const applied = await applyPlan(sink, plan, {
           formatError: safeCreationError,
         });
@@ -628,6 +628,19 @@ export async function createRepository(
         }
       },
     });
+    if (bootstrap.pushConfirmed) {
+      deferred.splice(
+        0,
+        deferred.length,
+        ...deferred.filter(({ resource }) => resource !== "files").map((
+          work,
+        ) => ({
+          ...work,
+          reason:
+            "Git bootstrap completed; reconcile remaining GitHub-side work from a fresh plan.",
+        })),
+      );
+    }
     if (bootstrap.outcome !== "completed") {
       return result(
         bootstrap.pushConfirmed
@@ -637,17 +650,14 @@ export async function createRepository(
           "Git bootstrap failed (" + bootstrap.failure +
             "); raw Git diagnostics are omitted.",
         ),
-        bootstrap.pushAttempted
+        bootstrap.pushConfirmed
+          ? "Repository bootstrapped and retained. Do not rerun resource create. Inspect local temporary storage for the cleanup failure, verify remote state and finish deferred GitHub-side work with a fresh ordinary plan/apply."
+          : bootstrap.pushAttempted
           ? "Repository retained. Do not rerun resource create. Inspect remote branches and compare the reported commit SHA before recovery; a lost push response may have changed the remote. Complete or repair content manually, then run ordinary plan/apply."
           : "Repository retained without bootstrap content. Do not rerun resource create. Correct the preparation/authentication failure and initialize the retained repository manually, then run ordinary plan/apply.",
       );
     }
     completedStages.push(stage);
-    deferred.splice(
-      0,
-      deferred.length,
-      ...deferred.filter(({ resource }) => resource !== "files"),
-    );
     stage = "deferred_reconciliation";
     deferredReconciliationAttempted = true;
     actual = await verifyMetadata();
