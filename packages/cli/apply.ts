@@ -105,7 +105,10 @@ export function createGitHubRuntime(
   return {
     client,
     value: secretValue,
-    bootstrap: new LocalGitBootstrap({ token: () => options.token }),
+    bootstrap: new LocalGitBootstrap({
+      token: () => options.token,
+      baseUrl: options.baseUrl,
+    }),
 
     async discover(loaded, repository) {
       options.traceGroup?.("organization");

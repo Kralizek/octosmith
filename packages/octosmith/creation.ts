@@ -661,6 +661,15 @@ export async function createRepository(
     stage = "deferred_reconciliation";
     deferredReconciliationAttempted = true;
     actual = await verifyMetadata();
+    const branches = await client.get<readonly { readonly name: string }[]>(
+      path + "/branches",
+      { per_page: 2 },
+    );
+    if (branches.length !== 1 || branches[0].name !== branch) {
+      throw new CreationStageError(
+        "Unexpected remote branches after the initial push; inspect remote history before deferred reconciliation.",
+      );
+    }
     const source = new GitHubRepositoryStateSource(client, organization);
     if (
       await source.getBranchHead(repository.name, branch) !==

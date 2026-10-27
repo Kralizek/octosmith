@@ -5,7 +5,7 @@ export function assertManagedFilePath(path: string): void {
     [...path].some((character) =>
       character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127
     ) ||
-    /[\\:\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/.test(
+    /[\\:"*?<>|\u200c-\u200f\u202a-\u202e\u206a-\u206f\ufeff]/.test(
       path,
     ) ||
     path.split("/").some((part) =>

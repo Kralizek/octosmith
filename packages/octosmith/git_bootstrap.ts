@@ -65,6 +65,8 @@ export interface GitCommandResult {
 /** Authentication and execution dependencies for the local bootstrap service. */
 export interface LocalGitBootstrapOptions {
   readonly token: () => string | Promise<string>;
+  /** GitHub API base URL; enterprise Git remotes use the same HTTPS origin. */
+  readonly baseUrl?: string;
   readonly run?: (command: GitCommand) => Promise<GitCommandResult>;
   readonly makeTempDirectory?: () => Promise<string>;
   readonly cleanup?: (path: string) => Promise<void>;
@@ -108,6 +110,15 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
       outcome: "failed",
     };
     try {
+      const api = new URL(this.options.baseUrl ?? "https://api.github.com");
+      if (api.protocol !== "https:" || api.username || api.password) {
+        throw new Error(
+          "Git bootstrap requires a credential-free HTTPS API URL",
+        );
+      }
+      const gitOrigin = api.origin === "https://api.github.com"
+        ? "https://github.com"
+        : api.origin;
       failure = "invalid_files";
       const paths = new Set<string>();
       for (const file of request.files) {
@@ -184,9 +195,7 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
           "update-index",
           "--add",
           "--cacheinfo",
-          "100644",
-          blob,
-          file.path,
+          `100644,${blob},${file.path}`,
         ]);
       }
       await git([
@@ -221,7 +230,7 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
         "remote",
         "add",
         "origin",
-        "https://github.com/" + encodeURIComponent(request.organization) + "/" +
+        gitOrigin + "/" + encodeURIComponent(request.organization) + "/" +
         encodeURIComponent(request.repository) + ".git",
       ]);
       failure = "push_unknown";

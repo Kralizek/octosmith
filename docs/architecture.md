@@ -189,17 +189,21 @@ child's environment receives it. No token is stored in the URL or Git config,
 passed in arguments, or exposed in diagnostics/reports. Credential helpers,
 interactive prompts, HTTP redirects and inherited tracing are disabled. API
 creation permissions and Git push authorization are distinct, including
-workflow, SSO and installation restrictions.
+workflow, SSO and installation restrictions. The configured API base URL also
+determines the Git host: public `api.github.com` maps to `github.com`, while
+enterprise APIs use the same HTTPS origin without the API path.
+Credential-bearing/non-HTTPS base URLs are rejected.
 
 Safe API settings, teams, properties, Actions, Dependabot and environments run
 before push; default-branch changes, **all** rulesets and archival run
-afterward. The second pass re-verifies classification and initial SHA, re-reads
-state, resolves composed desired state and builds a fresh `github-only` plan. A
-verified sole bootstrap branch can now be configured as default even if GitHub's
-metadata still names a missing branch. Archival is split out and ordered last.
-Opaque secrets successfully delivered earlier and still present are preserved
-using existing planner reference-preservation semantics, not blindly replayed.
-Files remain excluded for both delivery modes.
+afterward. The second pass requires the expected sole branch and re-verifies
+classification and initial SHA, re-reads state, resolves composed desired state
+and builds a fresh `github-only` plan. A verified sole bootstrap branch can now
+be configured as default even if GitHub's metadata still names a missing branch.
+Archival is split out and ordered last. Opaque secrets successfully delivered
+earlier and still present are preserved using existing planner
+reference-preservation semantics, not blindly replayed. Files remain excluded
+for both delivery modes.
 
 Creation results distinguish API reconciliation, preparation, commit creation,
 push attempted/confirmed and deferred reconciliation. `bootstrap_failed` may

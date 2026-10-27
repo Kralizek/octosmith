@@ -981,6 +981,57 @@ Deno.test("post-push classification is re-verified before any deferred mutations
   assertEquals(github.bootstraps.length, 1);
 });
 
+for (
+  const names of [["main", "unrelated"], ["main", "release/initial"], [], [
+    "unexpected",
+  ]]
+) {
+  Deno.test(
+    "post-push branch verification rejects unexpected branch set: " +
+      JSON.stringify(names),
+    async () => {
+      const github = new GitHub();
+      github.override = ({ method, path }) =>
+        github.initialized && method === "GET" && path.endsWith("/branches")
+          ? Response.json(
+            names.map((name) => ({ name, commit: { sha: github.sha } })),
+          )
+          : undefined;
+      const result = await run(
+        github,
+        configuration({
+          settings: { defaultBranch: "release/initial", archived: true },
+          rulesets: [{
+            name: "protect",
+            target: "push",
+            enforcement: "active",
+            rules: [],
+          }],
+        }),
+      );
+      assertEquals(result.status, "bootstrapped_not_reconciled");
+      assertEquals(result.failedStage, "deferred_reconciliation");
+      assertEquals(result.bootstrap?.pushConfirmed, true);
+      assertEquals(result.deferredReport, undefined);
+      assertEquals(github.bootstraps.length, 1);
+      assertEquals(result.deferred.map(({ resource }) => resource), [
+        "default_branch",
+        "rulesets",
+        "archival",
+      ]);
+      assertStringIncludes(result.error!.message, "Unexpected remote branches");
+      assertStringIncludes(result.recovery!, "Do not rerun resource create");
+      assertEquals(
+        github.calls.slice(github.pushedAt).filter(({ method }) =>
+          method !== "GET"
+        ),
+        [],
+      );
+      assertEquals(github.exists, true);
+    },
+  );
+}
+
 Deno.test("confirmed push with cleanup failure does not report files as remaining or retry", async () => {
   const github = new GitHub();
   const result = await createRepository({

@@ -151,6 +151,10 @@ and discarded; configuration, prompts, inherited credential helpers, hooks and
 global/system Git settings are isolated. Git Contents: write and workflow
 authorization are required independently of API creation permissions. Hosts can
 inject authentication, Git execution and temporary-directory/cleanup services.
+Pass the API `baseUrl` to `LocalGitBootstrap` when using GitHub Enterprise; the
+Git remote uses that server's HTTPS origin rather than its `/api/v3` path.
+`createGitHubRuntime` passes the same base URL to both API and Git transports.
+Credential-bearing or non-HTTPS base URLs are rejected before Git execution.
 Tests use fake execution or local bare repositories, never real GitHub creation.
 
 Lifecycle statuses distinguish `preflight_rejected`, `name_collision`,

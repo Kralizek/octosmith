@@ -27,8 +27,46 @@ function fakeGit(command: GitCommand) {
   });
 }
 
-for (const empty of [false, true]) {
-  Deno.test(`local Git bootstrap creates one exact commit and one push (empty=${empty})`, async () => {
+for (
+  const baseUrl of [
+    "http://github.example.com/api/v3",
+    "https://user:PRIVATE-TOKEN@github.example.com/api/v3",
+    "invalid",
+  ]
+) {
+  Deno.test(
+    "bootstrap rejects invalid transport URL without credentials or Git: " +
+      baseUrl.split("@").at(-1),
+    async () => {
+      let calls = 0;
+      const forbidden = (): never => {
+        calls++;
+        throw new Error("Must not execute");
+      };
+      const result = await new LocalGitBootstrap({
+        baseUrl,
+        token: forbidden,
+        run: forbidden,
+        makeTempDirectory: forbidden,
+      }).bootstrap(request);
+      assertEquals(result.failure, "preparation");
+      assertEquals(result.pushAttempted, false);
+      assertEquals(calls, 0);
+      assert(!JSON.stringify(result).includes("PRIVATE-TOKEN"));
+    },
+  );
+}
+
+for (
+  const { baseUrl, gitOrigin, empty } of [
+    { baseUrl: undefined, gitOrigin: "https://github.com" },
+    {
+      baseUrl: "https://github.example.com/api/v3",
+      gitOrigin: "https://github.example.com",
+    },
+  ].flatMap((host) => [false, true].map((empty) => ({ ...host, empty })))
+) {
+  Deno.test(`local Git bootstrap creates one exact commit and one push (empty=${empty}, host=${gitOrigin})`, async () => {
     const root = await Deno.makeTempDir();
     const remote = join(root, "remote.git");
     const workspace = join(root, "workspace");
@@ -64,6 +102,16 @@ for (const empty of [false, true]) {
           content: "hello\r\nworld\r\n",
         },
         {
+          path: "-README.md",
+          ensure: "exact" as const,
+          content: "leading dash\n",
+        },
+        {
+          path: "-comma,name.txt",
+          ensure: "exact" as const,
+          content: "leading dash and comma\n",
+        },
+        {
           path: "nested/utf8.txt",
           ensure: "exact" as const,
           content: "caf\u00e9\nno-final-newline",
@@ -78,6 +126,7 @@ for (const empty of [false, true]) {
       ];
       const bootstrap = new LocalGitBootstrap({
         token: () => token,
+        baseUrl,
         makeTempDirectory: async () => {
           await Deno.mkdir(workspace);
           return workspace;
@@ -91,7 +140,7 @@ for (const empty of [false, true]) {
           if (command.args[0] === "remote") {
             assertEquals(
               command.args.at(-1),
-              "https://github.com/acme/api-orders.git",
+              gitOrigin + "/acme/api-orders.git",
             );
             return await runGitCommand({
               ...command,
@@ -105,13 +154,16 @@ for (const empty of [false, true]) {
             const askpass = await Deno.readTextFile(command.env.GIT_ASKPASS);
             assert(!config.includes(token));
             assert(!askpass.includes(token));
-            const credential = await new Deno.Command(command.env.GIT_ASKPASS, {
-              args: ["Password for test host"],
-              clearEnv: true,
-              env: { OCTOSMITH_GIT_TOKEN: token },
-              stdout: "piped",
-              stderr: "piped",
-            }).output();
+            const credential = await new Deno.Command(
+              command.env.GIT_ASKPASS,
+              {
+                args: ["Password for test host"],
+                clearEnv: true,
+                env: { OCTOSMITH_GIT_TOKEN: token },
+                stdout: "piped",
+                stderr: "piped",
+              },
+            ).output();
             assertEquals(credential.code, 0);
             assertEquals(
               new TextDecoder().decode(credential.stdout).trim(),
@@ -147,9 +199,9 @@ for (const empty of [false, true]) {
         1,
       );
       assert(
-        commands.filter(({ args }) => args[0] === "config").every(({ args }) =>
-          args[1] === "--local"
-        ),
+        commands.filter(({ args }) => args[0] === "config").every((
+          { args },
+        ) => args[1] === "--local"),
       );
       assertEquals(
         await inspect(
@@ -200,7 +252,11 @@ for (const empty of [false, true]) {
         });
         assertEquals(output.code, 0);
         assertEquals(output.stdout, file.content);
-        current.push({ path: file.path, content: output.stdout, sha: "blob" });
+        current.push({
+          path: file.path,
+          content: output.stdout,
+          sha: "blob",
+        });
       }
       assertEquals(buildFileOperations(current, files), []);
       await assertRejects(() => Deno.stat(workspace), Deno.errors.NotFound);
@@ -231,6 +287,12 @@ for (
     "git~1/config",
     ".gi\u200ct/config",
     "file\0name",
+    'foo"bar',
+    "foo*bar",
+    "foo?bar",
+    "foo<bar",
+    "foo>bar",
+    "foo|bar",
   ]
 ) {
   Deno.test(
