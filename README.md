@@ -33,7 +33,8 @@ For setup, permissions, credentials, and workflows, follow the
 
 ## Documentation
 
-- [Documentation index](docs/README.md) — guides, CLI reference, and library API.
+- [Documentation index](docs/README.md) — guides, CLI reference, and library
+  API.
 - [Configuration](docs/configuration.md) — templates, scope, secrets, and files.
 - [CLI reference](docs/cli/README.md) — all commands and their options.
 - [Automation](docs/automation.md) — GitHub Action and workflow integration.
@@ -44,9 +45,9 @@ settings, rulesets, environments, teams, and managed files.
 
 ## Packages
 
-| Package | Use for |
-| --- | --- |
-| [`@octosmith/cli`](packages/cli/README.md) | Interactive and automated CLI commands |
+| Package                                                | Use for                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------- |
+| [`@octosmith/cli`](packages/cli/README.md)             | Interactive and automated CLI commands                        |
 | [`@octosmith/octosmith`](packages/octosmith/README.md) | TypeScript models, planning, GitHub adapters, and scaffolding |
 
 The repository also ships a [GitHub Action](docs/automation.md#github-action)
