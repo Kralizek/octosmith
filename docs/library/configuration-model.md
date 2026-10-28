@@ -1,8 +1,9 @@
 # Library configuration examples
 
-These examples show the library's configuration model. The
-[configuration reference](../configuration.md) is authoritative for supported
-settings and reconciliation semantics.
+These examples show the library's configuration model. See the
+[root configuration reference](../root-configuration.md) and
+[template reference](../repository-template.md) for schema-backed fields;
+[configuration behavior](../configuration.md) describes reconciliation.
 
 ## Configuration model
 
