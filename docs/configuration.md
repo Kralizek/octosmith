@@ -102,7 +102,7 @@ must be explicitly matched to an appropriate template or excluded from scope.
 Use `octosmith resource list` to inspect the remaining in-scope resources and
 their template matches. Ignored unmatched resources remain visible in inspection
 and plan summaries. See the
-[CLI reference](../packages/cli/README.md#resource-list) for text/JSON output
+[CLI reference](cli/resource-commands.md#resource-list) for text/JSON output
 and exit behavior.
 
 ## Templates
@@ -302,7 +302,7 @@ either delivery mode. Default-branch changes, rulesets and archival
 archival runs last. Branch precedence is composed template, GitHub-resolved
 organization default on the new repository, then documented `main`. Empty file
 sets produce an empty commit without a placeholder. See
-[creation and recovery](../packages/cli/README.md#resource-create). Ordinary
+[creation and recovery](cli/resource-commands.md#resource-create). Ordinary
 plan/apply still uses the existing initialization behavior above. An
 already-satisfied `archived: false` is not pending work, and unarchiving is
 allowed before bootstrap. Configured deferred work is retained on post-creation
