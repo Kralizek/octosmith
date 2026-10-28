@@ -17,7 +17,8 @@ const loaded = await loadConfigurationDirectory("./configuration");
 ```
 
 Validation does not require GitHub access. Planning and execution APIs are
-available through the package's [JSR API reference](https://jsr.io/@octosmith/octosmith/doc).
+available through the package's
+[JSR API reference](https://jsr.io/@octosmith/octosmith/doc).
 
 ## Scaffold a control repository
 
@@ -25,7 +26,8 @@ available through the package's [JSR API reference](https://jsr.io/@octosmith/oc
 deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme
 ```
 
-For routine command-line usage, use [`@octosmith/cli`](https://jsr.io/@octosmith/cli).
+For routine command-line usage, use
+[`@octosmith/cli`](https://jsr.io/@octosmith/cli).
 
 ## Documentation
 
