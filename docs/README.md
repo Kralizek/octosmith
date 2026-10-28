@@ -10,8 +10,10 @@ validate its configuration, and run plan/apply.
 - [CLI command reference](cli/README.md) — navigate commands by workflow.
 - [Automation](automation.md) — GitHub Action, credentials, generated workflows,
   and event streaming.
-- [Library API](library/programmatic-api.md) — TypeScript usage and exposed APIs.
-- [Library configuration examples](library/configuration-model.md) — model examples.
+- [Library API](library/programmatic-api.md) — TypeScript usage and exposed
+  APIs.
+- [Library configuration examples](library/configuration-model.md) — model
+  examples.
 - [Repository creation lifecycle](library/repository-creation.md) — reusable
   library API for creating repositories.
 
