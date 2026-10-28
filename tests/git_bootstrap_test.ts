@@ -31,6 +31,10 @@ for (
   const baseUrl of [
     "http://github.example.com/api/v3",
     "https://user:PRIVATE-TOKEN@github.example.com/api/v3",
+    "https://api.github.com?access_token=PRIVATE-TOKEN",
+    "https://github.example.com/api/v3?credential=PRIVATE-TOKEN",
+    "https://api.github.com#PRIVATE-TOKEN",
+    "https://github.example.com/api/v3#PRIVATE-TOKEN",
     "invalid",
   ]
 ) {
