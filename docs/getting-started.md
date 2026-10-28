@@ -148,7 +148,9 @@ applied when a later operation fails.
 
 ## Next steps
 
-- Read [configuration](configuration.md) before widening repository scope.
+- Read [root configuration](root-configuration.md) before widening repository
+  scope, then [repository templates](repository-template.md) for desired state.
+- See [configuration behavior](configuration.md) for runtime and delivery rules.
 - Read [automation](automation.md) before adding organization credentials to CI.
 - See [architecture](architecture.md) when embedding Octosmith or extending the
   engine.
