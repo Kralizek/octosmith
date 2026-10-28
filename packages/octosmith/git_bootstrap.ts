@@ -111,7 +111,10 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
     };
     try {
       const api = new URL(this.options.baseUrl ?? "https://api.github.com");
-      if (api.protocol !== "https:" || api.username || api.password || api.search || api.hash) {
+      if (
+        api.protocol !== "https:" || api.username || api.password ||
+        api.search || api.hash
+      ) {
         throw new Error(
           "Git bootstrap requires a credential-free HTTPS API URL",
         );
