@@ -34,5 +34,7 @@ For routine command-line usage, use
 - [Programmatic API and examples](https://github.com/Kralizek/octosmith/blob/master/docs/library/programmatic-api.md)
 - [Repository creation lifecycle](https://github.com/Kralizek/octosmith/blob/master/docs/library/repository-creation.md)
 - [Library configuration examples](https://github.com/Kralizek/octosmith/blob/master/docs/library/configuration-model.md)
-- [Configuration reference](https://github.com/Kralizek/octosmith/blob/master/docs/configuration.md)
+- [Root configuration file](https://github.com/Kralizek/octosmith/blob/master/docs/root-configuration.md)
+- [Repository template file](https://github.com/Kralizek/octosmith/blob/master/docs/repository-template.md)
+- [Configuration behavior](https://github.com/Kralizek/octosmith/blob/master/docs/configuration.md)
 - [Architecture and execution model](https://github.com/Kralizek/octosmith/blob/master/docs/architecture.md)
