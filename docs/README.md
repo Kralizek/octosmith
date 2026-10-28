@@ -5,8 +5,12 @@ validate its configuration, and run plan/apply.
 
 ## User guides
 
-- [Configuration](configuration.md) — repository scope, selectors, templates,
-  runtime values, secrets, branch settings, and managed files.
+- [Root configuration file](root-configuration.md) — `octosmith.yml`, scope,
+  organization policies, fallback selection, and file-delivery options.
+- [Repository template file](repository-template.md) — schema-driven desired
+  state fields, fragment composition, and fallback template behavior.
+- [Configuration behavior](configuration.md) — runtime values, secrets,
+  bootstrap, branch settings, and managed file reconciliation.
 - [CLI command reference](cli/README.md) — navigate commands by workflow.
 - [Automation](automation.md) — GitHub Action, credentials, generated workflows,
   and event streaming.
