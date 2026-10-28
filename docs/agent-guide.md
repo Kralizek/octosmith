@@ -123,7 +123,8 @@ successfully.
 
 - root README: project landing page and short onboarding
 - package READMEs: minimal JSR-friendly entry points with stable links
-- `docs/`: canonical command, library, configuration, and architecture references
+- `docs/`: canonical command, library, configuration, and architecture
+  references
 - this file: agent/maintainer repository guidance
 
 Prefer linking to canonical documentation over duplicating paragraphs across
