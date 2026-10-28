@@ -116,8 +116,7 @@ permission analysis. See the
 [permission guide](../automation.md#repository-creation-permissions).
 
 For deeper guidance, see the repository documentation for
-[configuration](../configuration.md) and
-[architecture](../architecture.md).
+[configuration](../configuration.md) and [architecture](../architecture.md).
 
 Canonical JSON Schemas for configuration authors are published from the
 repository [`/schemas`](../../schemas/) directory. See the
