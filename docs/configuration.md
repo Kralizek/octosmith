@@ -61,8 +61,8 @@ including bootstrap, secret reconciliation, and file delivery.
 
 Files under `templates/` select repositories and describe their desired state.
 They may compose reusable fragments; their canonical identity is derived from
-their path. See the [repository template reference](repository-template.md)
-for all supported fields, matching, fallback-only templates, and the complete
+their path. See the [repository template reference](repository-template.md) for
+all supported fields, matching, fallback-only templates, and the complete
 [fragment composition rules](repository-template.md#fragments-and-document-composition).
 
 ### Default branch and automatic initialization
@@ -288,13 +288,13 @@ repository:
 
 ### Fragment composition
 
-Templates support ordered `includes` of reusable, typed fragment documents.
-The [repository template reference](repository-template.md#fragments-and-document-composition)
+Templates support ordered `includes` of reusable, typed fragment documents. The
+[repository template reference](repository-template.md#fragments-and-document-composition)
 is canonical for depth-first resolution, path safety, merge precedence,
 identity-aware arrays, duplicate detection, and repeated fragments. In
 particular, named collections merge by destination identity while other arrays
-replace by default. `source` file paths stay relative to the configuration
-root, not to the fragment.
+replace by default. `source` file paths stay relative to the configuration root,
+not to the fragment.
 
 ## Collection management
 
