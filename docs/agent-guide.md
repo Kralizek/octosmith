@@ -121,10 +121,11 @@ successfully.
 
 ## Documentation ownership
 
-- root README: project landing page and onboarding
-- package READMEs: package-specific entry points
-- `docs/`: detailed cross-surface consumer and architecture documentation
+- root README: project landing page and short onboarding
+- package READMEs: minimal JSR-friendly entry points with stable links
+- `docs/`: canonical command, library, configuration, and architecture references
 - this file: agent/maintainer repository guidance
 
 Prefer linking to canonical documentation over duplicating paragraphs across
-multiple READMEs.
+multiple READMEs. When adding a new CLI behavior, update its focused page under
+`docs/cli/` instead of expanding a package README.
