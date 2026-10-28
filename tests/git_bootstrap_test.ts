@@ -28,7 +28,7 @@ function fakeGit(command: GitCommand) {
 }
 
 for (
-  const baseUrl of [
+  const [caseNumber, baseUrl] of [
     "http://github.example.com/api/v3",
     "https://user:PRIVATE-TOKEN@github.example.com/api/v3",
     "https://api.github.com?access_token=PRIVATE-TOKEN",
@@ -36,11 +36,11 @@ for (
     "https://api.github.com#PRIVATE-TOKEN",
     "https://github.example.com/api/v3#PRIVATE-TOKEN",
     "invalid",
-  ]
+  ].entries()
 ) {
   Deno.test(
-    "bootstrap rejects invalid transport URL without credentials or Git: " +
-      baseUrl.split("@").at(-1),
+    "bootstrap rejects invalid transport URL without credentials or Git #" +
+      caseNumber,
     async () => {
       let calls = 0;
       const forbidden = (): never => {
