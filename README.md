@@ -35,7 +35,10 @@ For setup, permissions, credentials, and workflows, follow the
 
 - [Documentation index](docs/README.md) — guides, CLI reference, and library
   API.
-- [Configuration](docs/configuration.md) — templates, scope, secrets, and files.
+- [Root configuration](docs/root-configuration.md) — scope and policies.
+- [Repository templates](docs/repository-template.md) — desired state and
+  fragment composition.
+- [Configuration behavior](docs/configuration.md) — secrets and file delivery.
 - [CLI reference](docs/cli/README.md) — all commands and their options.
 - [Automation](docs/automation.md) — GitHub Action and workflow integration.
 - [Architecture](docs/architecture.md) — engine design and lifecycle.
