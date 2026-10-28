@@ -102,8 +102,8 @@ must be explicitly matched to an appropriate template or excluded from scope.
 Use `octosmith resource list` to inspect the remaining in-scope resources and
 their template matches. Ignored unmatched resources remain visible in inspection
 and plan summaries. See the
-[CLI reference](cli/resource-commands.md#resource-list) for text/JSON output
-and exit behavior.
+[CLI reference](cli/resource-commands.md#resource-list) for text/JSON output and
+exit behavior.
 
 ## Templates
 
