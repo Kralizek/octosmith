@@ -1,7 +1,10 @@
 # Configuration
 
 An Octosmith configuration directory contains one root configuration and one or
-more repository templates.
+more repository templates. For the schema-driven file formats, start with the
+[`octosmith.yml` reference](root-configuration.md) and
+[repository template reference](repository-template.md). This guide explains
+reconciliation semantics and operational behavior.
 
 ```mermaid
 flowchart TD
