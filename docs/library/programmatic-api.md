@@ -1,0 +1,105 @@
+# Programmatic API
+
+## Import
+
+```ts
+import {
+  buildPlan,
+  buildRepositoryCreationPreview,
+  loadConfigurationDirectory,
+  preflightRepositoryCreation,
+  renderRepositoryCreationPreview,
+  validateConfigurationDirectory,
+} from "jsr:@octosmith/octosmith@0";
+```
+
+For example, validate a configuration directory without accessing GitHub:
+
+```ts
+await validateConfigurationDirectory("./configuration");
+```
+
+Prepare a repository creation without GitHub access or mutations:
+
+```ts
+const loaded = await loadConfigurationDirectory("./configuration");
+const specification = await preflightRepositoryCreation(loaded, {
+  template: "services",
+  name: "api-service",
+});
+const preview = buildRepositoryCreationPreview(loaded, specification);
+console.log(renderRepositoryCreationPreview(preview));
+// Or serialize the same typed projection for automation:
+console.log(JSON.stringify(preview));
+```
+
+`RepositoryCreationSpecification` is the validated input shared by preview and
+execution. `buildRepositoryCreationPreview` takes that specification and the
+**same loaded configuration** and projects the existing composed template
+(fragments included) into a versioned `RepositoryCreationPreview`. It does not
+re-run name generation, selectors, or classification, create another
+desired-state model, or plan against fictitious current state. Keep the
+specification as diagnostic output; the preview is a safe reporting projection,
+not an executable plan. Each separate execution runs preflight once.
+
+The builder and separate text renderer do not access GitHub, credentials,
+runtime value providers, Git, or the filesystem. Preflight still performs normal
+offline validation, including checking local managed-file sources. Preview
+exposes paths and presence/absence, never file contents or variable/secret
+values. Resource summaries describe resolved configured intent, not exact API
+deltas; unconfigured categories are `not_applicable`. Name availability, remote
+classification verification, precise reconciliation, and runtime values are
+deferred. Template-managed default branches resolve offline; otherwise execution
+must consult the organization default and then GitHub's documented fallback.
+Generated preview names are provisional, unreserved, and never persisted;
+callers must explicitly supply a name to preserve it across separate
+invocations.
+
+Failed preflight specifications produce an unresolved preview with the original
+structured choices, diagnostic codes, and validation details, and no bootstrap
+or resource plan. Hosts should return failure when `preview.ready` is false. The
+CLI performs end-to-end creation without `--dry-run`. Post-create commands and
+assisted choices are not implemented.
+
+## Main API areas
+
+The package's default export surface includes:
+
+- configuration loading and offline validation
+- selector matching and desired-state resolution
+- desired/current state models
+- plan construction and operation types
+- structured reports and text rendering
+- GitHub discovery and state readers
+- GitHub mutation sinks and apply helpers
+- resource inspection and template classification
+- worst-case GitHub permission analysis
+- persisted-plan creation, validation, and preflight helpers
+
+The package intentionally contains the reusable engine. CLI argument parsing,
+console output selection, and Hooksmith event serialization live in
+`@octosmith/cli`.
+
+## Scaffold a control repository
+
+The package also exposes `./create` for `deno create`:
+
+```sh
+deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme
+```
+
+Useful options are:
+
+- `--collection-management <explicit|strict>`
+- `--default-branch <name>`
+- `--no-workflows`
+- `--event-streaming`
+
+The generated repository starts scoped to itself so the initial apply cannot
+unexpectedly manage an entire organization. Its README includes the current
+`template validate`, `template permissions`, `resource list`, `plan`, and
+`apply` workflows, including template-scoped plan/apply examples.
+
+`include` is required and may be either a selector or the literal `all`. Use
+`include: all` when the scope starts from every resource and only `exclude`
+narrows it.
