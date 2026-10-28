@@ -23,6 +23,7 @@ export interface RepositoryCreationPermissionAnalysis {
   readonly creation: readonly GitHubPermissionRequirement[];
   readonly selectorMetadata: readonly GitHubPermissionRequirement[];
   readonly reconciliation: readonly GitHubPermissionRequirement[];
+  readonly gitBootstrap: readonly GitHubPermissionRequirement[];
   readonly constraints: readonly string[];
 }
 
@@ -65,6 +66,16 @@ export function requiredPermissionsForRepositoryCreation(
       access: "write",
     }],
     selectorMetadata: aggregateGitHubPermissionRequirements(metadata),
+    gitBootstrap: aggregateGitHubPermissionRequirements([
+      { scope: "repository", permission: "contents", access: "write" },
+      ...Object.entries(template.repository.files ?? {}).flatMap((
+        [path, file],
+      ) =>
+        file.ensure === "absent"
+          ? []
+          : requiredPermissionsForManagedFile(path, "direct")
+      ),
+    ]),
     reconciliation: aggregateGitHubPermissionRequirements([
       { scope: "repository", permission: "contents", access: "read" },
       ...potentialOperationTypes(
@@ -79,7 +90,8 @@ export function requiredPermissionsForRepositoryCreation(
       "Organization repository creation requires Administration: write on a supported fine-grained token/GitHub App, or the appropriate classic PAT repo/public_repo scope, and an actor allowed to create the requested visibility in this organization.",
       "Organization/enterprise policy, SSO authorization, internal-visibility availability and GitHub App repository installation access can prevent creation or access to the new repository.",
       "Selector team assignments require repository Administration: write and organization Members: read. Custom property definitions and editing policy must allow repository value assignment.",
-      "Contents: read is used to detect empty history; no Contents: write, commits, branches or file pull requests are used during API-side creation.",
+      "API reconciliation uses Contents: read to inspect history. The separate Git bootstrap requires Git-over-HTTPS Contents: write (and Workflows: write for workflow files); no file pull requests or Contents API writes are used.",
+      "Git authentication reuses the configured token, but GitHub App, fine-grained PAT, classic PAT and Actions token Git-push authorization differ. Repository installation access, SSO and organization rules can still reject the initial push.",
     ],
   };
 }

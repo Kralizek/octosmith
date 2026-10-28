@@ -8,6 +8,7 @@ import {
   hashCanonical,
   inspectResource,
   type LoadedConfiguration,
+  LocalGitBootstrap,
   MissingRuntimeValueError,
   type Operation,
   preflightRuntimeReferences,
@@ -15,6 +16,7 @@ import {
   type PullRequestResult,
   reportFailedRepository,
   reportPlannedRepository,
+  type RepositoryGitBootstrap,
   resolveDesiredState,
   type ResourceInspection,
   type RuntimeReference,
@@ -47,6 +49,7 @@ export type ApplyMode = "plan" | "apply";
 export interface ApplyRuntime {
   readonly client?: GitHubClient;
   readonly value?: RuntimeValueProvider;
+  readonly bootstrap?: RepositoryGitBootstrap;
 
   discover(
     loaded: LoadedConfiguration,
@@ -102,6 +105,10 @@ export function createGitHubRuntime(
   return {
     client,
     value: secretValue,
+    bootstrap: new LocalGitBootstrap({
+      token: () => options.token,
+      baseUrl: options.baseUrl,
+    }),
 
     async discover(loaded, repository) {
       options.traceGroup?.("organization");

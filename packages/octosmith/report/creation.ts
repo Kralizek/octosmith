@@ -16,6 +16,29 @@ export function renderRepositoryCreationResult(
       ? [`Requested repository: ${result.organization}/${result.requestedName}`]
       : []),
     `Completed stages: ${result.completedStages.join(", ") || "none"}`,
+    ...(result.bootstrap
+      ? [
+        `Git bootstrap: ${result.bootstrap.outcome}`,
+        `Branch: ${result.bootstrap.branch || "unresolved"}`,
+        `Bootstrap file count: ${result.bootstrap.fileCount}`,
+        `Prepared: ${result.bootstrap.prepared}`,
+        `Initial commit created: ${result.bootstrap.commitCreated}`,
+        ...(result.bootstrap.commitSha
+          ? [`Initial commit: ${result.bootstrap.commitSha}`]
+          : []),
+        `Push attempted: ${result.bootstrap.pushAttempted}`,
+        `Push confirmed: ${result.bootstrap.pushConfirmed}`,
+        ...(result.bootstrap.failure
+          ? [`Bootstrap failure: ${result.bootstrap.failure}`]
+          : []),
+        ...(result.bootstrap.cleanupFailed
+          ? [
+            "Temporary workspace cleanup failed; inspect local temporary storage.",
+          ]
+          : []),
+      ]
+      : []),
+    `Deferred reconciliation attempted: ${result.deferredReconciliationAttempted}`,
     ...result.metadataAssignments.map((assignment) =>
       `Metadata ${assignment.kind} ${assignment.target}: ${assignment.status}`
     ),
@@ -30,10 +53,19 @@ export function renderRepositoryCreationResult(
     ),
     ...(result.deferred.length
       ? [
-        "After #111 bootstrap, re-read current state and build a fresh GitHub-only plan; completed operations are not replayed.",
+        "Complete or verify Git bootstrap, then re-read current state and build a fresh GitHub-only plan; completed operations are not replayed.",
       ]
       : []),
-    ...(result.report ? ["", renderReport(result.report)] : []),
+    ...(result.report
+      ? ["", "Pre-bootstrap reconciliation:", renderReport(result.report)]
+      : []),
+    ...(result.deferredReport
+      ? [
+        "",
+        "Post-bootstrap reconciliation:",
+        renderReport(result.deferredReport),
+      ]
+      : []),
   ];
   return lines.join("\n");
 }

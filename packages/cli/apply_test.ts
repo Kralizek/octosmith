@@ -5,11 +5,27 @@ import {
   type CurrentState,
   type DesiredState,
   loadConfigurationDirectory,
+  LocalGitBootstrap,
   renderReport,
   reportPlannedRepository,
   type RepositoryReport,
 } from "@octosmith/octosmith";
-import { apply, type ApplyRuntime } from "./apply.ts";
+import { apply, type ApplyRuntime, createGitHubRuntime } from "./apply.ts";
+
+Deno.test("GitHub runtime passes the enterprise API host to Git bootstrap", () => {
+  const runtime = createGitHubRuntime({
+    token: "test-token",
+    baseUrl: "https://github.example.com/api/v3",
+  });
+  assertEquals(runtime.bootstrap instanceof LocalGitBootstrap, true);
+  if (!(runtime.bootstrap instanceof LocalGitBootstrap)) {
+    throw new Error("Expected local Git bootstrap");
+  }
+  assertEquals(
+    runtime.bootstrap.options.baseUrl,
+    "https://github.example.com/api/v3",
+  );
+});
 
 Deno.test(
   "apply abort reports skipped operations for prepared repositories",

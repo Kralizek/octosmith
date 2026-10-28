@@ -408,6 +408,7 @@ Deno.test({
           ],
           {
             credentials: { getEnv: forbidden, runGhAuthToken: forbidden },
+            bootstrap: { bootstrap: forbidden },
             fetch: forbidden,
             write: (value) => output.push(value),
             writeError: (value) => errors.push(value),

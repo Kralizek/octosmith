@@ -1,4 +1,5 @@
 import { buildFileOperations } from "../plan/build.ts";
+import { assertManagedFilePath } from "../state/file_path.ts";
 import { hashCanonical } from "../plan/canonical.ts";
 import type { ManagedFileSnapshot, Operation } from "../plan/types.ts";
 import type { FileChangesPullRequestConfiguration } from "../configuration/types.ts";
@@ -146,15 +147,7 @@ export async function reconcileFilePullRequest(options: {
   if (!validBranch(branch) || !validBranch(snapshot.branch)) {
     throw new Error("Invalid managed file branch name");
   }
-  for (const file of snapshot.files) {
-    if (
-      !file.path || file.path.split("/").some((part) =>
-        !part || part === "." || part === ".." || part.toLowerCase() === ".git"
-      ) || file.path.includes("\0")
-    ) {
-      throw new Error("Invalid managed file path");
-    }
-  }
+  for (const file of snapshot.files) assertManagedFilePath(file.path);
   const source = new GitHubRepositoryStateSource(client, owner);
   const assertTarget = async () => {
     if (

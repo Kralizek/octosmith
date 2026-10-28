@@ -13,10 +13,13 @@ import {
   discoverRepositories,
   equalCustomPropertyValues,
   FetchGitHubClient,
+  type GitBootstrapRequest,
+  type GitBootstrapResult,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
   loadConfigurationDirectory,
   type LoadedConfiguration,
+  LocalGitBootstrap,
   matchesSelector,
   readCurrentState,
   renderRepositoryCreationResult,
@@ -43,6 +46,34 @@ class GitHub {
   teams: { slug: string; permission: string }[] = [];
   properties: { property_name: string; value: unknown }[] = [];
   settings: Record<string, unknown> = {};
+  initialized = false;
+  branch = "main";
+  readonly sha = "a".repeat(40);
+  readonly bootstraps: GitBootstrapRequest[] = [];
+  pushedAt = -1;
+  readonly secretNames = new Map<string, Set<string>>();
+  readonly environments = new Set<string>();
+  readonly variables = new Map<string, { name: string; value: string }[]>();
+  readonly bootstrap = {
+    bootstrap: async (request: GitBootstrapRequest) => {
+      this.bootstraps.push(request);
+      await request.assertEmpty();
+      this.initialized = true;
+      this.branch = request.branch;
+      this.pushedAt = this.calls.length;
+      return {
+        branch: request.branch,
+        fileCount:
+          request.files.filter((file) => file.ensure !== "absent").length,
+        prepared: true,
+        commitCreated: true,
+        commitSha: this.sha,
+        pushAttempted: true,
+        pushConfirmed: true,
+        outcome: "completed" as const,
+      };
+    },
+  };
   override?: (call: Call) => Response | undefined;
   readonly fetch: typeof globalThis.fetch = (input, init) => {
     const path = new URL(String(input)).pathname;
@@ -98,28 +129,68 @@ class GitHub {
     if (call.method === "GET") {
       if (path.endsWith("/teams")) return json(this.teams);
       if (path.includes("/git/ref/")) {
+        if (this.initialized) {
+          return decodeURIComponent(path).endsWith("/heads/" + this.branch)
+            ? json({ object: { sha: this.sha } })
+            : json({ message: "Not Found" }, 404);
+        }
         return json({ message: "Git Repository is empty." }, 409);
       }
-      if (path.endsWith("/branches")) return json([]);
+      if (path.endsWith("/branches")) {
+        return json(
+          this.initialized
+            ? [{ name: this.branch, commit: { sha: this.sha } }]
+            : [],
+        );
+      }
       if (path.endsWith("/actions/permissions")) {
         return json({ enabled: true, allowed_actions: "all" });
       }
       if (path.endsWith("/rulesets")) return json([]);
-      if (path.endsWith("/environments")) return json({ environments: [] });
-      if (path.endsWith("/variables")) return json({ variables: [] });
+      if (path.endsWith("/environments")) {
+        return json({
+          environments: [...this.environments].map((name) => ({ name })),
+        });
+      }
+      if (path.endsWith("/variables")) {
+        return json({ variables: this.variables.get(path) ?? [] });
+      }
       if (path.includes("/variables/")) {
         return json({ message: "Not Found" }, 404);
       }
-      if (path.endsWith("/secrets")) return json({ secrets: [] });
+      if (path.endsWith("/secrets")) {
+        return json({
+          secrets: [...(this.secretNames.get(path) ?? [])].map((name) => ({
+            name,
+          })),
+        });
+      }
     }
-    if (call.method === "POST" && path.endsWith("/actions/variables")) {
+    if (call.method === "POST" && path.endsWith("/variables")) {
+      const variables = this.variables.get(path) ?? [];
+      variables.push({
+        name: String(call.body?.name),
+        value: String(call.body?.value),
+      });
+      this.variables.set(path, variables);
       return json({}, 201);
     }
     if (call.method === "PUT" && path.endsWith("/actions/permissions")) {
       return Promise.resolve(new Response(null, { status: 204 }));
     }
-    if (call.method === "PUT" && path.includes("/environments/")) {
+    if (call.method === "PUT" && /\/environments\/[^/]+$/.test(path)) {
+      this.environments.add(decodeURIComponent(path.split("/").at(-1)!));
       return json({});
+    }
+    if (call.method === "PUT" && path.includes("/secrets/")) {
+      const base = path.slice(0, path.lastIndexOf("/"));
+      const names = this.secretNames.get(base) ?? new Set<string>();
+      names.add(path.slice(path.lastIndexOf("/") + 1));
+      this.secretNames.set(base, names);
+      return Promise.resolve(new Response(null, { status: 204 }));
+    }
+    if (call.method === "POST" && path.endsWith("/rulesets")) {
+      return json({ id: 1 });
     }
     throw new Error("Unexpected request: " + call.method + " " + path);
   };
@@ -204,6 +275,7 @@ function run(
     ...input,
   }, {
     client: github.client(),
+    bootstrap: github.bootstrap,
     randomBytes: (length) => new Uint8Array(length),
   });
 }
@@ -232,6 +304,9 @@ Deno.test("creation verifies actual selectors then uses normal GitHub reconcilia
     "metadata",
     "classification",
     "reconciliation",
+    "bootstrap_preparation",
+    "git_bootstrap",
+    "deferred_reconciliation",
   ]);
   assertEquals(result.repository, {
     name: "api-orders",
@@ -248,6 +323,13 @@ Deno.test("creation verifies actual selectors then uses normal GitHub reconcilia
     "applied",
   ]);
   assertEquals(github.teams, [{ slug: "platform", permission: "maintain" }]);
+  assertEquals(github.bootstraps.length, 1);
+  assertEquals(github.bootstraps[0].files, []);
+  assertEquals(
+    github.mutations().filter(({ body }) => body?.description === "Orders")
+      .length,
+    1,
+  );
   assertEquals(github.properties, [{
     property_name: "tier",
     value: "backend",
@@ -360,6 +442,7 @@ Deno.test("generated name is resolved exactly once, including collision and remo
       template: "services",
     }, {
       client: github.client(),
+      bootstrap: github.bootstrap,
       randomBytes: (length) => {
         generations++;
         return new Uint8Array(length);
@@ -381,6 +464,14 @@ Deno.test("generated name is resolved exactly once, including collision and remo
       failure === "existing" ? 0 : 1,
     );
     if (failure === "existing") assertEquals(result.repository, undefined);
+    if (failure === "none") {
+      assertEquals(github.bootstraps[0].repository, "api-aaaaaa");
+      assert(
+        github.calls.filter(({ path }) => path.startsWith("/repos/")).every((
+          { path },
+        ) => path.startsWith("/repos/acme/api-aaaaaa")),
+      );
+    }
   }
 });
 
@@ -547,11 +638,36 @@ for (const mode of ["direct", "pull_request"] as const) {
         visibility: "internal",
         skipMissingValues: true,
       });
-      assertEquals(result.status, "awaiting_bootstrap");
+      assertEquals(result.status, "completed");
       assertEquals(result.repository?.name, "team-orders-svcs");
-      assert(result.deferred.some(({ resource }) => resource === "files"));
-      assert(
-        result.deferred.some(({ resource }) => resource === "default_branch"),
+      assertEquals(result.deferred, []);
+      assertEquals(
+        result.deferredReport?.repositories[0].items.some(({ type }) =>
+          type === "file"
+        ),
+        false,
+      );
+      assertEquals(github.bootstraps.length, 1);
+      assertEquals(github.bootstraps[0].repository, "team-orders-svcs");
+      assertEquals(github.bootstraps[0].branch, "trunk");
+      assertEquals(
+        github.bootstraps[0].files.map(({ path, ensure }) => ({
+          path,
+          ensure,
+        })),
+        [
+          { path: "README.md", ensure: "exact" },
+          { path: ".editorconfig", ensure: "exists" },
+          { path: "obsolete.txt", ensure: "absent" },
+        ],
+      );
+      const readme = github.bootstraps[0].files[0];
+      assert(readme.ensure !== "absent");
+      assertEquals(
+        readme.content,
+        await Deno.readTextFile(
+          "tests/fixtures/creation-preview/files/README.txt",
+        ),
       );
       assertEquals(
         result.report?.repositories[0].items.filter(({ type }) =>
@@ -630,6 +746,322 @@ Deno.test("GitHub-only planner defers rulesets and archival without mutating des
   );
 });
 
+for (const policy of ["template", "organization", "fallback"] as const) {
+  Deno.test("creation branch precedence: " + policy, async () => {
+    const github = new GitHub();
+    github.settings.default_branch = policy === "fallback"
+      ? "main"
+      : "org/development";
+    const loaded = configuration(
+      policy === "template"
+        ? { settings: { defaultBranch: "release/initial" } }
+        : {},
+    );
+    const result = await run(github, loaded);
+    assertEquals(result.status, "completed", JSON.stringify(result));
+    const expected = policy === "template"
+      ? "release/initial"
+      : policy === "organization"
+      ? "org/development"
+      : "main";
+    assertEquals(result.bootstrap?.branch, expected);
+    assertEquals(github.bootstraps[0].branch, expected);
+    assertEquals(github.repository().default_branch, expected);
+    assertEquals(result.deferredReconciliationAttempted, true);
+  });
+}
+
+for (
+  const failure of [
+    "preparation",
+    "invalid_files",
+    "initialization",
+    "commit",
+    "authentication",
+    "push_rejected",
+    "push_unknown",
+  ] as const
+) {
+  Deno.test(
+    "creation preserves identity and safe bootstrap failure progress: " +
+      failure,
+    async () => {
+      const github = new GitHub();
+      const pushed = failure === "push_rejected" ||
+        failure === "push_unknown";
+      const result = await createRepository({
+        configuration: configuration({
+          files: { "obsolete.txt": { ensure: "absent" } },
+        }),
+        template: "services",
+        name: "api-orders",
+      }, {
+        client: github.client(),
+        bootstrap: {
+          bootstrap: (request) =>
+            Promise.resolve(
+              {
+                branch: request.branch,
+                fileCount: 0,
+                prepared: failure !== "preparation" &&
+                  failure !== "invalid_files",
+                commitCreated: pushed,
+                ...(pushed && { commitSha: github.sha }),
+                pushAttempted: pushed,
+                pushConfirmed: false,
+                outcome: failure === "push_unknown" ? "unknown" : "failed",
+                failure,
+              } satisfies GitBootstrapResult,
+            ),
+        },
+      });
+      assertEquals(result.status, "bootstrap_failed");
+      assertEquals(result.failedStage, "git_bootstrap");
+      assertEquals(result.repository?.name, "api-orders");
+      assertEquals(
+        result.repository?.url,
+        "https://github.com/acme/api-orders",
+      );
+      assertEquals(result.bootstrap?.pushAttempted, pushed);
+      assertEquals(result.deferredReconciliationAttempted, false);
+      assertEquals(github.exists, true);
+      assert(!github.mutations().some(({ method }) => method === "DELETE"));
+      assertStringIncludes(result.recovery!, "Do not rerun resource create");
+      if (failure === "push_unknown") {
+        assertStringIncludes(result.recovery!, "may have changed the remote");
+        assertEquals(result.bootstrap?.outcome, "unknown");
+      }
+      const json = JSON.parse(JSON.stringify(result));
+      assertEquals(json.bootstrap.failure, failure);
+      assertStringIncludes(
+        renderRepositoryCreationResult(result),
+        "Push confirmed: false",
+      );
+    },
+  );
+}
+
+Deno.test("invalid managed source after creation is an invalid-files bootstrap failure", async () => {
+  const root = await Deno.makeTempDir();
+  const source = root + "/contents.txt";
+  await Deno.writeTextFile(source, "PRIVATE-CONTENT");
+  const github = new GitHub();
+  github.override = ({ method, path }) => {
+    if (method === "POST" && path === "/orgs/acme/repos") {
+      Deno.removeSync(source);
+    }
+  };
+  try {
+    const result = await run(github, {
+      ...configuration({
+        files: { "README.md": { ensure: "exact", source: "contents.txt" } },
+      }),
+      root,
+    });
+    assertEquals(result.status, "bootstrap_failed");
+    assertEquals(result.failedStage, "bootstrap_preparation");
+    assertEquals(result.bootstrap?.failure, "invalid_files");
+    assertEquals(result.bootstrap?.pushAttempted, false);
+    assertEquals(github.bootstraps, []);
+    assertEquals(github.exists, true);
+    assert(!JSON.stringify(result).includes("PRIVATE-CONTENT"));
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
+for (const timing of ["initial", "before_push"] as const) {
+  Deno.test("creation stops on unexpected history: " + timing, async () => {
+    const github = new GitHub();
+    let refReads = 0;
+    github.override = ({ path }) => {
+      if (timing === "initial" && path.includes("/git/ref/")) {
+        return Response.json({ object: { sha: github.sha } });
+      }
+      if (timing === "before_push" && path.endsWith("/branches")) {
+        return Response.json([{
+          name: "unexpected",
+          commit: { sha: github.sha },
+        }]);
+      }
+      if (path.includes("/git/ref/")) refReads++;
+    };
+    const result = await createRepository({
+      configuration: configuration(),
+      template: "services",
+      name: "api-orders",
+    }, {
+      client: github.client(),
+      bootstrap: new LocalGitBootstrap({
+        token: () => {
+          throw new Error("must not fetch token");
+        },
+      }),
+    });
+    assertEquals(
+      result.status,
+      timing === "initial" ? "reconciliation_failed" : "bootstrap_failed",
+    );
+    assertEquals(result.bootstrap?.pushAttempted ?? false, false);
+    assertEquals(github.exists, true);
+    assert(!github.mutations().some(({ method }) => method === "DELETE"));
+    if (timing === "before_push") assert(refReads >= 1);
+  });
+}
+
+Deno.test("post-push failure retains content, reports only remaining targets and never archives early", async () => {
+  const github = new GitHub();
+  const ruleset = (name: string) => ({
+    name,
+    target: "push" as const,
+    enforcement: "active" as const,
+    rules: [],
+  });
+  github.override = ({ method, path, body }) =>
+    method === "POST" && path.endsWith("/rulesets") &&
+      body?.name === "blocked"
+      ? Response.json({ message: "PRIVATE-TOKEN-CONTENT" }, { status: 403 })
+      : undefined;
+  const result = await run(
+    github,
+    configuration({
+      settings: {
+        defaultBranch: "release/initial",
+        description: "once",
+        archived: true,
+      },
+      rulesets: [ruleset("first"), ruleset("blocked")],
+    }),
+  );
+  assertEquals(result.status, "bootstrapped_not_reconciled");
+  assertEquals(result.failedStage, "deferred_reconciliation");
+  assertEquals(result.bootstrap?.pushConfirmed, true);
+  assertEquals(result.deferredReconciliationAttempted, true);
+  assertEquals(
+    result.deferred.map(({ resource, targets }) => ({ resource, targets })),
+    [
+      { resource: "rulesets", targets: ["blocked"] },
+      { resource: "archival", targets: ["archived"] },
+    ],
+  );
+  assertEquals(
+    result.deferredReport?.repositories[0].status,
+    "partially-applied",
+  );
+  assertEquals(github.settings.archived, undefined);
+  assertEquals(github.settings.default_branch, "release/initial");
+  assertEquals(
+    github.mutations().filter(({ body }) => body?.description === "once")
+      .length,
+    1,
+  );
+  assert(
+    github.calls.slice(0, github.pushedAt).every(({ path }) =>
+      !path.endsWith("/rulesets")
+    ),
+  );
+  assert(!JSON.stringify(result).includes("PRIVATE-TOKEN-CONTENT"));
+  assertStringIncludes(result.recovery!, "Do not rerun resource create");
+});
+
+Deno.test("post-push classification is re-verified before any deferred mutations", async () => {
+  const github = new GitHub();
+  github.override = ({ method, path }) =>
+    github.initialized && method === "GET" && path.endsWith("/teams")
+      ? Response.json([])
+      : undefined;
+  const result = await run(
+    github,
+    configuration({ settings: { archived: true } }),
+  );
+  assertEquals(result.status, "bootstrapped_not_reconciled");
+  assertEquals(result.bootstrap?.pushConfirmed, true);
+  assertEquals(result.deferredReport, undefined);
+  assertEquals(github.settings.archived, undefined);
+  assertEquals(github.bootstraps.length, 1);
+});
+
+for (
+  const names of [["main", "unrelated"], ["main", "release/initial"], [], [
+    "unexpected",
+  ]]
+) {
+  Deno.test(
+    "post-push branch verification rejects unexpected branch set: " +
+      JSON.stringify(names),
+    async () => {
+      const github = new GitHub();
+      github.override = ({ method, path }) =>
+        github.initialized && method === "GET" && path.endsWith("/branches")
+          ? Response.json(
+            names.map((name) => ({ name, commit: { sha: github.sha } })),
+          )
+          : undefined;
+      const result = await run(
+        github,
+        configuration({
+          settings: { defaultBranch: "release/initial", archived: true },
+          rulesets: [{
+            name: "protect",
+            target: "push",
+            enforcement: "active",
+            rules: [],
+          }],
+        }),
+      );
+      assertEquals(result.status, "bootstrapped_not_reconciled");
+      assertEquals(result.failedStage, "deferred_reconciliation");
+      assertEquals(result.bootstrap?.pushConfirmed, true);
+      assertEquals(result.deferredReport, undefined);
+      assertEquals(github.bootstraps.length, 1);
+      assertEquals(result.deferred.map(({ resource }) => resource), [
+        "default_branch",
+        "rulesets",
+        "archival",
+      ]);
+      assertStringIncludes(result.error!.message, "Unexpected remote branches");
+      assertStringIncludes(result.recovery!, "Do not rerun resource create");
+      assertEquals(
+        github.calls.slice(github.pushedAt).filter(({ method }) =>
+          method !== "GET"
+        ),
+        [],
+      );
+      assertEquals(github.exists, true);
+    },
+  );
+}
+
+Deno.test("confirmed push with cleanup failure does not report files as remaining or retry", async () => {
+  const github = new GitHub();
+  const result = await createRepository({
+    configuration: configuration({
+      files: { "obsolete.txt": { ensure: "absent" } },
+      settings: { archived: true },
+    }),
+    template: "services",
+    name: "api-orders",
+  }, {
+    client: github.client(),
+    bootstrap: {
+      bootstrap: async (request) => ({
+        ...await github.bootstrap.bootstrap(request),
+        outcome: "failed",
+        failure: "cleanup",
+        cleanupFailed: true,
+      }),
+    },
+  });
+  assertEquals(result.status, "bootstrapped_not_reconciled");
+  assertEquals(result.bootstrap?.pushConfirmed, true);
+  assertEquals(result.deferredReconciliationAttempted, false);
+  assertEquals(result.deferred.map(({ resource }) => resource), ["archival"]);
+  assertStringIncludes(result.deferred[0].reason, "Git bootstrap completed");
+  assertEquals(github.bootstraps.length, 1);
+  assertStringIncludes(result.recovery!, "cleanup failure");
+  assertEquals(github.exists, true);
+});
+
 Deno.test("GitHub-only sink refuses accidental content operations and never runs PR finish", async () => {
   const github = new GitHub();
   const sink = new GitHubRepositoryMutationSink({
@@ -664,7 +1096,7 @@ Deno.test("GitHub-only sink refuses accidental content operations and never runs
 Deno.test("creation recognizes empty repositories with 404 ref and empty branch listing", async () => {
   const github = new GitHub();
   github.override = ({ path }) =>
-    path.includes("/git/ref/")
+    !github.initialized && path.includes("/git/ref/")
       ? Response.json({ message: "Not Found" }, { status: 404 })
       : undefined;
   assertEquals((await run(github)).status, "completed");
@@ -684,7 +1116,11 @@ Deno.test("reconciliation partial failure keeps normal report and redacts runtim
     }),
     template: "services",
     name: "api-orders",
-  }, { client: github.client(), values: () => "PRIVATE-RUNTIME-VALUE" });
+  }, {
+    client: github.client(),
+    bootstrap: github.bootstrap,
+    values: () => "PRIVATE-RUNTIME-VALUE",
+  });
   assertEquals(result.status, "reconciliation_failed");
   assertEquals(result.report?.repositories[0].status, "partially-applied");
   assertEquals(
@@ -983,6 +1419,30 @@ Deno.test("creation permissions distinguish creation, selector metadata and reco
     ),
     false,
   );
+  assert(
+    analysis.gitBootstrap.some(({ permission, access }) =>
+      permission === "contents" && access === "write"
+    ),
+  );
+  const workflows = requiredPermissionsForRepositoryCreation(
+    configuration({
+      files: {
+        ".github/workflows/test.yml": {
+          ensure: "exact",
+          source: "workflow.yml",
+        },
+      },
+    }),
+    "services",
+  );
+  assert(
+    workflows.gitBootstrap.some(({ permission }) => permission === "workflows"),
+  );
+  assert(
+    !workflows.gitBootstrap.some(({ permission }) =>
+      permission === "pull_requests"
+    ),
+  );
 });
 
 Deno.test("CLI actual creation and collision JSON remain valid with shared authentication", async () => {
@@ -1004,13 +1464,14 @@ Deno.test("CLI actual creation and collision JSON remain valid with shared authe
     "--skip-missing-values",
   ];
   const options = {
+    bootstrap: github.bootstrap,
     credentials: { getEnv: () => "token" },
     fetch: github.fetch,
     write: (value: string) => output.push(value),
     writeError: (value: string) => errors.push(value),
   };
   assertEquals(await main(args, options), 0);
-  assertEquals(JSON.parse(output.pop()!).status, "awaiting_bootstrap");
+  assertEquals(JSON.parse(output.pop()!).status, "completed");
   assertEquals(errors, []);
   assertEquals(await main(args, options), 1);
   assertEquals(JSON.parse(output.pop()!).status, "name_collision");
@@ -1019,6 +1480,64 @@ Deno.test("CLI actual creation and collision JSON remain valid with shared authe
     1,
   );
 });
+
+for (const format of ["text", "json"]) {
+  Deno.test(
+    "CLI uncertain push is a redacted nonzero partial failure: " + format,
+    async () => {
+      const github = new GitHub();
+      const output: string[] = [];
+      const errors: string[] = [];
+      const token = "PRIVATE-CREDENTIAL-SENTINEL";
+      const status = await main([
+        "resource",
+        "create",
+        "services",
+        "--name",
+        "team-orders-svcs",
+        "--visibility",
+        "internal",
+        "--path",
+        "tests/fixtures/creation-preview",
+        "--skip-missing-values",
+        "--format",
+        format,
+      ], {
+        credentials: { getEnv: () => token },
+        fetch: github.fetch,
+        bootstrap: new LocalGitBootstrap({
+          token: () => token,
+          run: (command) =>
+            Promise.resolve({
+              code: command.args.includes("push") ? 1 : 0,
+              stdout: command.args[0] === "rev-parse" ||
+                  command.args[0] === "hash-object"
+                ? github.sha
+                : "",
+              stderr: "connection lost " + token,
+            }),
+        }),
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      });
+      assertEquals(status, 1);
+      const rendered = (format === "json" ? output : errors).join("\n");
+      assert(!rendered.includes(token));
+      assertStringIncludes(rendered, "push_unknown");
+      assertStringIncludes(rendered, "team-orders-svcs");
+      if (format === "json") {
+        const result = JSON.parse(rendered);
+        assertEquals(result.status, "bootstrap_failed");
+        assertEquals(result.bootstrap.commitCreated, true);
+        assertEquals(result.bootstrap.pushAttempted, true);
+        assertEquals(result.bootstrap.pushConfirmed, false);
+        assertEquals(result.bootstrap.outcome, "unknown");
+        assertEquals(errors, []);
+      } else assertEquals(output, []);
+      assertEquals(github.exists, true);
+    },
+  );
+}
 
 Deno.test("creation uses normal encryption for Actions, Dependabot and environment secrets", async () => {
   await sodium.ready;
@@ -1030,12 +1549,6 @@ Deno.test("creation uses normal encryption for Actions, Dependabot and environme
         key_id: "key",
         key: sodium.to_base64(keys.publicKey, sodium.base64_variants.ORIGINAL),
       });
-    }
-    if (method === "PUT" && path.includes("/secrets/")) {
-      return new Response(null, { status: 204 });
-    }
-    if (method === "POST" && path.endsWith("/variables")) {
-      return Response.json({}, { status: 201 });
     }
   };
   const value = "SECRET-RUNTIME-SENTINEL";
@@ -1053,7 +1566,11 @@ Deno.test("creation uses normal encryption for Actions, Dependabot and environme
     }),
     template: "services",
     name: "api-orders",
-  }, { client: github.client(), values: () => value });
+  }, {
+    client: github.client(),
+    values: () => value,
+    bootstrap: github.bootstrap,
+  });
   assertEquals(result.status, "completed");
   const writes = github.mutations().filter(({ body }) =>
     typeof body?.encrypted_value === "string"
@@ -1093,7 +1610,7 @@ Deno.test("creation uses normal encryption for Actions, Dependabot and environme
 Deno.test("creation deferral result is explicit and fresh plans resume only remaining deltas", async () => {
   const github = new GitHub();
   github.override = ({ path }) => {
-    if (path.endsWith("/rulesets")) {
+    if (!github.initialized && path.endsWith("/rulesets")) {
       throw new Error("Rulesets must not be read before bootstrap");
     }
   };
@@ -1114,12 +1631,22 @@ Deno.test("creation deferral result is explicit and fresh plans resume only rema
       }],
     }),
   );
-  assertEquals(result.status, "awaiting_bootstrap");
-  assertEquals(result.deferred.map(({ resource }) => resource), [
-    "default_branch",
-    "rulesets",
-    "archival",
-  ]);
+  assertEquals(result.status, "completed");
+  assertEquals(result.deferred, []);
+  assertEquals(result.bootstrap?.pushConfirmed, true);
+  const mutationsAfterPush = github.calls.slice(github.pushedAt).filter((
+    { method },
+  ) => method !== "GET");
+  assertEquals(
+    mutationsAfterPush.map(({ path, body }) =>
+      body?.archived
+        ? "archive"
+        : path.endsWith("/rulesets")
+        ? "ruleset"
+        : "branch"
+    ),
+    ["branch", "ruleset", "archive"],
+  );
   const items = result.report!.repositories[0].items;
   assertEquals(
     items.filter(({ status }) => status === "applied").map(({ type }) => type),
@@ -1398,6 +1925,40 @@ Deno.test("metadata verification permission errors retain identity and failed st
   assertEquals(JSON.stringify(result).includes("private-body"), false);
 });
 
+Deno.test("missing bootstrap transport is rejected before credentials, API access or remote creation", async () => {
+  const github = new GitHub();
+  let credentialCalls = 0;
+  for (
+    const client of [
+      github.client(),
+      () => {
+        credentialCalls++;
+        return Promise.resolve(github.client());
+      },
+    ]
+  ) {
+    const result = await createRepository({
+      configuration: configuration({
+        settings: { description: "must-not-apply" },
+      }),
+      template: "services",
+      name: "api-orders",
+    }, { client });
+    assertEquals(result.status, "preflight_rejected");
+    assertEquals(result.failedStage, "preflight");
+    assertEquals(result.repository, undefined);
+    assertEquals(result.report, undefined);
+    assertEquals(result.bootstrap, undefined);
+    assertStringIncludes(
+      result.error!.message,
+      "Git bootstrap transport is required",
+    );
+    assertEquals(github.calls, []);
+    assertEquals(github.exists, false);
+  }
+  assertEquals(credentialCalls, 0);
+});
+
 Deno.test("creation library configuration and authentication failures have structured results", async () => {
   const github = new GitHub();
   const missing = await createRepository({
@@ -1412,6 +1973,7 @@ Deno.test("creation library configuration and authentication failures have struc
     template: "services",
     name: "api-orders",
   }, {
+    bootstrap: github.bootstrap,
     client: () => {
       throw new Error("PRIVATE-AUTH-DETAIL");
     },

@@ -12,6 +12,7 @@ export * from "./types.ts";
 export * from "./github/mod.ts";
 export * from "./inspection.ts";
 export * from "./creation.ts";
+export * from "./git_bootstrap.ts";
 
 /** The apply modes supported by Octosmith. */
 export type ApplyMode = "plan" | "apply";

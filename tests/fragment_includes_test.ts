@@ -869,7 +869,7 @@ Deno.test("rejects duplicate rule types in standalone templates without includes
       'Duplicate identity "pull_request" in repository.rulesets.*.rules',
     );
     assertEquals(error.message.includes("at indexes 0 and 1"), true);
-    assertEquals(error.message.includes("templates/sample.yml"), true);
+    assertEquals(error.message.includes(join("templates", "sample.yml")), true);
   } finally {
     await Deno.remove(root, { recursive: true });
   }
