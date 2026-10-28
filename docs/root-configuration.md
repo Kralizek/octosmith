@@ -6,12 +6,12 @@ apply to **all** managed repositories. Repository-specific desired state lives
 in [repository templates](repository-template.md).
 
 The authoritative source is
-[`schemas/octosmith.schema.json`](../schemas/octosmith.schema.json),
-which references the
+[`schemas/octosmith.schema.json`](../schemas/octosmith.schema.json), which
+references the
 [repository scope schema](../schemas/scopes/repository.schema.json) and
-[selector schema](../schemas/selectors/repository.schema.json).
-This page explains the YAML-facing fields and runtime semantics. Validation
-also enforces constraints beyond JSON Schema.
+[selector schema](../schemas/selectors/repository.schema.json). This page
+explains the YAML-facing fields and runtime semantics. Validation also enforces
+constraints beyond JSON Schema.
 
 ## Minimal configuration
 
@@ -45,18 +45,18 @@ considered for template selection.
 
 A selector must contain at least one of:
 
-- `names`: non-empty, unique list of repository name patterns. `*` matches
-  any sequence and `?` matches one character. Any pattern can match.
-- `teams`: non-empty, unique list of team names. A repository must have
-  **all** listed teams.
-- `properties`: non-empty mapping from custom-property names to expected
-  values. Each value can be a string, boolean, or list of strings. All
-  declared properties must match.
-- `visibility`: `public`, `private`, `internal`, or a non-empty unique
-  list of those values. Any listed visibility can match.
+- `names`: non-empty, unique list of repository name patterns. `*` matches any
+  sequence and `?` matches one character. Any pattern can match.
+- `teams`: non-empty, unique list of team names. A repository must have **all**
+  listed teams.
+- `properties`: non-empty mapping from custom-property names to expected values.
+  Each value can be a string, boolean, or list of strings. All declared
+  properties must match.
+- `visibility`: `public`, `private`, `internal`, or a non-empty unique list of
+  those values. Any listed visibility can match.
 
-When a selector contains multiple fields, **all specified fields must
-match**. `exclude` uses the same predicate as `include`.
+When a selector contains multiple fields, **all specified fields must match**.
+`exclude` uses the same predicate as `include`.
 
 ```yaml
 repositories:
@@ -92,8 +92,8 @@ policies. All listed keys are optional.
   - `fallback`: use the specified template when **zero** regular templates
     match.
 - `fallback_template`: required **only** when
-  `unmatched_repositories: fallback`; forbidden for other modes. Its value
-  must be a canonical identity beginning with `repository:`, for example
+  `unmatched_repositories: fallback`; forbidden for other modes. Its value must
+  be a canonical identity beginning with `repository:`, for example
   `repository:baseline`. The referenced template must exist.
 
 ```yaml
@@ -105,9 +105,9 @@ repositories:
     fallback_template: repository:baseline
 ```
 
-A file at `templates/baseline.yml` has identity `repository:baseline`.
-The fallback template can omit `match`; ordinary templates cannot. If the
-fallback also declares `match`, it participates in regular matching too.
+A file at `templates/baseline.yml` has identity `repository:baseline`. The
+fallback template can omit `match`; ordinary templates cannot. If the fallback
+also declares `match`, it participates in regular matching too.
 
 Selection follows this order:
 
@@ -126,20 +126,19 @@ before using a powerful fallback baseline.
 
 ### Reconciliation policies
 
-- `collection_management`: `explicit` (default) or `strict`.
-  `explicit` preserves undeclared members of supported collections;
-  `strict` makes supported collections authoritative and may remove
-  undeclared members. Neither mode implicitly deletes managed files:
-  `ensure: absent` must be declared explicitly.
-- `secrets`: `automatic` (default) or `manual`. With `manual`, fresh
-  plan/apply excludes repository Actions, Dependabot, and environment secret
+- `collection_management`: `explicit` (default) or `strict`. `explicit`
+  preserves undeclared members of supported collections; `strict` makes
+  supported collections authoritative and may remove undeclared members. Neither
+  mode implicitly deletes managed files: `ensure: absent` must be declared
+  explicitly.
+- `secrets`: `automatic` (default) or `manual`. With `manual`, fresh plan/apply
+  excludes repository Actions, Dependabot, and environment secret
   reconciliation. `--include-secrets` opts back in. Saved plans replay their
   stored operations rather than reinterpreting this setting.
 - `default_branch_drift`: `ignore` (default) or `enforce`. On existing
-  initialized repositories, `ignore` leaves the default branch alone.
-  `enforce` reconciles an explicitly declared
-  `repository.settings.default_branch` only when that branch already exists;
-  it does not create or rename branches.
+  initialized repositories, `ignore` leaves the default branch alone. `enforce`
+  reconciles an explicitly declared `repository.settings.default_branch` only
+  when that branch already exists; it does not create or rename branches.
 
 ```yaml
 repositories:
@@ -158,9 +157,9 @@ see [configuration behavior](configuration.md).
 
 ## `repositories.file_changes`
 
-Configures how managed-file deltas are delivered. This object is optional.
-If absent, the effective default is `mode: pull_request`. If present, it
-**must** contain `mode`:
+Configures how managed-file deltas are delivered. This object is optional. If
+absent, the effective default is `mode: pull_request`. If present, it **must**
+contain `mode`:
 
 - `mode: pull_request` supports optional `commit` and `pull_request`.
 - `mode: direct` supports optional `commit` but **not** `pull_request`.
@@ -190,15 +189,15 @@ repositories:
 ```
 
 Commit messages and PR titles support `{organization}` and `{repository}`
-placeholders. PR `introduction` is literal Markdown, not a placeholder
-template. Use `mode: direct` only when direct writes to the target branch are
-intended; normal GitHub protections remain in effect.
+placeholders. PR `introduction` is literal Markdown, not a placeholder template.
+Use `mode: direct` only when direct writes to the target branch are intended;
+normal GitHub protections remain in effect.
 
 ## Validation and related references
 
 Run `octosmith template validate --path .` before planning. Static validation
-does not need GitHub credentials. To see effective template names and paths,
-run `octosmith template list --path .`; to check selection against actual
+does not need GitHub credentials. To see effective template names and paths, run
+`octosmith template list --path .`; to check selection against actual
 repositories, run `octosmith resource list --path .`.
 
 - [Repository template reference](repository-template.md): file structure,
