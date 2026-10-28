@@ -1,24 +1,28 @@
 # Octosmith documentation
 
-This directory contains the in-repository documentation for people and agents
-working with Octosmith.
+Start with [getting started](getting-started.md) to create a control repository,
+validate its configuration, and run plan/apply.
 
-## Consumer documentation
+## User guides
 
-- [Getting started](getting-started.md) — create a control repository, validate,
-  inspect resources and permissions, plan, and apply.
-- [Configuration](configuration.md) — repository scope, templates, collection
-  management, runtime values, secrets, and managed files.
-- [Automation](automation.md) — GitHub Action usage, generated workflows,
-  credentials, and event streaming.
-- [Architecture](architecture.md) — package boundaries, data flow, planning, and
-  GitHub integration.
+- [Configuration](configuration.md) — repository scope, selectors, templates,
+  runtime values, secrets, branch settings, and managed files.
+- [CLI command reference](cli/README.md) — navigate commands by workflow.
+- [Automation](automation.md) — GitHub Action, credentials, generated workflows,
+  and event streaming.
+- [Library API](library/programmatic-api.md) — TypeScript usage and exposed APIs.
+- [Library configuration examples](library/configuration-model.md) — model examples.
+- [Repository creation lifecycle](library/repository-creation.md) — reusable
+  library API for creating repositories.
 
-## Repository and agent guidance
+## Maintainer reference
 
-- [Agent guide](agent-guide.md) — repository layout, invariants, common change
-  paths, CI expectations, and boundaries that should not be crossed casually.
+- [Architecture](architecture.md) — system boundaries, planning, GitHub
+  integration, state ownership, and persisted plans.
+- [Agent guide](agent-guide.md) — repository conventions and CI expectations.
+- [Managed-file reconciliation investigation](managed-file-reconciliation.md) —
+  historical diagnosis and recovery findings, not a configuration reference.
 
-Package READMEs remain the entry points published with JSR packages. Detailed
-conceptual documentation should live here when it applies across more than one
-surface.
+The root and package READMEs are entry points, not exhaustive references.
+Module-level JSDoc documents the public JSR entry points; declaration JSDoc
+provides API reference content.
