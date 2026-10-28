@@ -57,6 +57,7 @@ Usually touches:
 - canonical JSON schemas under `schemas/`
 - normalization / desired-state resolution
 - validation tests
+- docs/root-configuration.md and docs/repository-template.md
 - docs/configuration.md
 
 ### New managed GitHub resource
@@ -123,8 +124,8 @@ successfully.
 
 - root README: project landing page and short onboarding
 - package READMEs: minimal JSR-friendly entry points with stable links
-- `docs/`: canonical command, library, configuration, and architecture
-  references
+- `docs/`: canonical command, library, schema-based configuration references,
+  and architecture documentation
 - this file: agent/maintainer repository guidance
 
 Prefer linking to canonical documentation over duplicating paragraphs across
