@@ -257,7 +257,7 @@ Deno.test("native command runner passes literal arguments, null stdin and captur
       cwd: root,
       args: [
         "eval",
-        'console.log(JSON.stringify({args:Deno.args,cwd:Deno.cwd(),stdin:await Deno.stdin.read(new Uint8Array(1))})); console.error("PRIVATE-STDERR");',
+        'console.log(JSON.stringify({args:Deno.args,cwd:await Deno.realPath(Deno.cwd()),stdin:await Deno.stdin.read(new Uint8Array(1))})); console.error("PRIVATE-STDERR");',
         ...args,
       ],
       env: {
