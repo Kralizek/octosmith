@@ -313,7 +313,10 @@ function normalizeYaml(
       ];
     }),
   );
-  if (path.at(-1) === "postCreateCommands" && normalized.args === undefined) {
+  if (
+    path.length === 2 && path[0] === "repository" &&
+    path[1] === "postCreateCommands" && normalized.args === undefined
+  ) {
     normalized.args = [];
   }
   return normalized;

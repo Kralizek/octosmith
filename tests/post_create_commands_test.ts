@@ -96,6 +96,54 @@ Deno.test("structured commands preserve order, default args and schema round-tri
   }
 });
 
+for (const source of ["template", "included-template", "fragment"]) {
+  Deno.test(`command argument defaults leave managed-file names unchanged in ${source}`, async () => {
+    const root = await configuration(undefined);
+    const repository = {
+      post_create_commands: [{ command: "generator" }],
+      files: { postCreateCommands: { ensure: "absent" } },
+    };
+    try {
+      if (source !== "template") {
+        await Deno.writeTextFile(
+          join(root, "base.yml"),
+          JSON.stringify({
+            version: 1,
+            kind: "fragment",
+            resource: "repository",
+            repository: source === "fragment" ? repository : {},
+          }),
+        );
+      }
+      await Deno.writeTextFile(
+        join(root, "templates", "service.yml"),
+        JSON.stringify({
+          version: 1,
+          kind: "repository",
+          match: { include: "all" },
+          ...(source !== "template" && { includes: ["../base.yml"] }),
+          repository: source === "fragment" ? {} : repository,
+        }),
+      );
+      const loaded = await loadConfigurationDirectory(root);
+      const template = loaded.templates["repository:service"];
+      assertEquals(template.repository.files, {
+        postCreateCommands: { ensure: "absent" },
+      });
+      assertEquals(template.repository.postCreateCommands, [
+        { command: "generator", args: [] },
+      ]);
+      assertEquals(toSchemaCompatibleRepositoryTemplate(template).repository, {
+        ...repository,
+        post_create_commands: [{ command: "generator", args: [] }],
+      });
+      assertEquals(await validateConfigurationDirectory(root), []);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}
+
 for (
   const [name, commands] of Object.entries({
     scalar: "dotnet new editorconfig",
