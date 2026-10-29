@@ -5,6 +5,28 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
+    "post_create_commands": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "args": {
+            "type": "array",
+            "default": [],
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "settings": {
       "$ref": "#/$defs/repositorySettings"
     },

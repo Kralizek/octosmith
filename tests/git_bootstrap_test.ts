@@ -6,6 +6,7 @@ import {
   type GitCommand,
   INITIAL_COMMIT_IDENTITY,
   LocalGitBootstrap,
+  type PostCreateCommandInvocation,
   runGitCommand,
 } from "@octosmith/octosmith";
 
@@ -20,9 +21,10 @@ const request: GitBootstrapRequest = {
 function fakeGit(command: GitCommand) {
   return Promise.resolve({
     code: 0,
-    stdout: command.args[0] === "rev-parse" || command.args[0] === "hash-object"
-      ? "a".repeat(40) + "\n"
-      : "",
+    stdout:
+      ["commit-tree", "write-tree", "hash-object"].includes(command.args[0])
+        ? "a".repeat(40) + "\n"
+        : "",
     stderr: "",
   });
 }
@@ -209,7 +211,7 @@ for (
       assertEquals(result.pushAttempted, true);
       assertEquals(result.pushConfirmed, true);
       assertEquals(
-        commands.filter(({ args }) => args[0] === "commit").length,
+        commands.filter(({ args }) => args[0] === "commit-tree").length,
         1,
       );
       assertEquals(
@@ -389,7 +391,9 @@ for (
               });
             }
           }
-          if (command.args[0] === stage) {
+          if (
+            command.args[0] === (stage === "commit" ? "commit-tree" : stage)
+          ) {
             return Promise.resolve({
               code: 1,
               stdout: "",
@@ -468,3 +472,476 @@ Deno.test("Git rejects malformed branch without a push or shell interpolation", 
   assertEquals(result.failure, "initialization");
   assertEquals(result.pushAttempted, false);
 });
+
+for (const empty of [false, true]) {
+  Deno.test(`command output joins managed files in one raw initial commit (empty=${empty})`, async () => {
+    const root = await Deno.makeTempDir();
+    const remote = join(root, "remote.git");
+    const workspace = join(root, "workspace");
+    const env = {
+      PATH: Deno.env.get("PATH") ?? "",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: Deno.build.os === "windows" ? "NUL" : "/dev/null",
+      ...(Deno.build.os === "windows" &&
+        { SYSTEMROOT: Deno.env.get("SYSTEMROOT") ?? "" }),
+    };
+    const inspect = async (...args: string[]) => {
+      const output = await runGitCommand({ cwd: root, args, env });
+      assertEquals(output.code, 0, output.stderr);
+      return output.stdout;
+    };
+    const commands: GitCommand[] = [];
+    const hooks: PostCreateCommandInvocation[] = [];
+    const diagnostics: string[] = [];
+    let remoteChecks = 0;
+    const files = empty
+      ? [{ path: "removed.txt", ensure: "absent" as const }]
+      : [
+        { path: "managed.txt", ensure: "exact" as const, content: "exact\r\n" },
+        {
+          path: "exists.txt",
+          ensure: "exists" as const,
+          content: "exists\r\n",
+        },
+        {
+          path: "managed-ignored.txt",
+          ensure: "exact" as const,
+          content: "forced\r\n",
+        },
+        { path: "removed.txt", ensure: "absent" as const },
+        {
+          path: ".gitignore",
+          ensure: "exact" as const,
+          content: "ignored-*\nmanaged-ignored.txt\n",
+        },
+        {
+          path: ".gitattributes",
+          ensure: "exact" as const,
+          content: "* text eol=lf filter=must-not-run\n",
+        },
+      ];
+    try {
+      await inspect(
+        "init",
+        "--bare",
+        "--initial-branch=release/initial",
+        remote,
+      );
+      const result = await new LocalGitBootstrap({
+        token: () => "PRIVATE-TOKEN",
+        makeTempDirectory: async () => {
+          await Deno.mkdir(workspace);
+          return workspace;
+        },
+        runPostCreateCommand: async (command) => {
+          hooks.push(command);
+          assertEquals(command.cwd, join(workspace, "repository"));
+          assertEquals(command.env.OCTOSMITH_GIT_TOKEN, undefined);
+          assertEquals(command.env.GH_TOKEN, undefined);
+          assertEquals(command.env.GITHUB_TOKEN, undefined);
+          assertEquals(command.env.GIT_ASKPASS, undefined);
+          assertEquals(command.env.HOME, workspace);
+          if (hooks.length === 1) {
+            assert(
+              commands.some(({ args }) =>
+                args[0] === "config" && args[2] === "user.email"
+              ),
+            );
+            assertEquals(command.args, ["$LITERAL", "$(not-a-shell)", "a;b"]);
+            await Deno.writeTextFile(
+              join(command.cwd, ".git", "private-command-marker"),
+              "Git internals must never be staged",
+            );
+            await Deno.writeTextFile(
+              join(command.cwd, "removed.txt"),
+              "remove",
+            );
+            await Deno.writeTextFile(
+              join(command.cwd, "ignored-output.txt"),
+              "ignored",
+            );
+            await Deno.writeTextFile(join(command.cwd, ".gitignore"), "*\n");
+            if (!empty) {
+              await Deno.writeTextFile(
+                join(command.cwd, "managed.txt"),
+                "generated",
+              );
+              await Deno.writeTextFile(
+                join(command.cwd, "exists.txt"),
+                "generated",
+              );
+              await Deno.writeTextFile(
+                join(command.cwd, "generated.txt"),
+                "raw\r\n",
+              );
+              await Deno.writeTextFile(
+                join(command.cwd, " leading,-name.txt"),
+                "space\r\n",
+              );
+              await Deno.writeFile(
+                join(command.cwd, "binary.bin"),
+                new Uint8Array([0, 1, 2]),
+              );
+              await Deno.writeTextFile(
+                join(command.cwd, "executable"),
+                "generated executable\n",
+              );
+              if (Deno.build.os !== "windows") {
+                await Deno.chmod(join(command.cwd, "executable"), 0o755);
+              }
+              for (
+                const [key, value] of [
+                  ["filter.must-not-run.clean", "executable-that-must-not-run"],
+                  ["filter.must-not-run.required", "true"],
+                ]
+              ) {
+                assertEquals(
+                  (await runGitCommand({
+                    ...command,
+                    args: ["config", "--local", key, value],
+                  })).code,
+                  0,
+                );
+              }
+            }
+            // Generators may stage files; the bootstrap must rebuild the index.
+            assertEquals(
+              (await runGitCommand({
+                ...command,
+                args: ["add", "--force", "--", "removed.txt"],
+              })).code,
+              0,
+            );
+          } else {
+            assertEquals(command.args, []);
+            assertEquals(
+              await Deno.readTextFile(join(command.cwd, "removed.txt")),
+              "remove",
+            );
+            if (!empty) {
+              assertEquals(
+                await Deno.readTextFile(join(command.cwd, "managed.txt")),
+                "generated",
+              );
+            }
+          }
+          assert(!commands.some(({ args }) => args[0] === "hash-object"));
+          return { code: 0, stdout: "PRIVATE-OUTPUT", stderr: "PRIVATE-ERROR" };
+        },
+        run: async (command) => {
+          commands.push(command);
+          if (command.args[0] === "remote") {
+            return await runGitCommand({
+              ...command,
+              args: [...command.args.slice(0, -1), remote],
+            });
+          }
+          const output = await runGitCommand(command);
+          if (output.code !== 0) {
+            diagnostics.push(command.args.join(" ") + ": " + output.stderr);
+          }
+          return output;
+        },
+      }).bootstrap({
+        ...request,
+        files,
+        postCreateCommands: [
+          {
+            command: "first-generator",
+            args: ["$LITERAL", "$(not-a-shell)", "a;b"],
+          },
+          { command: "second-generator" },
+        ],
+        assertEmpty: () => {
+          remoteChecks++;
+          assertEquals(hooks.length, 2);
+          assertEquals(
+            commands.filter(({ args }) => args[0] === "commit-tree").length,
+            1,
+          );
+          return Promise.resolve();
+        },
+      });
+      assertEquals(
+        result.outcome,
+        "completed",
+        JSON.stringify({ result, diagnostics }),
+      );
+      assertEquals(hooks.map(({ command }) => command), [
+        "first-generator",
+        "second-generator",
+      ]);
+      assertEquals(result.failedCommand, undefined);
+      assertEquals(result.pushAttempted, true);
+      assertEquals(remoteChecks, 1);
+      assertEquals(
+        commands.filter(({ args }) => args.includes("push")).length,
+        1,
+      );
+      assertEquals(
+        (await inspect("--git-dir=" + remote, "rev-list", "--count", "HEAD"))
+          .trim(),
+        "1",
+      );
+      const expected = empty ? [] : [
+        ...files.filter(({ ensure }) => ensure !== "absent").map(({ path }) =>
+          path
+        ),
+        "generated.txt",
+        " leading,-name.txt",
+        "binary.bin",
+        "executable",
+      ];
+      const committed = (await inspect(
+        "--git-dir=" + remote,
+        "ls-tree",
+        "-r",
+        "--name-only",
+        "-z",
+        "HEAD",
+      )).split("\0").filter(Boolean);
+      assertEquals(committed.sort(), expected.sort());
+      assertEquals(result.fileCount, expected.length);
+      for (const file of files) {
+        if (file.ensure === "absent") continue;
+        assertEquals(
+          await inspect("--git-dir=" + remote, "show", "HEAD:" + file.path),
+          file.content,
+        );
+      }
+      if (!empty) {
+        assertEquals(
+          await inspect("--git-dir=" + remote, "show", "HEAD:generated.txt"),
+          "raw\r\n",
+        );
+        assertEquals(
+          await inspect("--git-dir=" + remote, "show", "HEAD:binary.bin"),
+          "\0\x01\x02",
+        );
+        const mode = await inspect(
+          "--git-dir=" + remote,
+          "ls-tree",
+          "HEAD",
+          "--",
+          "executable",
+        );
+        assert(
+          mode.startsWith(Deno.build.os === "windows" ? "100644" : "100755"),
+        );
+      }
+      assert(!JSON.stringify(result).includes("PRIVATE"));
+      await assertRejects(() => Deno.stat(workspace), Deno.errors.NotFound);
+    } finally {
+      await Deno.remove(root, { recursive: true });
+    }
+  });
+}
+
+for (const launchFailure of [false, true]) {
+  Deno.test(`post-create ${launchFailure ? "launch failure" : "nonzero exit"} stops immediately and cleans up`, async () => {
+    const workspace = await Deno.makeTempDir();
+    const commands: GitCommand[] = [];
+    const hooks: PostCreateCommandInvocation[] = [];
+    let cleaned = false;
+    const result = await new LocalGitBootstrap({
+      token: () => {
+        throw new Error("Must not fetch credentials");
+      },
+      makeTempDirectory: () => Promise.resolve(workspace),
+      run: (command) => {
+        commands.push(command);
+        return fakeGit(command);
+      },
+      runPostCreateCommand: (command) => {
+        hooks.push(command);
+        if (hooks.length === 2) {
+          if (launchFailure) throw new Error("PRIVATE-ARGUMENT PRIVATE-OUTPUT");
+          return Promise.resolve({
+            code: 3,
+            stdout: "PRIVATE-OUTPUT",
+            stderr: "PRIVATE-ERROR",
+          });
+        }
+        return Promise.resolve({ code: 0, stdout: "", stderr: "" });
+      },
+      cleanup: async (path) => {
+        assertEquals(path, workspace);
+        await assertRejects(
+          () => Deno.stat(join(path, "repository", "managed.txt")),
+          Deno.errors.NotFound,
+        );
+        await Deno.remove(path, { recursive: true });
+        cleaned = true;
+      },
+    }).bootstrap({
+      ...request,
+      files: [{
+        path: "managed.txt",
+        ensure: "exact",
+        content: "not yet materialized",
+      }],
+      postCreateCommands: ["first", "failed", "never"].map((command) => ({
+        command,
+        args: ["PRIVATE-ARGUMENT"],
+      })),
+      assertEmpty: () => {
+        throw new Error("Must not reach push preflight");
+      },
+    });
+    assertEquals(hooks.map(({ command }) => command), ["first", "failed"]);
+    assertEquals(result.failure, "post_create_command");
+    assertEquals(result.failedCommand, 2);
+    assertEquals(result.prepared, false);
+    assertEquals(result.commitCreated, false);
+    assertEquals(result.pushAttempted, false);
+    assertEquals(result.outcome, "failed");
+    assert(!JSON.stringify(result).includes("PRIVATE"));
+    assert(
+      commands.every(({ args }) =>
+        ["check-ref-format", "init", "config"].includes(args[0])
+      ),
+    );
+    assert(cleaned);
+    await assertRejects(() => Deno.stat(workspace), Deno.errors.NotFound);
+  });
+}
+
+Deno.test("native launch failure is redacted before materialization or push", async () => {
+  let workspace = "";
+  const result = await new LocalGitBootstrap({
+    token: () => {
+      throw new Error("Must not fetch credentials");
+    },
+    makeTempDirectory: async () => workspace = await Deno.makeTempDir(),
+    run: fakeGit,
+  }).bootstrap({
+    ...request,
+    postCreateCommands: [{
+      command: "octosmith-test-executable-that-does-not-exist",
+      args: ["PRIVATE-ARGUMENT"],
+    }],
+  });
+  assertEquals(result.failure, "post_create_command");
+  assertEquals(result.failedCommand, 1);
+  assertEquals(result.pushAttempted, false);
+  assertEquals(result.prepared, false);
+  assert(!JSON.stringify(result).includes("PRIVATE"));
+  await assertRejects(() => Deno.stat(workspace), Deno.errors.NotFound);
+});
+
+Deno.test("a command-created branch commit cannot be overwritten or pushed", async () => {
+  let workspace = "";
+  const result = await new LocalGitBootstrap({
+    token: () => {
+      throw new Error("Must not fetch credentials");
+    },
+    makeTempDirectory: async () => workspace = await Deno.makeTempDir(),
+    runPostCreateCommand: async (command) =>
+      await runGitCommand({
+        ...command,
+        args: ["commit", "--allow-empty", "-m", "Unexpected hook commit"],
+      }),
+  }).bootstrap({
+    ...request,
+    postCreateCommands: [{ command: "fake" }],
+  });
+  assertEquals(result.failure, "commit");
+  assertEquals(result.pushAttempted, false);
+  await assertRejects(() => Deno.stat(workspace), Deno.errors.NotFound);
+});
+
+for (const ensure of ["exact", "exists", "absent"] as const) {
+  for (const generated of ["Managed.txt", "Nested/file.txt"]) {
+    Deno.test(`generated case aliases of managed ${ensure} paths fail portably: ${generated}`, async () => {
+      let workspace = "";
+      const result = await new LocalGitBootstrap({
+        token: () => {
+          throw new Error("Must not fetch credentials");
+        },
+        makeTempDirectory: async () => workspace = await Deno.makeTempDir(),
+        run: fakeGit,
+        runPostCreateCommand: async ({ cwd }) => {
+          if (generated.startsWith("Nested/")) {
+            await Deno.mkdir(join(cwd, "Nested"));
+          }
+          await Deno.writeTextFile(join(cwd, generated), "generated");
+          await Deno.writeTextFile(join(cwd, ".gitignore"), "*\n");
+          return { code: 0, stdout: "", stderr: "" };
+        },
+      }).bootstrap({
+        ...request,
+        files: [{ path: generated.toLowerCase(), ensure, content: "managed" }],
+        postCreateCommands: [{ command: "fake" }],
+      });
+      assertEquals(result.failure, "invalid_files");
+      assertEquals(result.prepared, false);
+      assertEquals(result.pushAttempted, false);
+      await assertRejects(() => Deno.stat(workspace), Deno.errors.NotFound);
+    });
+  }
+}
+
+for (
+  const path of [
+    "nested/.git/config",
+    "nested/.GIT/config",
+    "git~1/config",
+    ...(Deno.build.os === "windows" ? [] : [
+      ".git./config",
+      "con.txt",
+      "unsafe\\name",
+      "bad:name",
+      "bad\nname",
+      "case.txt",
+      "link",
+      ".git",
+    ]),
+  ]
+) {
+  Deno.test(
+    "generated paths are validated even when ignored: " + JSON.stringify(path),
+    async () => {
+      let workspace = "";
+      const commands: GitCommand[] = [];
+      const result = await new LocalGitBootstrap({
+        token: () => {
+          throw new Error("Must not fetch credentials");
+        },
+        makeTempDirectory: async () => workspace = await Deno.makeTempDir(),
+        run: (command) => {
+          commands.push(command);
+          return fakeGit(command);
+        },
+        runPostCreateCommand: async ({ cwd }) => {
+          await Deno.writeTextFile(join(cwd, ".gitignore"), "*\n");
+          if (path === "link" || path === ".git") {
+            await Deno.symlink(workspace, join(cwd, path));
+          } else {
+            const parts = path.split("/");
+            if (parts.length > 1) {
+              await Deno.mkdir(join(cwd, ...parts.slice(0, -1)), {
+                recursive: true,
+              });
+            }
+            await Deno.writeTextFile(join(cwd, path), "unsafe");
+            if (path === "case.txt") {
+              await Deno.writeTextFile(join(cwd, "CASE.txt"), "collision");
+            }
+          }
+          return { code: 0, stdout: "", stderr: "" };
+        },
+      }).bootstrap({
+        ...request,
+        postCreateCommands: [{ command: "fake" }],
+      });
+      assertEquals(result.failure, "invalid_files", JSON.stringify(result));
+      assertEquals(result.pushAttempted, false);
+      assert(
+        !commands.some(({ args }) =>
+          ["hash-object", "update-index", "commit-tree"].includes(args[0])
+        ),
+      );
+      await assertRejects(() => Deno.stat(workspace), Deno.errors.NotFound);
+    },
+  );
+}

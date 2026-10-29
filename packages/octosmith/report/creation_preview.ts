@@ -51,6 +51,11 @@ export function renderRepositoryCreationPreview(
       ...preview.bootstrap.files.map((file) =>
         "  " + file.path + ": " + file.presence
       ),
+      "  Post-create commands (before managed files): " +
+        preview.bootstrap.postCreateCommandCount,
+      ...preview.bootstrap.postCreateCommands.map(({ command }, index) =>
+        "  " + (index + 1) + ". " + command + " (arguments omitted)"
+      ),
       "",
       "GitHub-side desired resources (intent, not API deltas):",
       "  Collection management: " + preview.collectionManagement,

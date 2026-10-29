@@ -303,7 +303,7 @@ function normalizeYaml(
     path.at(-1) === "customProperties" ||
     path.at(-1) === "files";
 
-  return Object.fromEntries(
+  const normalized = Object.fromEntries(
     Object.entries(value as Record<string, unknown>).map(([key, child]) => {
       const normalizedKey = preserveKeys ? key : camelizeKey(key);
 
@@ -313,6 +313,13 @@ function normalizeYaml(
       ];
     }),
   );
+  if (
+    path.length === 2 && path[0] === "repository" &&
+    path[1] === "postCreateCommands" && normalized.args === undefined
+  ) {
+    normalized.args = [];
+  }
+  return normalized;
 }
 
 function camelizeKey(key: string): string {

@@ -91,6 +91,13 @@ commit/push, then finishes deferred branch settings, rulesets and archival. Add
 [CLI creation guide](packages/cli/README.md#resource-create) for lifecycle
 reporting, permissions and partial-failure recovery.
 
+Templates may declare structured
+[`repository.post_create_commands`](docs/configuration.md#create-only-bootstrap-commands)
+to generate initial content. These trusted executables run only during actual
+creation, before managed files; declarative files take precedence. Generated
+files honor `.gitignore` and may join the same initial commit. Neither ordinary
+plan/apply nor preview executes commands.
+
 `template validate` and `template permissions` do not access GitHub.
 `template validate` treats environment-backed secrets already present in the
 process as available without reading their values. `resource list`, `plan`, and

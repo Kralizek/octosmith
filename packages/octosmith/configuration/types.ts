@@ -99,6 +99,7 @@ export interface RepositoryFragment {
 
 /** Describes repository configuration. */
 export interface RepositoryConfiguration {
+  readonly postCreateCommands?: readonly PostCreateCommand[];
   readonly settings?: RepositorySettingsConfiguration;
   readonly customProperties?: Readonly<
     Record<string, string | readonly string[] | null>
@@ -109,6 +110,12 @@ export interface RepositoryConfiguration {
   readonly rulesets?: readonly RulesetConfiguration[];
   readonly environments?: readonly EnvironmentConfiguration[];
   readonly files?: Readonly<Record<string, FileConfiguration>>;
+}
+
+/** A trusted create-only executable invocation; omitted args mean no arguments. */
+export interface PostCreateCommand {
+  readonly command: string;
+  readonly args?: readonly string[];
 }
 
 /** Describes repository settings configuration. */

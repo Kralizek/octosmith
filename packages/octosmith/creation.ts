@@ -606,6 +606,8 @@ export async function createRepository(
       repository: repository.name,
       branch,
       files: desired.files ?? [],
+      postCreateCommands: loaded.templates[specification.template].repository
+        .postCreateCommands ?? [],
       assertEmpty: async () => {
         const branches = await client.get<readonly unknown[]>(
           path + "/branches",
@@ -649,13 +651,17 @@ export async function createRepository(
           : "bootstrap_failed",
         new CreationStageError(
           "Git bootstrap failed (" + bootstrap.failure +
-            "); raw Git diagnostics are omitted.",
+            ")" +
+            (bootstrap.failedCommand === undefined
+              ? ""
+              : "; post-create command #" + bootstrap.failedCommand) +
+            "; raw subprocess diagnostics and arguments are omitted.",
         ),
         bootstrap.pushConfirmed
           ? "Repository bootstrapped and retained. Do not rerun resource create. Inspect local temporary storage for the cleanup failure, verify remote state and finish deferred GitHub-side work with a fresh ordinary plan/apply."
           : bootstrap.pushAttempted
           ? "Repository retained. Do not rerun resource create. Inspect remote branches and compare the reported commit SHA before recovery; a lost push response may have changed the remote. Complete or repair content manually, then run ordinary plan/apply."
-          : "Repository retained without bootstrap content. Do not rerun resource create. Correct the preparation/authentication failure and initialize the retained repository manually, then run ordinary plan/apply.",
+          : "Repository retained without bootstrap content. Do not rerun resource create. Correct the preparation/command/authentication failure and initialize the retained repository manually, then run ordinary plan/apply. Commands may have external side effects; no automatic retry or deletion is performed.",
       );
     }
     completedStages.push(stage);

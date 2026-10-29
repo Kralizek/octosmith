@@ -9,6 +9,12 @@ match:
       repository-type: code
 
 repository:
+  post_create_commands:
+    - command: dotnet
+      args: [new, editorconfig]
+    - command: dotnet
+      args: [new, globaljson]
+
   settings:
     has_projects: false
     has_discussions: false
