@@ -165,14 +165,44 @@ It receives already composed/resolved `DesiredFile[]` from
 `resolveDesiredState`, the same source-reader/normalization/runtime pipeline
 used by ordinary apply. There is no new file reconciliation or selector engine.
 Path validation is shared with managed-file PR delivery and protects `.git`
-aliases. The private temporary worktree stages raw blobs, bypassing
-`.gitignore`, attributes and line-ending conversion, then creates one commit
-(including an empty commit when no files are present). No placeholder, Contents
-writes or bootstrap PRs occur. Author and committer are repository-local
-`Octosmith <octosmith@users.noreply.github.com>`; the stable message is
-`Initial repository bootstrap`. Global/system configuration and hooks are
-isolated, not modified. Cleanup runs even when Git fails and cannot mask the
-primary failure.
+aliases. After Git initialization and identity setup, the transport executes
+composed `repository.postCreateCommands` sequentially in the repository root.
+The runner is injectable separately from Git; its native implementation launches
+the executable directly with literal argument arrays, null stdin and captured
+output. Only actual creation calls this boundary; hooks are not desired-state
+resources and never run during ordinary resolution, plan/apply, inspection,
+validation or preview.
+
+The private worktree validates all generated paths before materialization,
+including ignored output, and again before staging. Symlinks, special files,
+case collisions and Git aliases are rejected; the real root `.git` directory is
+excluded. Managed present files then overwrite generated files; absent
+declarations remove output. The index is cleared with `read-tree --empty` so
+generator-staged entries cannot survive an absence declaration.
+`ls-files
+--others --exclude-standard -z` selects generated files using the
+final `.gitignore`. Explicitly managed present files are included regardless of
+ignore rules. The union is staged with `hash-object --no-filters` and
+`update-index --cacheinfo`, preserving raw bytes for both kinds of file.
+Generated executable bits are retained on Linux; Windows uses regular file mode.
+`write-tree`/`commit-tree` avoid porcelain commit's index refresh (which can
+invoke clean filters). Updating the initial branch ref requires it to be absent.
+This creates one root commit (including an empty commit when no files are
+present). No placeholder, Contents writes or bootstrap PRs occur. Author and
+committer are repository-local `Octosmith <octosmith@users.noreply.github.com>`;
+the stable message is `Initial repository bootstrap`. Global/system
+configuration and hooks are isolated, not modified. Cleanup runs even when Git
+fails and cannot mask the primary failure.
+
+Commands are trusted operator configuration, not sandboxed code. They must not
+alter Git metadata. They receive only the bootstrap allowlisted environment
+(`PATH`, Windows `SYSTEMROOT`, private home/temp and Git settings), not host
+secrets or push credentials. External side effects are not transactional.
+Launch/nonzero failures stop immediately as `post_create_command` with a
+one-based `failedCommand` ordinal, never output or arguments; no content work or
+push follows, the remote is retained and cleanup still runs. There is no command
+retry. Preview adds ordered executable summaries/count to version 1 without
+probing tools or exposing arguments.
 
 Branch precedence is composed template `repository.settings.default_branch`,
 then GitHub's organization/enterprise default already reflected in the empty
@@ -214,11 +244,9 @@ Neither condition permits automatic deletion, retry, force push or adoption.
 Recovery inspects the reported SHA/branch, completes content/default-branch
 repair manually if necessary, then uses ordinary plan/apply, not another create.
 
-Future #112 can extend this library boundary with a controlled hook between
-materialization and staging in the same workspace, before the sole commit/push.
-It must reuse the resolved identity, branch, content and cleanup/result
-handling, not invoke preflight, creation, or bootstrap again. No hook or command
-execution is implemented here.
+The create-only hook reuses this boundary's resolved identity, branch and
+cleanup/result handling; it does not invoke preflight, repository creation or
+bootstrap a second time. No post-push hooks or ordinary plan/apply hooks exist.
 
 ### Repository bootstrap
 

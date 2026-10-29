@@ -1,6 +1,7 @@
 import { dirname, join } from "@std/path";
 import type { DesiredFile } from "./state/types.ts";
 import { assertManagedFilePath } from "./state/file_path.ts";
+import type { PostCreateCommand } from "./configuration/types.ts";
 
 /** Stable identity and message used for the single initial commit. */
 export const INITIAL_COMMIT_IDENTITY = {
@@ -14,6 +15,7 @@ export type GitBootstrapFailure =
   | "preparation"
   | "invalid_files"
   | "initialization"
+  | "post_create_command"
   | "commit"
   | "authentication"
   | "push_rejected"
@@ -31,6 +33,8 @@ export interface GitBootstrapResult {
   readonly pushConfirmed: boolean;
   readonly outcome: "completed" | "failed" | "unknown";
   readonly failure?: GitBootstrapFailure;
+  /** One-based ordinal only; executable arguments and diagnostics stay private. */
+  readonly failedCommand?: number;
   readonly cleanupFailed?: boolean;
 }
 
@@ -40,6 +44,7 @@ export interface GitBootstrapRequest {
   readonly repository: string;
   readonly branch: string;
   readonly files: readonly DesiredFile[];
+  readonly postCreateCommands?: readonly PostCreateCommand[];
   readonly assertEmpty: () => Promise<void>;
 }
 
@@ -62,12 +67,20 @@ export interface GitCommandResult {
   readonly stderr: string;
 }
 
+/** Direct executable invocation in the isolated bootstrap environment. */
+export interface PostCreateCommandInvocation extends GitCommand {
+  readonly command: string;
+}
+
 /** Authentication and execution dependencies for the local bootstrap service. */
 export interface LocalGitBootstrapOptions {
   readonly token: () => string | Promise<string>;
   /** GitHub API base URL; enterprise Git remotes use the same HTTPS origin. */
   readonly baseUrl?: string;
   readonly run?: (command: GitCommand) => Promise<GitCommandResult>;
+  readonly runPostCreateCommand?: (
+    command: PostCreateCommandInvocation,
+  ) => Promise<GitCommandResult>;
   readonly makeTempDirectory?: () => Promise<string>;
   readonly cleanup?: (path: string) => Promise<void>;
 }
@@ -76,7 +89,14 @@ export interface LocalGitBootstrapOptions {
 export async function runGitCommand(
   command: GitCommand,
 ): Promise<GitCommandResult> {
-  const output = await new Deno.Command("git", {
+  return await runPostCreateCommand({ ...command, command: "git" });
+}
+
+/** Run without a shell or interactive input; never stream subprocess output. */
+export async function runPostCreateCommand(
+  command: PostCreateCommandInvocation,
+): Promise<GitCommandResult> {
+  const output = await new Deno.Command(command.command, {
     args: [...command.args],
     cwd: command.cwd,
     clearEnv: true,
@@ -92,6 +112,52 @@ export async function runGitCommand(
   };
 }
 
+interface BootstrapFile {
+  readonly path: string;
+  readonly mode: string;
+}
+
+async function readBootstrapFiles(
+  tree: string,
+  declarations: ReadonlyMap<string, string>,
+): Promise<BootstrapFile[]> {
+  const files: BootstrapFile[] = [];
+  const paths = new Set<string>();
+  const visit = async (directory: string, prefix: string): Promise<void> => {
+    for await (const entry of Deno.readDir(directory)) {
+      const path = prefix + entry.name;
+      const info = await Deno.lstat(join(tree, path));
+      // Only the actual root Git directory is excluded, never aliases or links.
+      if (path === ".git" && info.isDirectory && !info.isSymlink) continue;
+      assertManagedFilePath(path);
+      const key = path.toLowerCase();
+      const declared = declarations.get(key);
+      if (declared !== undefined && declared !== path) {
+        throw new Error("Generated path aliases a managed path");
+      }
+      if (paths.has(key)) throw new Error("Duplicate bootstrap path");
+      paths.add(key);
+      if (info.isSymlink) {
+        throw new Error("Bootstrap symlinks are not supported");
+      }
+      if (info.isDirectory) {
+        await visit(join(tree, path), path + "/");
+      } else if (info.isFile) {
+        files.push({
+          path,
+          mode: Deno.build.os !== "windows" && ((info.mode ?? 0) & 0o111) !== 0
+            ? "100755"
+            : "100644",
+        });
+      } else {
+        throw new Error("Bootstrap paths must be regular files or directories");
+      }
+    }
+  };
+  await visit(tree, "");
+  return files;
+}
+
 /** Materialize resolved files, commit once (even empty), and push at most once. */
 export class LocalGitBootstrap implements RepositoryGitBootstrap {
   constructor(readonly options: LocalGitBootstrapOptions) {}
@@ -99,6 +165,7 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
   async bootstrap(request: GitBootstrapRequest): Promise<GitBootstrapResult> {
     let workspace: string | undefined;
     let failure: GitBootstrapFailure = "preparation";
+    let failedCommand: number | undefined;
     let state: GitBootstrapResult = {
       branch: request.branch,
       fileCount:
@@ -124,11 +191,22 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
         : api.origin;
       failure = "invalid_files";
       const paths = new Set<string>();
+      const declarations = new Map<string, string>();
       for (const file of request.files) {
         assertManagedFilePath(file.path);
         const key = file.path.toLowerCase();
         if (paths.has(key)) throw new Error("Duplicate managed path");
         paths.add(key);
+        const parts = file.path.split("/");
+        for (let count = 1; count <= parts.length; count++) {
+          const path = parts.slice(0, count).join("/");
+          const key = path.toLowerCase();
+          const declared = declarations.get(key);
+          if (declared !== undefined && declared !== path) {
+            throw new Error("Managed paths have conflicting case");
+          }
+          declarations.set(key, path);
+        }
         if (file.ensure !== "absent" && typeof file.content !== "string") {
           throw new Error("Missing resolved file content");
         }
@@ -144,6 +222,9 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
           { SYSTEMROOT: Deno.env.get("SYSTEMROOT") ?? "" }),
         HOME: workspace,
         XDG_CONFIG_HOME: workspace,
+        TMPDIR: workspace,
+        TMP: workspace,
+        TEMP: workspace,
         GIT_CONFIG_NOSYSTEM: "1",
         GIT_CONFIG_GLOBAL: Deno.build.os === "windows" ? "NUL" : "/dev/null",
         GIT_ATTR_NOSYSTEM: "1",
@@ -158,7 +239,7 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
       const git = async (args: readonly string[]) => {
         const output = await run({ cwd: tree, args, env });
         if (output.code !== 0) throw new Error("Git operation failed");
-        return output.stdout.trim();
+        return output.stdout;
       };
       failure = "initialization";
       await git(["check-ref-format", "--branch", request.branch]);
@@ -176,44 +257,95 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
       ) {
         await git(["config", "--local", key, value]);
       }
+      failure = "post_create_command";
+      const runCommand = this.options.runPostCreateCommand ??
+        runPostCreateCommand;
+      for (
+        const [index, command] of (request.postCreateCommands ?? []).entries()
+      ) {
+        failedCommand = index + 1;
+        const output = await runCommand({
+          command: command.command,
+          args: command.args ?? [],
+          cwd: tree,
+          env,
+        });
+        if (output.code !== 0) throw new Error("Post-create command failed");
+      }
+      failedCommand = undefined;
       failure = "invalid_files";
+      await readBootstrapFiles(tree, declarations);
+      for (const file of request.files) {
+        if (file.ensure !== "absent") continue;
+        const destination = join(tree, file.path);
+        try {
+          await Deno.remove(destination, { recursive: true });
+        } catch (error) {
+          if (!(error instanceof Deno.errors.NotFound)) throw error;
+        }
+      }
       for (const file of request.files) {
         if (file.ensure === "absent") continue;
         const destination = join(tree, file.path);
         await Deno.mkdir(dirname(destination), { recursive: true });
         await Deno.writeTextFile(destination, file.content!);
       }
+      const files = await readBootstrapFiles(tree, declarations);
       state = { ...state, prepared: true };
       failure = "commit";
-      // Stage raw blobs: .gitattributes must not transform already resolved bytes.
-      for (const file of request.files) {
-        if (file.ensure === "absent") continue;
-        const blob = await git([
+      // Discard any index entries left by generators. Discover ignored files
+      // using Git, but stage raw blobs so attributes cannot run clean filters.
+      await git(["read-tree", "--empty"]);
+      const generated = new Set(
+        (await git([
+          "ls-files",
+          "--others",
+          "--exclude-standard",
+          "-z",
+        ])).split("\0").filter(Boolean),
+      );
+      const managed = new Set(
+        request.files.filter((file) => file.ensure !== "absent").map((file) =>
+          file.path
+        ),
+      );
+      const staged = files.filter(({ path }) =>
+        managed.has(path) || generated.has(path)
+      );
+      state = { ...state, fileCount: staged.length };
+      for (const file of staged) {
+        const blob = (await git([
           "hash-object",
           "-w",
           "--no-filters",
           "--",
           file.path,
-        ]);
+        ])).trim();
         await git([
           "update-index",
           "--add",
           "--cacheinfo",
-          `100644,${blob},${file.path}`,
+          `${
+            managed.has(file.path) ? "100644" : file.mode
+          },${blob},${file.path}`,
         ]);
       }
-      await git([
-        "commit",
-        "--allow-empty",
+      // Porcelain commit refreshes the index and can invoke clean filters.
+      // Plumbing preserves raw blobs and creates one root commit, even empty.
+      const treeSha = (await git(["write-tree"])).trim();
+      const commitSha = (await git([
+        "commit-tree",
+        treeSha,
         "-m",
         INITIAL_COMMIT_IDENTITY.message,
-      ]);
-      state = { ...state, commitCreated: true };
-      const commitSha = await git(["rev-parse", "HEAD"]);
+      ])).trim();
       if (!/^([a-f0-9]{40}|[a-f0-9]{64})$/.test(commitSha)) {
         throw new Error("Invalid commit");
       }
-      state = { ...state, commitSha };
+      state = { ...state, commitCreated: true, commitSha };
+      const ref = "refs/heads/" + request.branch;
+      await git(["update-ref", ref, commitSha, "0".repeat(commitSha.length)]);
+      await git(["symbolic-ref", "HEAD", ref]);
       failure = "preparation";
       await request.assertEmpty();
       failure = "authentication";
@@ -270,6 +402,7 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
       state = {
         ...state,
         failure,
+        ...(failedCommand !== undefined && { failedCommand }),
         outcome: failure === "push_unknown" ? "unknown" : "failed",
       };
     } finally {

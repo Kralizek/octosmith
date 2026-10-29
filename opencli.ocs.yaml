@@ -173,6 +173,18 @@ commands:
       verifies scope and unique classification, then uses ordinary reconciliation.
       Resolves composed files through ordinary desired-state semantics and creates
       one local commit (empty if no files) and at most one explicit branch push.
+      Structured repository.post_create_commands run only during actual creation,
+      sequentially after Git initialization and before managed-file materialization.
+      They use literal argument arrays, no shell or interactive input, captured
+      output and an isolated environment without forwarded host secrets or push
+      credentials. Executables must be installed; trusted programs are not sandboxed
+      and may have external side effects. Lists use existing fragment replacement
+      precedence, without conditions or runtime expansion.
+      Managed files overwrite generated content; ensure absent removes output.
+      Generated files honor the final .gitignore, while managed files are always
+      included. Raw blobs and write-tree/commit-tree bypass attribute filters and
+      line-ending conversion. Unsafe paths, symlinks and Git aliases are rejected;
+      root .git internals are excluded.
       Branch precedence is template, organization default exposed on the new
       repository, then GitHub's main fallback. Identity is repository-local
       Octosmith <octosmith@users.noreply.github.com>; the commit message is
@@ -186,6 +198,13 @@ commands:
       category and deferred work. Uncertain push outcomes may have remote changes;
       inspect the remote SHA before manual recovery and fresh plan/apply. Never
       rerun create for a retained repository, force push or automatically delete it.
+      Command launch/nonzero failures stop before staging or push, report
+      post_create_command and a one-based failedCommand ordinal without arguments
+      or raw output, clean temporary storage and retain the remote. No automatic
+      command retry or rollback of external effects occurs. Preview version 1
+      adds ordered bootstrap.postCreateCommands executable summaries and
+      postCreateCommandCount; no arguments or executable probes. Commands never
+      run during plan, apply, inspection, validation or --dry-run.
     args:
       - name: template
         type: string
@@ -204,7 +223,7 @@ commands:
         summary: Explicit visibility when selector constraints leave multiple choices.
       - name: dry-run
         type: boolean
-        summary: Preview resolved identity, bootstrap files, desired resources, and deferred work without GitHub access or local writes.
+        summary: Preview resolved identity, bootstrap files and executable names/count, desired resources, and deferred work without GitHub access, local writes or command execution.
       - name: include-secrets
         type: boolean
         summary: Include secrets; explicit false honors configuration.

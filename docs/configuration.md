@@ -380,6 +380,78 @@ repository:
         value: eu-north-1
 ```
 
+### Create-only bootstrap commands
+
+Templates and repository fragments may declare an ordered executable list:
+
+```yaml
+repository:
+  post_create_commands:
+    - command: dotnet
+      args: [new, editorconfig]
+    - command: dotnet
+      args: [new, globaljson]
+  files:
+    .editorconfig:
+      ensure: exact
+      source: files/.editorconfig
+    obsolete.txt:
+      ensure: absent
+```
+
+`command` is a required nonempty, non-whitespace string naming an executable (or
+executable path). `args` is an optional array of strings, defaulting to `[]`.
+Unknown fields, scalar command entries, conditions and environment declarations
+are rejected during configuration loading. There is no shell mode, argument
+interpolation, runtime-value expansion or command-specific configuration.
+Arguments are passed literally, including spaces, `$`, `%` and shell
+punctuation.
+
+Commands execute **only** during actual `resource create`, after local Git
+initialization and identity configuration, sequentially in the temporary
+repository root. Plan, apply, inspection, validation and `--dry-run` never run
+them or probe executable availability. The execution host must have the tools
+installed and accessible on `PATH` (or use an explicit executable path).
+
+Managed files are materialized **after all commands succeed**. Both `exists` and
+`exact` overwrite command-generated files with their resolved declarative bytes;
+`absent` removes generated output at that path. The final `.gitignore` applies
+conventionally to generated files, but explicitly managed present files are
+always included, even if ignored. Remaining generated regular files and managed
+files enter the same single initial commit. All blobs bypass `.gitattributes`
+filters and line-ending conversions, preserving on-disk bytes. Generated
+executable bits are preserved on Linux; native Windows uses regular file mode.
+Paths are checked against the same portable safety rules as managed files,
+including ignored output. Symlinks, special files, case-colliding paths, unsafe
+names and nested Git directories are rejected; root `.git` internals are
+excluded. Commands must not modify Git metadata or create their own commits.
+
+These are **trusted operator-supplied programs, not a sandbox**. They run with
+the host user's filesystem/network privileges and can have external side
+effects. Octosmith supplies an isolated environment: host `PATH` (plus
+`SYSTEMROOT` on Windows), temporary `HOME`/`XDG_CONFIG_HOME`/temp directories
+and bootstrap Git settings. It does not forward arbitrary host variables,
+credentials or runtime secrets. Tools relying on host-specific environment
+configuration may need an explicit executable path or operator setup.
+Executables are launched directly, with no interactive input; stdout/stderr are
+captured, not streamed.
+
+A launch failure or nonzero exit stops the sequence immediately, with no
+materialization, staging, commit or push afterward. Lifecycle failure
+`post_create_command` reports only the one-based `failedCommand` ordinal, not
+arguments or raw output. Temporary storage is cleaned up; the new remote is
+retained and `pushAttempted` is false. Creation is nontransactional: external
+command side effects are not rolled back. Correct the failure and initialize the
+retained repository manually, then use ordinary plan/apply. Do not rerun create,
+automatically retry commands or delete the remote. Preview shows ordered
+executable names/count only; generated file counts remain unknown until
+execution.
+
+This list uses existing fragment precedence: nested includes first, includes in
+declaration order, then the template. A later `post_create_commands` list
+**replaces the whole earlier list**, preserving its own order; `[]` clears it.
+Commands are never merged by executable name or appended implicitly.
+
 ### Fragment composition
 
 Repository templates may compose reusable desired-state fragments with
@@ -447,13 +519,14 @@ across different fragments and templates remain supported. A later empty named
 collection (`teams: []`, for example) clears inherited entries.
 
 Array replacement remains the default for paths without an explicit policy,
-including OIDC claims and ruleset bypass actors. Supported identity merges are
-opted in by Octosmith itself; YAML authors do not configure merge modes. A CI
-test requires an explicit decision for primary repository collections and checks
-that registered paths exist. Nested arrays are opt-in: a newly added nested
-array can retain the default replacement behavior without a declaration.
-Includes are applied in declaration order and the local template is applied
-last.
+including OIDC claims and ruleset bypass actors. `post_create_commands`
+explicitly uses whole-list replacement, not identity merging. Supported identity
+merges are opted in by Octosmith itself; YAML authors do not configure merge
+modes. A CI test requires an explicit decision for primary repository
+collections and checks that registered paths exist. Nested arrays are opt-in: a
+newly added nested array can retain the default replacement behavior without a
+declaration. Includes are applied in declaration order and the local template is
+applied last.
 
 Nested includes are limited to 32 levels and must remain within the
 configuration root after path canonicalization. Cycles are rejected across the

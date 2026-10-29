@@ -17,6 +17,7 @@ export type ArrayCompositionPolicy =
 export const arrayCompositionPolicies: Readonly<
   Record<string, ArrayCompositionPolicy>
 > = {
+  postCreateCommands: "replace",
   teams: "name",
   rulesets: "name",
   environments: "name",

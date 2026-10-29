@@ -5,6 +5,10 @@ match:
     names: [team-*-svcs]
 includes: [../fragments/base.yml]
 repository:
+  post_create_commands:
+    - command: executable-that-must-not-be-probed
+      args: [PRIVATE_COMMAND_ARGUMENT_SENTINEL]
+    - command: another-missing-executable
   settings:
     has_issues: false
   files:

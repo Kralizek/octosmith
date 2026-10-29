@@ -286,6 +286,10 @@ Deno.test("creation verifies actual selectors then uses normal GitHub reconcilia
     github,
     configuration({
       settings: { description: "Orders", hasIssues: false },
+      postCreateCommands: [
+        { command: "generator", args: ["PRIVATE-ARGUMENT", "$LITERAL"] },
+        { command: "second-generator" },
+      ],
       teams: [{ name: "platform", permission: "maintain" }],
       actions: { enabled: false, variables: [{ name: "REGION", value: "eu" }] },
       environments: [{ name: "production" }],
@@ -325,6 +329,11 @@ Deno.test("creation verifies actual selectors then uses normal GitHub reconcilia
   assertEquals(github.teams, [{ slug: "platform", permission: "maintain" }]);
   assertEquals(github.bootstraps.length, 1);
   assertEquals(github.bootstraps[0].files, []);
+  assertEquals(github.bootstraps[0].postCreateCommands, [
+    { command: "generator", args: ["PRIVATE-ARGUMENT", "$LITERAL"] },
+    { command: "second-generator" },
+  ]);
+  assert(!JSON.stringify(result).includes("PRIVATE-ARGUMENT"));
   assertEquals(
     github.mutations().filter(({ body }) => body?.description === "Orders")
       .length,
@@ -776,6 +785,7 @@ for (
     "preparation",
     "invalid_files",
     "initialization",
+    "post_create_command",
     "commit",
     "authentication",
     "push_rejected",
@@ -811,6 +821,7 @@ for (
                 pushConfirmed: false,
                 outcome: failure === "push_unknown" ? "unknown" : "failed",
                 failure,
+                ...(failure === "post_create_command" && { failedCommand: 2 }),
               } satisfies GitBootstrapResult,
             ),
         },
@@ -827,6 +838,13 @@ for (
       assertEquals(github.exists, true);
       assert(!github.mutations().some(({ method }) => method === "DELETE"));
       assertStringIncludes(result.recovery!, "Do not rerun resource create");
+      if (failure === "post_create_command") {
+        assertStringIncludes(result.error!.message, "command #2");
+        assertStringIncludes(
+          renderRepositoryCreationResult(result),
+          "Failed post-create command: #2",
+        );
+      }
       if (failure === "push_unknown") {
         assertStringIncludes(result.recovery!, "may have changed the remote");
         assertEquals(result.bootstrap?.outcome, "unknown");
@@ -1507,11 +1525,14 @@ for (const format of ["text", "json"]) {
         fetch: github.fetch,
         bootstrap: new LocalGitBootstrap({
           token: () => token,
+          runPostCreateCommand: () =>
+            Promise.resolve({ code: 0, stdout: "", stderr: "" }),
           run: (command) =>
             Promise.resolve({
               code: command.args.includes("push") ? 1 : 0,
-              stdout: command.args[0] === "rev-parse" ||
-                  command.args[0] === "hash-object"
+              stdout: ["commit-tree", "write-tree", "hash-object"].includes(
+                  command.args[0],
+                )
                 ? github.sha
                 : "",
               stderr: "connection lost " + token,

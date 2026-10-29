@@ -38,6 +38,9 @@ export interface RepositoryCreationBootstrapPreview {
     readonly presence: "present" | "absent";
   }[];
   readonly plannedFileCount: number;
+  /** Ordered executable names only; arguments are never previewed or resolved. */
+  readonly postCreateCommands: readonly { readonly command: string }[];
+  readonly postCreateCommandCount: number;
 }
 
 /** Read-only creation intent suitable for text, JSON, and future execution hosts. */
@@ -227,6 +230,10 @@ export function buildRepositoryCreationPreview(
       files,
       plannedFileCount:
         files.filter((file) => file.presence === "present").length,
+      postCreateCommands: (repository.postCreateCommands ?? []).map(
+        ({ command }) => ({ command }),
+      ),
+      postCreateCommandCount: repository.postCreateCommands?.length ?? 0,
     },
     resources,
     deferred: [

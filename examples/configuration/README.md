@@ -18,3 +18,16 @@ this directory as their policy input instead of duplicating the configuration.
 
 Names used in this example are generic and do not represent any specific
 organization.
+
+The code template demonstrates `repository.post_create_commands`, requiring the
+.NET SDK only on the host performing actual `resource create`. The executables
+run sequentially in the temporary repository root before managed files;
+declarative content wins and `ensure: absent` removes generated output.
+Remaining generated files honor `.gitignore` and join the same raw-byte initial
+commit. Plan/apply, validation, inspection and read-only preview never run or
+probe the tools; preview omits arguments. Hooks are trusted host programs, not
+sandboxed. Launch/nonzero failures stop before push, clean the workspace and
+retain the remote without rollback of external side effects. Repair it manually
+rather than rerunning create. See the
+[configuration reference](../../docs/configuration.md#create-only-bootstrap-commands)
+for execution isolation, list replacement and safe failure reporting.

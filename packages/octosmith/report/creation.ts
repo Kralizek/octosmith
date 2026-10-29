@@ -31,6 +31,9 @@ export function renderRepositoryCreationResult(
         ...(result.bootstrap.failure
           ? [`Bootstrap failure: ${result.bootstrap.failure}`]
           : []),
+        ...(result.bootstrap.failedCommand === undefined
+          ? []
+          : [`Failed post-create command: #${result.bootstrap.failedCommand}`]),
         ...(result.bootstrap.cleanupFailed
           ? [
             "Temporary workspace cleanup failed; inspect local temporary storage.",

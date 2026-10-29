@@ -282,6 +282,11 @@ Deno.test({
         value: "trunk",
       },
       plannedFileCount: 2,
+      postCreateCommands: [
+        { command: "executable-that-must-not-be-probed" },
+        { command: "another-missing-executable" },
+      ],
+      postCreateCommandCount: 2,
       files: [
         { path: ".editorconfig", presence: "present" },
         { path: "README.md", presence: "present" },
@@ -331,6 +336,7 @@ Deno.test({
         const sensitive of [
           "MANAGED_FILE_CONTENT_SENTINEL",
           "PRIVATE_LITERAL_SENTINEL",
+          "PRIVATE_COMMAND_ARGUMENT_SENTINEL",
           "validation:",
           '"content"',
           "files/README.txt",
