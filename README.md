@@ -2,11 +2,11 @@
 
 Declarative desired-state management for GitHub repositories.
 
-Octosmith lets an organization describe which repositories it manages, assign
-each repository to a template, inspect the changes required to reach that
-desired state, and apply those changes through the CLI or GitHub Actions.
+Octosmith discovers repositories in a GitHub organization, matches them to
+configuration templates, and validates, plans, or applies their desired state.
+Use the CLI locally or run it through GitHub Actions.
 
-## Quick start
+## Get started
 
 Create a control repository:
 
@@ -14,162 +14,47 @@ Create a control repository:
 deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme
 ```
 
-The generated repository starts deliberately small:
-
-```text
-github-config/
-├── .github/
-│   └── workflows/
-│       ├── octosmith-validate.yml
-│       └── octosmith-apply.yml
-├── templates/
-│   └── default.yml
-├── octosmith.yml
-├── README.md
-└── .gitignore
-```
-
-Edit `octosmith.yml` to define the repositories in scope, then edit or add
-templates under `templates/` to describe their desired state.
-
-The generated pull-request workflow validates configuration offline without
-organization credentials. The default-branch workflow applies the configuration
-using the `OCTOSMITH_TOKEN` secret.
-
-For non-interactive scaffolding, options after Deno's `--` separator include:
-
-- `--organization <name>`
-- `--collection-management <explicit|strict>`
-- `--default-branch <name>`
-- `--no-workflows`
-- `--event-streaming`
-
-## How Octosmith works
-
-Octosmith follows the same pipeline whether it runs locally or in GitHub
-Actions:
-
-1. Load and validate the configuration directory.
-2. Discover repositories inside `repositories.scope`.
-3. Resolve each repository to exactly one matching template.
-4. Read the current GitHub state.
-5. Build a plan from current state to desired state.
-6. Report the plan or apply its operations.
-
-The default collection-management mode is `explicit`: Octosmith manages only
-members explicitly declared by configuration. `strict` makes supported named
-collections authoritative and can remove undeclared members.
-
-See the [library package README](packages/octosmith/README.md) for the
-configuration model and programmatic API.
-
-## Run Octosmith
-
-### CLI
-
-Install the CLI:
+Edit `octosmith.yml` and the generated templates, then inspect and apply:
 
 ```sh
 deno install -A -n octosmith jsr:@octosmith/cli@0
+octosmith template validate --path ./github-config
+octosmith resource list --path ./github-config
+octosmith plan --path ./github-config
+octosmith apply --path ./github-config
 ```
 
-The main workflows are available as grouped inspection commands plus plan/apply:
+Validation runs offline; inspection, planning, and application require GitHub
+access. Review the plan before applying changes, especially when managing
+collections, secrets, or repository files.
 
-```sh
-octosmith template validate --path .
-octosmith template permissions --path .
-octosmith resource list --path .
-octosmith plan --path .
-octosmith apply --path .
-```
-
-Provision an organization repository from a selected template with
-`octosmith resource create services --name team-orders-svcs --visibility internal`.
-This performs GitHub creation, API reconciliation and one local Git bootstrap
-commit/push, then finishes deferred branch settings, rulesets and archival. Add
-`--dry-run` for a completely offline, read-only preview. See the
-[CLI creation guide](packages/cli/README.md#resource-create) for lifecycle
-reporting, permissions and partial-failure recovery.
-
-Templates may declare structured
-[`repository.post_create_commands`](docs/configuration.md#create-only-bootstrap-commands)
-to generate initial content. These trusted executables run only during actual
-creation, before managed files; declarative files take precedence. Generated
-files honor `.gitignore` and may join the same initial commit. Neither ordinary
-plan/apply nor preview executes commands.
-
-`template validate` and `template permissions` do not access GitHub.
-`template validate` treats environment-backed secrets already present in the
-process as available without reading their values. `resource list`, `plan`, and
-`apply` authenticate with an injected token, `GITHUB_TOKEN`, or the local GitHub
-CLI. Use `--template <template>` with `plan` or `apply` to target all
-repositories classified by one template, or pass a repository name directly to
-target one repository.
-
-Secrets reconcile automatically by default. Set
-`repositories.settings.secrets: manual` to exclude Actions, Dependabot, and
-environment secrets from fresh plan/apply, then opt in with `--include-secrets`
-when needed. `--include-secrets=true` also opts in; `--include-secrets=false`
-honors the configured mode. Saved plans always execute their stored operations,
-regardless of the current secret mode or flag. See
-[secret reconciliation](docs/configuration.md#secret-reconciliation).
-
-`template list` is offline and reports each template's canonical identity,
-optional display name, and source file path relative to the configuration root.
-
-See the [CLI package README](packages/cli/README.md) for command options,
-targeted runs, output formats, exit behavior, and event output.
-
-### GitHub Action
-
-The repository also ships a GitHub Action:
-
-```yaml
-- uses: actions/checkout@v7
-- uses: Kralizek/octosmith@v0
-  with:
-    mode: apply
-    github-token: ${{ secrets.OCTOSMITH_TOKEN }}
-```
-
-Supported modes are `validate`, `plan`, and `apply`. The Action runs the exact
-published `@octosmith/cli` version associated with its release commit. The
-moving `v0` tag tracks the latest compatible 0.x Action release.
-
-## Event streaming
-
-The CLI can emit one NDJSON resource event per repository while planning or
-applying. The output path can be a normal file, FIFO, or another writable path.
-
-The scaffolder's `--event-streaming` option generates a Hooksmith example that
-streams live `resource.applied` events while Octosmith is running. Hooksmith is
-an optional consumer; the Octosmith library itself does not depend on Hooksmith
-for apply behavior.
+For setup, permissions, credentials, and workflows, follow the
+[getting-started guide](docs/getting-started.md).
 
 ## Documentation
 
-Detailed documentation lives under [`docs/`](docs/README.md):
+- [Documentation index](docs/README.md) — guides, CLI reference, and library
+  API.
+- [Root configuration](docs/root-configuration.md) — scope and policies.
+- [Repository templates](docs/repository-template.md) — desired state and
+  fragment composition, including create-only bootstrap commands.
+- [Configuration behavior](docs/configuration.md) — secrets and file delivery.
+- [CLI reference](docs/cli/README.md) — all commands and their options.
+- [Automation](docs/automation.md) — GitHub Action and workflow integration.
+- [Architecture](docs/architecture.md) — engine design and lifecycle.
 
-- [Getting started](docs/getting-started.md)
-- [Configuration](docs/configuration.md)
-- [Automation](docs/automation.md)
-- [Architecture](docs/architecture.md)
-- [Agent guide](docs/agent-guide.md)
+An [example configuration](examples/configuration) covers repository selection,
+settings, rulesets, environments, teams, and managed files.
 
 ## Packages
 
-| Package                                                | Purpose                                                                                                                     |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| [`@octosmith/octosmith`](packages/octosmith/README.md) | Configuration, desired/current state models, planning, reporting, GitHub integration, and the control-repository scaffolder |
-| [`@octosmith/cli`](packages/cli/README.md)             | Command-line interface for grouped template/resource commands, plan/apply, reporting, and event output                      |
+| Package                                                | Use for                                                       |
+| ------------------------------------------------------ | ------------------------------------------------------------- |
+| [`@octosmith/cli`](packages/cli/README.md)             | Interactive and automated CLI commands                        |
+| [`@octosmith/octosmith`](packages/octosmith/README.md) | TypeScript models, planning, GitHub adapters, and scaffolding |
 
-## Examples
+The repository also ships a [GitHub Action](docs/automation.md#github-action)
+with `validate`, `plan`, and `apply` modes.
 
-[`examples/configuration`](examples/configuration) contains a fuller
-configuration with repository selectors, repository settings, rulesets,
-environments, teams, and managed files.
-
-## Versioning
-
-Octosmith is currently on the 0.x release line. The public surface is usable,
-but configuration and APIs may still evolve before 1.0.
+Octosmith is on the 0.x release line; its public APIs and configuration may
+change before 1.0.

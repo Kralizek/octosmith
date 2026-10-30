@@ -1,5 +1,11 @@
 /**
- * Octosmith domain models, planning, reporting, and GitHub integration.
+ * Reusable Octosmith models, offline validation, planning, reporting, and
+ * GitHub integration.
+ *
+ * Use `validateConfigurationDirectory` to validate configuration offline,
+ * or `loadConfigurationDirectory` to load it for programmatic planning.
+ * For examples, see the
+ * [library guide](https://github.com/Kralizek/octosmith/blob/master/docs/library/programmatic-api.md).
  *
  * @module
  */

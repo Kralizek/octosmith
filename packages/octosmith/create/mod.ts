@@ -1,5 +1,8 @@
 /**
- * Deno create entry point for scaffolding an Octosmith control repository.
+ * Scaffold a GitHub organization control repository with Octosmith.
+ *
+ * Run `deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme`.
+ * See the [getting-started guide](https://github.com/Kralizek/octosmith/blob/master/docs/getting-started.md).
  *
  * @module
  */

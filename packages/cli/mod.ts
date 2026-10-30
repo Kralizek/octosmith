@@ -1,8 +1,12 @@
 #!/usr/bin/env -S deno run --allow-read --allow-write --allow-env --allow-net --allow-run=gh,git
 
 /**
- * Octosmith command-line host for validating, planning, and applying GitHub
+ * Command-line host for validating, inspecting, planning, and applying GitHub
  * repository configuration.
+ *
+ * Install with `deno install -A -n octosmith jsr:@octosmith/cli@0`.
+ * For commands, credentials, and output formats, see the
+ * [CLI reference](https://github.com/Kralizek/octosmith/blob/master/docs/cli/README.md).
  *
  * @module
  */

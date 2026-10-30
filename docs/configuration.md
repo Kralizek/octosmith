@@ -1,7 +1,10 @@
 # Configuration
 
 An Octosmith configuration directory contains one root configuration and one or
-more repository templates.
+more repository templates. For the schema-driven file formats, start with the
+[`octosmith.yml` reference](root-configuration.md) and
+[repository template reference](repository-template.md). This guide explains
+reconciliation semantics and operational behavior.
 
 ```mermaid
 flowchart TD
@@ -46,118 +49,21 @@ packaging.
 
 ## Root configuration
 
-`octosmith.yml` identifies the organization, repository scope, and collection
-management mode.
+The top-level `octosmith.yml` file defines the GitHub organization, scope,
+unmatched-repository handling, and global reconciliation policies. The
+[schema-based root configuration reference](root-configuration.md) is the
+canonical description of its fields, allowed values, and fallback selector.
 
-```yaml
-version: 1
-organization: acme
-
-repositories:
-  scope:
-    include: all
-
-  settings:
-    collection_management: explicit
-    unmatched_repositories: ignore
-    default_branch_drift: ignore
-```
-
-Repository scope may use names, teams, visibility, and custom properties. Name
-selectors support `*` and `?` glob patterns.
-
-`include` is required and may be either a repository selector or the literal
-`all`. Use `include: all` when the scope starts from every repository and
-`exclude` narrows it. `exclude` always uses the repository selector shape.
-
-By default, every repository discovered in scope must match exactly one
-template. `unmatched_repositories: ignore` leaves unmatched repositories
-unmanaged. Use `unmatched_repositories: fallback` with a canonical
-`fallback_template` identity to apply an ordinary repository template to
-repositories without an explicit match:
-
-```yaml
-repositories:
-  scope:
-    include:
-      teams:
-        - cloud-services
-
-  settings:
-    collection_management: explicit
-    unmatched_repositories: fallback
-    fallback_template: repository:baseline
-```
-
-The referenced template can omit `match` when it is used only as a fallback. It
-remains real managed desired state: its settings, permissions, rulesets, and
-other declarations are reconciled normally. A fallback is not merged into
-templates that match explicitly. Exactly one explicit match always wins, and
-multiple explicit matches remain an error.
-
-Review the scope carefully before applying a baseline that grants broad team
-access. Scope exclusions are applied before matching; sensitive repositories
-must be explicitly matched to an appropriate template or excluded from scope.
-
-Use `octosmith resource list` to inspect the remaining in-scope resources and
-their template matches. Ignored unmatched resources remain visible in inspection
-and plan summaries. See the
-[CLI reference](../packages/cli/README.md#resource-list) for text/JSON output
-and exit behavior.
+This guide concentrates on the behavior of the effective configuration,
+including bootstrap, secret reconciliation, and file delivery.
 
 ## Templates
 
-Each repository in scope that is managed must resolve to exactly one template.
-Regular template selectors are evaluated first. If none match, the configured
-unmatched policy errors, ignores the repository, or selects the fallback
-template. A fallback template may define `match`; that selector still
-participates in regular matching, and the template can also be selected as the
-fallback when no regular template matches.
-
-Templates are discovered recursively under `templates/`. Their canonical
-identity is `<kind>:<relative-path-without-extension>`, so
-`templates/team-a/backend.yml` is `repository:team-a/backend`. The optional
-`name` field is display-only and does not participate in identity.
-
-A fallback-only template can omit `match` and compose fragments like any other
-template:
-
-```yaml
-version: 1
-kind: repository
-
-includes:
-  - ../fragments/repository-baseline.yml
-  - ../fragments/default-branch-protection.yml
-
-repository: {}
-```
-
-```yaml
-version: 1
-kind: repository
-
-match:
-  include:
-    names:
-      - "service-*"
-
-repository:
-  settings:
-    has_issues: true
-
-  teams:
-    - name: platform
-      permission: maintain
-
-  files:
-    CODEOWNERS:
-      ensure: exact
-      source: files/CODEOWNERS
-```
-
-Templates can manage repository settings, teams, custom properties, Actions
-settings and values, Dependabot secrets, rulesets, environments, and files.
+Files under `templates/` select repositories and describe their desired state.
+They may compose reusable fragments; their canonical identity is derived from
+their path. See the [repository template reference](repository-template.md) for
+all supported fields, matching, fallback-only templates, and the complete
+[fragment composition rules](repository-template.md#fragments-and-document-composition).
 
 ### Default branch and automatic initialization
 
@@ -302,7 +208,7 @@ either delivery mode. Default-branch changes, rulesets and archival
 archival runs last. Branch precedence is composed template, GitHub-resolved
 organization default on the new repository, then documented `main`. Empty file
 sets produce an empty commit without a placeholder. See
-[creation and recovery](../packages/cli/README.md#resource-create). Ordinary
+[creation and recovery](cli/resource-commands.md#resource-create). Ordinary
 plan/apply still uses the existing initialization behavior above. An
 already-satisfied `archived: false` is not pending work, and unarchiving is
 allowed before bootstrap. Configured deferred work is retained on post-creation
@@ -382,34 +288,15 @@ repository:
 
 ### Create-only bootstrap commands
 
-Templates and repository fragments may declare an ordered executable list:
-
-```yaml
-repository:
-  post_create_commands:
-    - command: dotnet
-      args: [new, editorconfig]
-    - command: dotnet
-      args: [new, globaljson]
-  files:
-    .editorconfig:
-      ensure: exact
-      source: files/.editorconfig
-    obsolete.txt:
-      ensure: absent
-```
-
-`command` is a required nonempty, non-whitespace string naming an executable (or
-executable path). `args` is an optional array of strings, defaulting to `[]`.
-Unknown fields, scalar command entries, conditions and environment declarations
-are rejected during configuration loading. There is no shell mode, argument
-interpolation, runtime-value expansion or command-specific configuration.
-Arguments are passed literally, including spaces, `$`, `%` and shell
-punctuation.
+The template's
+[`repository.post_create_commands`](repository-template.md#post_create_commands)
+list configures trusted executables for initial creation, not ongoing
+reconciliation. The template reference defines its fields and whole-list
+composition rules.
 
 Commands execute **only** during actual `resource create`, after local Git
 initialization and identity configuration, sequentially in the temporary
-repository root. Plan, apply, inspection, validation and `--dry-run` never run
+repository root. Plan, apply, inspection, validation, and `--dry-run` never run
 them or probe executable availability. The execution host must have the tools
 installed and accessible on `PATH` (or use an explicit executable path).
 
@@ -423,121 +310,41 @@ filters and line-ending conversions, preserving on-disk bytes. Generated
 executable bits are preserved on Linux; native Windows uses regular file mode.
 Paths are checked against the same portable safety rules as managed files,
 including ignored output. Symlinks, special files, case-colliding paths, unsafe
-names and nested Git directories are rejected; root `.git` internals are
+names, and nested Git directories are rejected; root `.git` internals are
 excluded. Commands must not modify Git metadata or create their own commits.
 
 These are **trusted operator-supplied programs, not a sandbox**. They run with
 the host user's filesystem/network privileges and can have external side
 effects. Octosmith supplies an isolated environment: host `PATH` (plus
-`SYSTEMROOT` on Windows), temporary `HOME`/`XDG_CONFIG_HOME`/temp directories
+`SYSTEMROOT` on Windows), temporary `HOME`/`XDG_CONFIG_HOME`/temp directories,
 and bootstrap Git settings. It does not forward arbitrary host variables,
-credentials or runtime secrets. Tools relying on host-specific environment
+credentials, or runtime secrets. Tools relying on host-specific environment
 configuration may need an explicit executable path or operator setup.
 Executables are launched directly, with no interactive input; stdout/stderr are
 captured, not streamed.
 
 A launch failure or nonzero exit stops the sequence immediately, with no
-materialization, staging, commit or push afterward. Lifecycle failure
+materialization, staging, commit, or push afterward. Lifecycle failure
 `post_create_command` reports only the one-based `failedCommand` ordinal, not
 arguments or raw output. Temporary storage is cleaned up; the new remote is
 retained and `pushAttempted` is false. Creation is nontransactional: external
 command side effects are not rolled back. Correct the failure and initialize the
 retained repository manually, then use ordinary plan/apply. Do not rerun create,
-automatically retry commands or delete the remote. Preview shows ordered
+automatically retry commands, or delete the remote. Preview shows ordered
 executable names/count only; generated file counts remain unknown until
-execution.
-
-This list uses existing fragment precedence: nested includes first, includes in
-declaration order, then the template. A later `post_create_commands` list
-**replaces the whole earlier list**, preserving its own order; `[]` clears it.
-Commands are never merged by executable name or appended implicitly.
+execution. See the
+[CLI creation guide](cli/resource-commands.md#resource-create) for lifecycle
+output and recovery.
 
 ### Fragment composition
 
-Repository templates may compose reusable desired-state fragments with
-root-level `includes`. Include paths are resolved relative to the document
-declaring them, so fragments may include other fragments using paths relative to
-their own location.
-
-```yaml
-version: 1
-kind: repository
-
-match:
-  include:
-    properties:
-      type: backend
-
-includes:
-  - ../fragments/common.yml
-  - ../fragments/dotnet.yml
-
-repository: {}
-```
-
-Fragments are typed documents rather than partial templates:
-
-```yaml
-version: 1
-kind: fragment
-resource: repository
-
-repository:
-  settings:
-    has_wiki: false
-```
-
-A fragment may contain only `includes`, which allows composition bundles. Empty
-fragments are invalid. Repository templates still require their `repository`
-payload; use `repository: {}` when all desired state comes from included
-fragments.
-
-Composition is deterministic. Objects merge recursively, and scalar values from
-later inputs replace earlier values. Schema-defined named collections merge by
-identity, preserving the order of inherited entries, replacing matching entries,
-and appending new ones:
-
-- `teams`, `rulesets`, and `environments` use their `name`.
-- Actions, Dependabot, and environment `secrets` use the destination secret name
-  (the string value or `to` in a renamed secret).
-- Actions and environment `variables` use the destination variable name (the
-  string value, `to`, or `name`).
-- Rules within the same named ruleset merge by `type`, replacing a matching rule
-  atomically rather than merging its parameters.
-
-Matching rulesets and environments recursively merge their object fields. A
-ruleset cannot change an explicitly inherited `target` to another target under
-the same name: composition fails instead of inheriting potentially incompatible
-conditions and rules. Matching teams, secrets, and variables replace the earlier
-entry as a whole, so changing a variable from `from`/`to` to `name`/`value` does
-not mix representations.
-
-A document cannot declare the same identity twice in one named collection,
-including nested environment secrets and variables. Validation reports the
-collection path, duplicate identity, positions, and source file. Overrides
-across different fragments and templates remain supported. A later empty named
-collection (`teams: []`, for example) clears inherited entries.
-
-Array replacement remains the default for paths without an explicit policy,
-including OIDC claims and ruleset bypass actors. `post_create_commands`
-explicitly uses whole-list replacement, not identity merging. Supported identity
-merges are opted in by Octosmith itself; YAML authors do not configure merge
-modes. A CI test requires an explicit decision for primary repository
-collections and checks that registered paths exist. Nested arrays are opt-in: a
-newly added nested array can retain the default replacement behavior without a
-declaration. Includes are applied in declaration order and the local template is
-applied last.
-
-Nested includes are limited to 32 levels and must remain within the
-configuration root after path canonicalization. Cycles are rejected across the
-full include chain. If the same canonical fragment is reached repeatedly while
-composing one root template, it is applied only at its first depth-first
-occurrence. This de-duplication is scoped per root template, so the same
-fragment can be reused by multiple templates independently.
-
-Team permissions accept GitHub's built-in permission names. The user-facing
-aliases `read` and `write` are normalized to GitHub's REST API values `pull` and
-`push` respectively; custom repository-role names are preserved.
+Templates support ordered `includes` of reusable, typed fragment documents. The
+[repository template reference](repository-template.md#fragments-and-document-composition)
+is canonical for depth-first resolution, path safety, merge precedence,
+identity-aware arrays, duplicate detection, and repeated fragments. In
+particular, named collections merge by destination identity while other arrays
+replace by default. `source` file paths stay relative to the configuration root,
+not to the fragment.
 
 ## Collection management
 

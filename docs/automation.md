@@ -103,7 +103,7 @@ deleted. Creation makes one local Git commit and at most one push;
 default-branch work, all rulesets and archival follow a confirmed push, with
 archival last. Inspect branch/SHA before recovering an uncertain push; never
 rerun create for a retained repository. See
-[creation recovery](../packages/cli/README.md#resource-create). Ordinary apply
+[creation recovery](cli/resource-commands.md#resource-create). Ordinary apply
 retains its existing bootstrap behavior.
 
 ## Generated workflows
