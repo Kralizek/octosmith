@@ -1,18 +1,254 @@
-# Octosmith Local E2E Acceptance Report
+# Octosmith E2E Acceptance Report
 
 **Run date:** 2026-10-30\
 **Acceptance target:** GitHub repository creation from epic #17 and issues
 #108–#113\
-**Overall result:** **Core bootstrap and remote file behavior passed on
-disposable repos; full Octosmith CLI creation/reconciliation is blocked for the
-authorized personal-account target**
+**Current overall result:** **Full Octosmith CLI create → bootstrap → reconcile
+→ subsequent plan/apply lifecycle passed for successful scenarios against the
+authorized `grupify` organization. The workflow-file push remains blocked by
+missing `Workflows: write`; expected failure and recovery scenarios behaved
+safely.**
 
-## Executive summary
+## Latest continuation: full CLI against `grupify`
 
-This continuation performed real GitHub operations under the explicitly
-authorized personal account `Kralizek`, using only private repositories named
-with the `octosmith-e2e-` prefix. Nine new repositories were created and none
-were deleted.
+This is the current authoritative acceptance result and supersedes the earlier
+personal-account limitation for the full lifecycle. The authorized `grupify`
+target is an organization, unlike the personal account used in the prior
+continuation. Every repository below was created by Octosmith's actual
+`resource create` CLI; no `gh repo create` or direct `LocalGitBootstrap` call
+was used for this organization run.
+
+The CLI completed creation, classification, Git bootstrap, and immediate and
+deferred reconciliation for A-core, B, C, D, both E variants, and the assisted H
+case. Later ordinary CLI plan/apply was also run. A separate workflow fixture
+reached the real Git push and failed with `push_rejected`: the current token
+does not have the additional `workflow` scope required to create
+`.github/workflows/*`. F and G intentionally failed before pushing content; F
+was then recovered with ordinary CLI `plan` and `apply`. All ten created
+organization repositories are private, use the `octosmith-e2e-` prefix, and
+remain in place. No repository was deleted.
+
+### Organization and permission verification
+
+| Check                                          | Result                                                                                                                                                        |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Authenticated user                             | `Kralizek` (`type: User`)                                                                                                                                     |
+| Organization                                   | `grupify` (`type: Organization`)                                                                                                                              |
+| Membership                                     | Active, `admin` role                                                                                                                                          |
+| Organization default repository permission     | `read`                                                                                                                                                        |
+| `members_can_create_repositories`              | `true`                                                                                                                                                        |
+| `members_can_create_private_repositories`      | `true`                                                                                                                                                        |
+| `members_can_create_public_repositories`       | `true`                                                                                                                                                        |
+| Actual private repo creation through Octosmith | Passed for all successful scenarios                                                                                                                           |
+| Repository-scoped settings                     | Description, `has_issues`, and default branch updates succeeded on test repos                                                                                 |
+| Repository Actions variables                   | Four synthetic values created and re-read for E-replace                                                                                                       |
+| Workflow file push                             | Blocked: `Workflows: write` required but `gh auth status` reports only `repo`, `read:org`, and `admin:public_key` among the shown scopes; no `workflow` scope |
+| Organization rulesets visibility               | Not verifiable with current token: `GET /orgs/grupify/rulesets` reported missing `admin:org`. No organization ruleset or setting mutation was attempted.      |
+
+`deno run -A packages/cli/mod.ts template permissions a-workflow --creation
+--format json --path /tmp/octosmith-e2e-grupify-20261030`
+reports repository `administration: write`, selector metadata `read`, Git
+bootstrap `contents: write`, and `workflows: write`. The account's active
+org-admin membership and org create flags were verified separately. Actual
+A-core creation, metadata updates, branch update, and other repository file
+pushes succeeded, confirming the relevant current create/settings/content
+permissions.
+
+### Toolchain and source revision
+
+| Item                                                | Observed                                                                                                                           |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Octosmith source revision tested                    | `1bac1cbe4d5779519dee0ae0cf216b1d4f7af880` (`master`, includes merge commit #123); report-only PR changes do not alter source      |
+| Working PR branch before this report update         | `report/e2e-acceptance-20261030`, head `82b4a37333df7b36f8f8fa2ec71508dd89667601`                                                  |
+| OS                                                  | Linux x86_64, WSL2 kernel `6.18.54.1-microsoft-standard-WSL2`                                                                      |
+| Deno / Git / GitHub CLI                             | Deno `2.9.7` stable / Git `2.55.0` / `gh` `2.102.0`                                                                                |
+| CLI invocation                                      | `deno run -A packages/cli/mod.ts resource create ...` from the checked-out source                                                  |
+| Existing local validation at tested source revision | `deno task check`: schema sync, formatting, lint, documentation checks, 1041 tests passed / 0 failed; OpenCLI contract tests 10/10 |
+
+### Isolation and exact scope
+
+The isolated organization configuration is
+`/tmp/octosmith-e2e-grupify-20261030/octosmith.yml`:
+
+```yaml
+version: 1
+organization: grupify
+repositories:
+  scope:
+    include:
+      names: ["octosmith-e2e-*"]
+      visibility: private
+  settings:
+    unmatched_repositories: ignore
+  file_changes:
+    mode: direct
+```
+
+Each template has an exact-name selector within this prefix. Every intended name
+was queried and verified unused immediately before its actual CLI create. An
+out-of-prefix name was rejected at preflight as `metadata_outside_intersection`.
+The final actual CLI `resource list` returned exactly **10 matched, 0 fallback,
+0 unmatched** resources. The GitHub org inventory query returned exactly these
+ten private prefixed repositories; no assisted-alpha repository exists.
+
+### Actual CLI creation results
+
+| Scenario                                                         | Actual CLI result                                                                                                                                                                                                                                                                                                                               | Remote URL and initial history                                                                                                                                               |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A-core — declarative files without workflow                      | **PASS.** `resource create a-core` returned `completed`; created metadata, `main`, 10 managed files, one bootstrap push, successful deferred branch reconciliation.                                                                                                                                                                             | [A-core](https://github.com/grupify/octosmith-e2e-20261030-a-core), root commit `e91ecbdce6381f02976576e000893eb854c7fc3c`                                                   |
+| A-workflow — workflow permission probe                           | **BLOCKED by credential scope.** `resource create a-workflow` created the private repo and reconciled description; local bootstrap prepared one commit and attempted push, then returned `bootstrap_failed`, stage `git_bootstrap`, reason `push_rejected`. No branch or remote commit exists. No raw Git diagnostic or credential was exposed. | [A-workflow](https://github.com/grupify/octosmith-e2e-20261030-a-workflow), no branches/commits; remote default still `master`                                               |
+| B — generated files                                              | **PASS.** `resource create b-generated` returned `completed`; generator commands ran in order and 8 initial tracked files were bootstrapped. Later CLI plan/apply added one desired file; final plan is clean.                                                                                                                                  | [B](https://github.com/grupify/octosmith-e2e-20261030-b-generated), initial `702b4486129b0a485032f3e0895fc9bc1d080a67`; later `8cfde9d3eeac4c25cf4e3448092f3c73d2ffe015`     |
+| C — generated/declarative collisions                             | **PASS.** `resource create c-collisions` returned `completed`; 9 files in one root commit, including declarative precedence and absent/ignored rules. Subsequent plan and apply unchanged.                                                                                                                                                      | [C](https://github.com/grupify/octosmith-e2e-20261030-c-collisions), root `512e1f3fb33ad297f437cf5f0b4fa969c1a9063d`                                                         |
+| D — empty content                                                | **PASS.** `resource create d-empty` returned `completed`; created exactly one empty root commit on `main`; subsequent plan/apply unchanged.                                                                                                                                                                                                     | [D](https://github.com/grupify/octosmith-e2e-20261030-d-empty), root `11f4a3adef39de12dfae360db805c1182c1043d8`                                                              |
+| E-replace — two fragments, root override and command replacement | **PASS.** `resource create e-replace` returned `completed`; composed files and Actions-variable collections reconciled; command list was replaced by the template list. Subsequent plan is clean.                                                                                                                                               | [E-replace](https://github.com/grupify/octosmith-e2e-20261030-e-replace), root `b3e15c261eab243270c66ade38579cf043fe255c`                                                    |
+| E-clear — explicit empty command array                           | **PASS.** `resource create e-clear` returned `completed`; fragments composed and `post_create_commands: []` cleared inherited commands. Subsequent plan is clean.                                                                                                                                                                               | [E-clear](https://github.com/grupify/octosmith-e2e-20261030-e-clear), root `a8ee3bc35886872c044560f41135c2080f0ecfb4`                                                        |
+| F — failed command and recovery                                  | **PASS for failure/recovery behavior.** Actual `resource create` retained the private repo, reported `bootstrap_failed`, `post_create_command`, ordinal `#1`, and no commit/push; later command did not run. Ordinary CLI plan identified initialization/file/cleanup; ordinary CLI apply completed those; final plan was unchanged.            | [F](https://github.com/grupify/octosmith-e2e-20261030-f-failure), recovery commits `8e7e913935f7623c8dd036598f98419ca8ecd626` and `49fbdcf47cc927ceb80072cee304547b351064f0` |
+| G — unsafe generated Git-internal alias                          | **PASS for safe refusal.** Actual `resource create` created the repo and applied its repository description, then returned `bootstrap_failed`, `invalid_files`; no commit, push, or remote branch.                                                                                                                                              | [G](https://github.com/grupify/octosmith-e2e-20261030-g-unsafe), empty remote                                                                                                |
+| H — assisted naming                                              | **PASS.** A local PTY selected option 2; CLI presented and created that same resolved name. Actual lifecycle returned `completed` and bootstrapped one empty root commit. PTY `:cancel` created no alpha repo.                                                                                                                                  | [H-beta](https://github.com/grupify/octosmith-e2e-20261030-h-assisted-beta), root `62ac54610a5f525920e196e280f27ea957649d92`; H-alpha absent                                 |
+
+The pre-existing-name collision check ran actual
+`resource create c-collisions --name octosmith-e2e-20261030-c-collisions` after
+the repository existed. It returned `name_collision` before any mutation and
+stated that no repository was created or adopted. Strict ambiguous naming
+without `--assisted` returned `preflight_rejected`. Assisted mode with JSON,
+dry-run, and non-TTY inputs was rejected before mutation. No PRs were opened for
+any repository.
+
+### Preview consistency
+
+Previews used the same isolated config and source CLI. B JSON preview ran while
+its selected repo name was still unused and resolved the same explicit identity
+(`grupify/octosmith-e2e-20261030-b-generated`), private visibility, branch
+`main`, `.gitignore`, and two ordered commands later reflected in actual
+creation. Its preview said no repository was created and no command executed. E
+JSON preview resolved five declarative files plus the template replacement
+command; actual E-replace had those five effective declarative files plus only
+the replacement command's generated file. E-clear JSON preview had four
+declarative files and zero commands; actual E-clear had exactly that effective
+file set and no generator-created output. A text and JSON preview both resolved
+the same A-core identity/private visibility and ten planned files as the
+successful actual A-core creation. Preview output omits file contents and
+command arguments.
+
+### Independent verification: bytes, modes, history and reconciliation
+
+GitHub API queries and fresh clones independently verified visibility, default
+branch, branch head, commit parentage, tree entries, blob bytes, Actions
+variables, and PR count. Every successful initial bootstrap listed below is one
+parentless `Initial repository bootstrap` commit. B has one additional expected
+ordinary reconciliation commit; F has two commits only because ordinary recovery
+runs initialization then managed-file delivery.
+
+- **A-core exact contents:** all ten remote SHA-256 values match source fixture
+  hashes. Examples: README
+  `ed1bd60c01ab719cb76ab1d0a445f28ce830cbe7e8f2904cec1f5d402dc87fb5`, nested
+  JSON `fb47d7bc8471061129cde2350a10791ad628eb9a58a830f3f0d0bd5b3afbda83`,
+  `filename with spaces.txt`
+  `f63f9d7dc8573b19cff42d53b01063c1b02dcaa517b23c5599079ad6b6e15faa`,
+  `-leading.txt`
+  `eeb6ed51ba299816fa1dd7968263d1d9026dd17b30d8c59eca3a5eca749c2b18`, UTF-8
+  `16ed4eebde440dc0ba8cc982fb06ecab26346bd7fc0881fbf4f72af6bc9638ff`,
+  no-final-newline
+  `e06d68ba55c36d52fcc37043631be324050b3249873cf53ea96900c132058385`, and CRLF
+  `98ab4d3aeab1e120560e942e2df6a0db1147bf94bafcf1590000ffb3c2b6fc80`.
+- **B generator:** fresh clone shows `order.txt` exactly `first\nsecond\n`; root
+  and nested files; UTF-8 file; `binary.dat` SHA-256
+  `801e856b1349a0dca69f3df3f8ae7076df76c863de2b5c6356b9985f0185a6de`, matching
+  bytes `00 01 02 ff 00 80`; generated CRLF bytes remain `0d 0a`; executable
+  script mode is `100755`; ignored generated file is not in the tree. The later
+  managed-file update produced the second commit whose parent is the bootstrap
+  commit. A temporary sentinel post-create command was added to config after
+  creation; ordinary apply remained unchanged and the sentinel output was
+  absent, proving commands are not rerun by normal apply.
+- **C precedence:** one initial tree contains `.editorconfig`, `.gitattributes`,
+  `.gitignore`, README, `crlf.txt`, executable script, declarative
+  `existing.txt`, generated-only file, and managed-ignored file. Declarative
+  README and editorconfig blob hashes match their source; the `ensure: exists`
+  file matches declarative bytes. `remove-me.txt`, `nested/remove.txt`, and
+  ignored `ignored.txt` are absent. Explicitly managed `managed-ignored.txt`
+  remains tracked despite `.gitignore`. `.gitattributes` specifies text/EOL and
+  a synthetic clean filter for `crlf.txt`; a fresh clone configured with a local
+  `tr a-z A-Z` clean filter produces hypothetical object ID
+  `683418e7682e7b86ba4ea84ff1f5deea83561e0f`, while the remote raw blob is
+  `4a046735c88b47e53f3414069c394a8fe378a825` and its actual bytes retain CRLF.
+  The synthetic filter was local-only and not pushed.
+- **D empty tree:** `main` has only commit
+  `11f4a3adef39de12dfae360db805c1182c1043d8` with no parents; tree ID is the
+  canonical empty tree `4b825dc642cb6eb9a060e54bf8d69288fbee4904`; zero blobs.
+- **E effective collection composition:** GitHub Actions variable reads for
+  E-replace returned `BASE_ONLY=base`, `SECOND_ONLY=second`,
+  `SHARED_VALUE=template-wins`, and `ROOT_ONLY=root`. E-clear contains only the
+  inherited `BASE_ONLY`, `SECOND_ONLY`, and `SHARED_VALUE=fragment-base`; it has
+  no template-only `ROOT_ONLY`. Both repositories have the effective fragment
+  files and root override; E-replace alone has `command-replacement.txt`;
+  neither contains inherited command output.
+- **F recovery:** final history has root
+  `8e7e913935f7623c8dd036598f98419ca8ecd626`
+  (`Octosmith: initialize
+  repository`) and child
+  `49fbdcf47cc927ceb80072cee304547b351064f0`
+  (`Octosmith: reconcile managed files`). The tree contains only `recovery.txt`;
+  later-command marker is absent. Final targeted CLI plan is clean.
+- **A-workflow/G failure remotes:** independently queried branch lists are
+  empty; no initial content was pushed. A-workflow's local attempted commit SHA
+  in the CLI result was `3f1bf630933740c8f307022899d97f2cccfcece5`; it is not
+  present remotely.
+- **Settings:** GitHub API confirms A-core private, `main`, intended
+  description, and `has_issues: false`. E repositories similarly accepted their
+  repo-specific description, `has_issues: false`, and deferred
+  `default_branch: main`; Actions variables were reconciled successfully. These
+  are repository-scoped settings only.
+
+### Result and remaining limitation
+
+The full CLI lifecycle is now demonstrated against a real GitHub
+**organization** for A-core, B, C, D, E-replace, E-clear, and assisted H: create
+→ classify → repository API reconciliation → one initial Git commit/push →
+deferred reconciliation → clean subsequent plan/apply. B also passed a later
+file change. F proves ordinary recovery after bootstrap failure. G and the
+workflow test prove safe pre-push/local bootstrap refusal paths. Scenario A's
+separate workflow file remains blocked only on `Workflows: write`, not
+repository creation or ordinary `Contents: write`. No implementation defect was
+reproduced in these runs.
+
+**Operational conclusion:** core organization repository creation is now
+operationally verified for the exercised supported paths. Do not claim the
+workflow-file path is verified for the current credential until an authorized
+token with `Workflows: write` can be used to rerun A-workflow. Organization
+rulesets could not be enumerated due missing `admin:org` credential scope; no
+org-wide settings or rulesets were changed.
+
+### Organization test resource inventory
+
+All ten repositories below are private, in `grupify`, with the exact prefix. No
+PRs exist. A-workflow and G have empty Git remotes after intended failures. No
+repository was deleted.
+
+| Repository                                                                           | Final state                                                                               | Manual cleanup    |
+| ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | ----------------- |
+| [A-core](https://github.com/grupify/octosmith-e2e-20261030-a-core)                   | `main`, one root commit, 10 files, clean plan                                             | Operator decision |
+| [A-workflow](https://github.com/grupify/octosmith-e2e-20261030-a-workflow)           | Empty remote after rejected workflow push                                                 | Operator decision |
+| [B-generated](https://github.com/grupify/octosmith-e2e-20261030-b-generated)         | `main`, initial + one later file-reconciliation commit, 9 files, clean plan               | Operator decision |
+| [C-collisions](https://github.com/grupify/octosmith-e2e-20261030-c-collisions)       | `main`, one root commit, 9 files, clean plan                                              | Operator decision |
+| [D-empty](https://github.com/grupify/octosmith-e2e-20261030-d-empty)                 | `main`, one empty root commit, clean plan                                                 | Operator decision |
+| [E-replace](https://github.com/grupify/octosmith-e2e-20261030-e-replace)             | `main`, one root commit, composed files and four Actions variables, clean plan            | Operator decision |
+| [E-clear](https://github.com/grupify/octosmith-e2e-20261030-e-clear)                 | `main`, one root commit, composed files and three inherited Actions variables, clean plan | Operator decision |
+| [F-failure](https://github.com/grupify/octosmith-e2e-20261030-f-failure)             | `main`, recovered with two commits and one managed file, clean plan                       | Operator decision |
+| [G-unsafe](https://github.com/grupify/octosmith-e2e-20261030-g-unsafe)               | Empty remote after generated Git-internal path refusal                                    | Operator decision |
+| [H-assisted-beta](https://github.com/grupify/octosmith-e2e-20261030-h-assisted-beta) | `main`, one empty root commit, clean apply                                                | Operator decision |
+
+H-assisted-alpha was not created. The final organization inventory query
+returned exactly these ten `octosmith-e2e-*` repositories. Previous
+personal-account test repositories from the historical continuation remain
+separate under `Kralizek`; they are not included in this organization inventory.
+
+## Previous continuation: personal-account component testing
+
+The following sections preserve the earlier `Kralizek` user-account run as
+historical context. They are not the current organization-run result. authorized
+personal account `Kralizek`, using only private repositories named with the
+`octosmith-e2e-` prefix. Nine new repositories were created and none were
+deleted.
 
 The critical limitation was discovered by executing the source CLI: Octosmith's
 creation and discovery APIs call organization-only endpoints such as
@@ -30,7 +266,7 @@ run against the individual test repositories. This verified real pushes, commit
 history, blobs, modes, command behavior, failure handling, and recovery. **These
 results are not represented as full `resource create` CLI E2E passes.**
 
-## Safety and scope
+### Previous run: safety and scope
 
 - Target identity was explicitly confirmed as `Kralizek` (`gh api user` returned
   `type: User`). The synthetic `acme` fixture owner was not used for any GitHub
@@ -52,7 +288,7 @@ results are not represented as full `resource create` CLI E2E passes.**
 - No organization-wide `apply` was run. No bootstrap or later pull request was
   created; every test repository has zero PRs.
 
-## Environment
+### Previous run: environment
 
 | Item                   | Observed                                                                                 |
 | ---------------------- | ---------------------------------------------------------------------------------------- |
@@ -70,7 +306,7 @@ formatting, lint, documentation checks, and **1041 tests passed / 0 failed**.
 The targeted OpenCLI contract test passed **10 / 10**. The report was formatted
 and the check is rerun before updating this PR.
 
-## Personal-account support limitation
+### Previous run: personal-account support limitation
 
 Evidence collected:
 
@@ -98,7 +334,7 @@ simulated failure. `gh repo create` can create the authorized personal
 repositories, which allowed the lower-level bootstrap and state engine to be
 tested against actual remote repositories.
 
-## Local configuration, previews, and execution method
+### Previous run: local configuration, previews, and execution method
 
 The isolated root config contains:
 
@@ -134,7 +370,7 @@ unsupported **repository creation/discovery endpoint**, not file materialization
 or bootstrap logic. Logs and manifest are in the isolated temporary workspace:
 `/tmp/octosmith-e2e-20261030/execution.log` and `manifest.json`.
 
-## Scenario results
+### Previous run: scenario results
 
 | Scenario                              | Expected behavior                                                                                                          | Actual behavior and status                                                                                                                                                                                                                                                                                                                               | GitHub repository                                                                             |
 | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -152,7 +388,7 @@ or bootstrap logic. Logs and manifest are in the isolated temporary workspace:
 | CLI scope safety                      | Reject names outside disposable selector before mutation                                                                   | **PASS.** `outside-prefix-test` was rejected at preflight with `metadata_outside_intersection`; no API mutation.                                                                                                                                                                                                                                         | None created                                                                                  |
 | CLI plan/discovery                    | Targeted normal CLI plan works on authorized account                                                                       | **BLOCKED by account type.** `plan` failed at organization repository discovery (`GET /orgs/Kralizek/repos`, 404). Per-repository source library read/plan/apply operations were tested where applicable.                                                                                                                                                | N/A                                                                                           |
 
-## Independent remote evidence
+### Previous run: independent remote evidence
 
 GitHub API queries and fresh `gh repo clone` operations independently verified
 private visibility, `master` as default branch, branch heads, commit ancestry,
@@ -242,22 +478,22 @@ No test repo had an open or closed pull request.
   for those organization-only team declarations. No org-wide settings were
   modified.
 
-## Findings
+### Previous run: findings
 
-### Confirmed product limitation
+#### Confirmed product limitation
 
 | Severity                       | Reproduction / sanitized result                                                                                                                                                                                                                                | Expected vs. observed                                                                                                                                                                                                           | Suspected component                                                                                               | Recommendation                                                                                                                                                                                     |
 | ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | High for this requested target | Run the source CLI `resource create` with `organization: Kralizek` and an unused prefixed name; independently `gh api user` returns `type: User`. Result: `creation_failed`, stage `creation`, HTTP 404. `plan` fails at org repository listing with HTTP 404. | Expected: create/discover personal-account repositories, as authorized. Observed: Octosmith uses `/orgs/{owner}/repos` and `/orgs/{owner}/repos` discovery, which cannot address a user account. No repo is created by the CLI. | `createOrganizationRepository` and `discoverRepositories`; current CLI/library contract is organization-oriented. | Add explicit account/owner support with user-repository create and discovery endpoints, or run the full CLI acceptance against an authorized organization. Do not infer a production organization. |
 
-### Environment / permission limitations
+#### Environment / permission limitations
 
 | Severity | Reproduction / sanitized result                                                                                                                                                                                                                                                                                                             | Expected vs. observed                                                                                                  | Likely requirement                                                                         | Recommendation                                                                                                                                                   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Medium   | Scenario A `LocalGitBootstrap` prepared 11 files and a local root commit, then returned `push_rejected`; no branch or commit exists remotely. `template permissions a-declarative --creation` reports `Workflows: write`; current `gh auth status` scopes do not include `workflow`. Bootstrap deliberately suppresses raw Git diagnostics. | Expected: push workflow file in the initial commit. Observed: rejected push and no remote history.                     | GitHub workflow write authorization is separately required for `.github/workflows/ci.yml`. | Re-run A only with an operator-authorized credential carrying workflow-write permission. This will not resolve the personal-account `/orgs` endpoint limitation. |
 | Medium   | E team reconciliation returned HTTP 404 from `/orgs/Kralizek/teams/...`; `Kralizek` is a user account.                                                                                                                                                                                                                                      | Expected: reconcile two declared teams. Observed: org-only team endpoint is inapplicable; no team assignment occurred. | Teams require a GitHub organization.                                                       | Use an actual authorized test organization for team-resource verification, or omit org teams for personal-account tests.                                         |
 
-### Confirmed defects
+#### Confirmed defects
 
 No defect was isolated in managed-file materialization, raw blob staging,
 generated/declarative precedence, empty-root bootstrap, or tested recovery. The
@@ -265,7 +501,7 @@ full CLI workflow remains unverified because of the owner-type limitation; the
 bootstrap/reconciliation results above are component-level live tests, not a
 substitute for that missing full lifecycle.
 
-## Resource inventory
+### Previous run: resource inventory
 
 All listed repositories are private, under `Kralizek`, and have the
 `octosmith-e2e-` prefix. All require manual cleanup if the operator chooses;
@@ -286,7 +522,7 @@ none were deleted.
 No repository was created for assisted alpha/beta. The final account query found
 exactly these nine prefixed repositories and no additional test resources.
 
-## Final assessment
+### Previous assessment: personal-account run
 
 1. **Can Octosmith create a repository end-to-end?** Not for the explicitly
    authorized personal user account. The source CLI create attempt failed at the
@@ -338,3 +574,57 @@ results. Do **not** call epic #17 fully operationally verified or the complete
 repository-creation CLI production-ready yet: the required end-to-end
 create/discover/reconcile lifecycle could not be exercised through the CLI for
 the authorized personal-account target.
+
+## Current final assessment: organization CLI run
+
+1. **Can Octosmith create a repository end-to-end?** Yes for the exercised
+   private organization-repository paths: A-core, B, C, D, E-replace, E-clear,
+   and assisted H completed actual `resource create`. The workflow fixture
+   remains blocked on the token's missing workflow-write scope.
+2. **Does managed-file materialization work correctly?** Yes. Independently
+   cloned remote trees match the effective templates; B also accepted a later
+   managed-file update through ordinary `apply`.
+3. **Do generated files coexist correctly with declarative files?** Yes. C's
+   declarative exact/exists content wins over generated collisions,
+   generated-only content survives, and explicitly managed ignored content is
+   committed.
+4. **Are `exact`, `exists`, and `absent` handled correctly?** Yes for the
+   exercised files: C verified exact and exists precedence plus absent paths; D
+   verified an empty desired tree. No exception was observed.
+5. **Are `.gitignore` and `.gitattributes` honored as intended?** Yes for the
+   tested behaviors. Ignored un-managed output is absent, explicit managed
+   ignored content is included, raw CRLF bytes are preserved, and a fresh
+   clone's configured synthetic clean filter would have changed the blob ID
+   rather than altering the committed raw blob.
+6. **Does initial bootstrap always produce one commit?** Every successful
+   initial bootstrap in this run produced exactly one parentless commit,
+   including D/H's empty trees. A-workflow was rejected before remote push; F/G
+   deliberately stopped before bootstrap push. The evidence supports the
+   successful cases, not a universal claim for every GitHub policy/token.
+7. **Is the created repository correctly reconciled afterward?** Yes for all
+   completed paths: effective selectors matched all ten repositories, repository
+   settings and E's Actions variables were observed remotely, subsequent plans
+   were clean, and ordinary apply did not rerun post-create commands.
+8. **Are failure reports and recovery paths operationally usable?** Yes for the
+   tested failures. F reported stage, command type, and ordinal without exposing
+   sensitive command arguments/output; its retained empty repo was recovered
+   through ordinary Octosmith plan/apply. G refused the unsafe generated path
+   without a remote push.
+9. **Does assisted mode work correctly?** The local PTY selected a strategy and
+   the displayed name was the actual repository created. Cancellation created
+   nothing; non-TTY, JSON, and dry-run assisted combinations were rejected
+   before mutation.
+10. **What blocks calling epic #17 operationally verified?** The exercised
+    lifecycle is operationally verified for supported, non-workflow paths in
+    `grupify`. Re-run A-workflow with an operator-authorized credential carrying
+    `Workflows: write` before asserting workflow-file creation. Org rulesets
+    also could not be inspected with the current token (`admin:org` absent); no
+    ruleset change or org-wide mutation was attempted.
+
+**Current recommendation:** Octosmith's repository creation and bootstrap paths
+exercised here are production-capable for private organization repos when the
+token has the permissions required by the selected resources. The core create →
+bootstrap → reconcile → subsequent plan/apply lifecycle passed. Treat
+workflow-containing bootstrap as permission-dependent and not yet verified with
+an appropriately scoped token; do not extend this result to uninspected org
+rulesets or unsupported resource types.
