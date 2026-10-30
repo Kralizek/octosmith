@@ -95,6 +95,7 @@ on stderr; successfully discovered resources are still reported.
 ```sh
 octosmith resource create services --path ./configuration
 octosmith resource create services --name api-service --visibility private --path ./configuration
+octosmith resource create services --assisted --path ./configuration
 octosmith resource create services --format json --path ./configuration
 octosmith resource create services --dry-run --path ./configuration
 octosmith resource create services --name team-orders-svcs --visibility internal --dry-run
@@ -116,9 +117,43 @@ with no `*` or `?` use their literal name. Use `--name` to override generation,
 or to select among multiple patterns. Visibility is inferred when uniquely
 constrained; use `--visibility` when multiple valid values remain. Ambiguities
 and configuration errors are returned as structured diagnostics (including in
-JSON output) and exit unsuccessfully before any GitHub access. No prompting is
-performed. Names are generated once per execution; a collision fails without
-adopting an existing repository or generating a replacement name.
+JSON output) and exit unsuccessfully before any GitHub access in the default
+**strict mode**, which never prompts. Names are generated once per execution; a
+collision fails without adopting an existing repository or generating a
+replacement name.
+
+### Assisted creation
+
+`--assisted` opts into resolving only genuine preflight ambiguities. It requires
+both stdin and stderr to be interactive terminals, and is incompatible with
+`--format json` and `--dry-run`. These checks happen before GitHub access.
+Questions use the terminal on stderr, not normal stdout output.
+
+- Multiple effective naming strategies: choose a numbered pattern. The shared
+  preflight generates the name securely and checks include/exclude constraints
+  and unique template classification. Patterns that cannot be safely resolved
+  are not selectable; supply an explicit `--name` instead.
+- No naming pattern: enter a repository name. Invalid manual names report the
+  ordinary preflight diagnostics and can be corrected.
+- Ambiguous visibility: choose a numbered visibility with a readable
+  description, limited to current effective constraints.
+
+Single naming strategies generate automatically; uniquely determined visibility,
+teams and custom properties never need confirmation. Explicit `--name` and
+`--visibility` bypass their questions; invalid explicit values fail instead of
+being replaced. Configuration errors, incompatible constraints and template
+overlaps cannot be bypassed by questions.
+
+Type `:cancel` at any question, send EOF, or interrupt with Ctrl+C to stop
+before creation. A closed input stream also cancels. No credentials or GitHub
+calls are needed until preflight succeeds. Each choice is fed back to
+authoritative preflight. The final resolved name is then passed explicitly to
+the existing creation lifecycle, which performs preflight again without
+generating a second name. Collision handling and all later
+bootstrap/reconciliation behavior remain unchanged; assisted mode never adopts
+or retries an existing repository.
+
+### Creation lifecycle and recovery
 
 Immediate reconciliation includes repository settings (except deferred fields),
 team permissions, custom properties, Actions settings/OIDC/variables/secrets,

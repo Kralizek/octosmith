@@ -39,6 +39,18 @@ created. Required teams/custom properties are assigned through the existing
 mutation sink and actually re-read through discovery. Only an in-scope, unique
 match for the explicitly selected template proceeds.
 
+Interactive hosts can first call `preflightRepositoryCreation` and resolve only
+its structured ambiguities. Pass an effective pattern as
+`RepositoryCreationInput.namingStrategy` to select the existing generator; the
+library validates it against current effective constraints, never as an
+arbitrary trusted pattern. See the
+[preflight input contract](programmatic-api.md). After preflight succeeds, hand
+`repository.name` and `repository.visibility` back as explicit creation inputs
+with the same loaded configuration. Creation still re-runs authoritative
+preflight before GitHub access, but does not generate another name. The CLI's
+`--assisted` does this on an interactive terminal; strict library/CLI callers
+remain noninteractive. No collision retry is added.
+
 Creation reuses runtime-reference/secret policies, composed desired-state
 resolution, `readCurrentState`, `buildPlan`, `applyPlan` and regular report
 builders. The reusable `scope: "github-only"` option on the state reader,

@@ -143,6 +143,7 @@ Deno.test("OpenCLI contract exposes explicit resource creation visibility", asyn
     [
       "name",
       "visibility",
+      "assisted",
       "dry-run",
       "include-secrets",
       "skip-missing-values",
@@ -161,6 +162,10 @@ Deno.test("OpenCLI contract exposes explicit resource creation visibility", asyn
   assertStringIncludes(
     command.examples?.map(({ content }) => content).join("\n") ?? "",
     "--dry-run --format json",
+  );
+  assertStringIncludes(
+    command.examples?.map(({ content }) => content).join("\n") ?? "",
+    "--assisted",
   );
 });
 

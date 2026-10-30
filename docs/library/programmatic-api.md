@@ -40,7 +40,8 @@ execution. `buildRepositoryCreationPreview` takes that specification and the
 re-run name generation, selectors, or classification, create another
 desired-state model, or plan against fictitious current state. Keep the
 specification as diagnostic output; the preview is a safe reporting projection,
-not an executable plan. Each separate execution runs preflight once.
+not an executable plan. Each creation operation runs authoritative preflight,
+even when its host already resolved choices interactively.
 
 The builder and separate text renderer do not access GitHub, credentials,
 runtime value providers, Git, or the filesystem. Preflight still performs normal
@@ -65,7 +66,25 @@ it never probes or runs them. The version 1 bootstrap projection adds
 `postCreateCommandCount`. Generated file counts remain unknown until execution;
 the preview's file count covers declarative present files only. See the
 [repository creation lifecycle](repository-creation.md) for command execution
-and runner injection. Assisted choices are not implemented.
+and runner injection.
+
+`RepositoryCreationInput.namingStrategy` accepts an exact pattern from the
+current effective `choices.name.alternatives`. Preflight checks membership in
+the fully analyzed intersection; arbitrary or stale patterns produce
+`invalid_name_strategy`. Incomplete or unsafe strategy analysis offers no
+selectable alternatives. Selecting a strategy reuses the ordinary secure
+generator, bounded attempts, exclusions and unique classification checks; it
+never trusts a caller-supplied generation pattern. An explicit `name` takes
+precedence: `namingStrategy` is ignored, even if stale or invalid, while the
+explicit name still undergoes ordinary validation and constraint checks.
+
+Hosts may collect ambiguous visibility, naming-strategy or required-name choices
+and re-run preflight with those inputs. Never prompt around unrelated semantic
+errors. After a ready result, preserve `specification.repository.name` and
+`visibility` as explicit inputs to `createRepository`, using the same loaded
+configuration. Do not rely on a previously generated name being generated again.
+The CLI implements this workflow with opt-in `resource create --assisted`; the
+library itself never prompts.
 
 ## Main API areas
 
