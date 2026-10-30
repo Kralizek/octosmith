@@ -198,7 +198,10 @@ export async function preflightRepositoryCreation(
   const hasNameConstraints = nameGroups.length > 0;
   const nameStrategyAnalysis = effectiveNameStrategies(nameGroups);
   const nameStrategies = nameStrategyAnalysis.patterns;
-  const nameAlternatives = nameStrategies.map((pattern) => ({ pattern }));
+  // Incomplete analysis must not advertise unproven patterns as selectable.
+  const nameAlternatives = nameStrategyAnalysis.complete
+    ? nameStrategies.map((pattern) => ({ pattern }))
+    : [];
   const selectedStrategy = input.name === undefined
     ? input.namingStrategy
     : undefined;
@@ -457,8 +460,6 @@ export async function preflightRepositoryCreation(
   } else if (
     generationStrategy === undefined
   ) {
-    // Incomplete analysis must not advertise unproven patterns as selectable.
-    const alternatives = nameStrategyAnalysis.complete ? nameAlternatives : [];
     diagnostics.push({
       code: "ambiguous_name_strategy",
       message:
@@ -466,7 +467,7 @@ export async function preflightRepositoryCreation(
       template: resolvedIdentity,
       path: "name",
     });
-    nameChoice = { status: "ambiguous", alternatives };
+    nameChoice = { status: "ambiguous", alternatives: nameAlternatives };
   } else {
     nameChoice = { status: "unresolved", alternatives: nameAlternatives };
   }

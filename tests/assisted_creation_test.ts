@@ -1,8 +1,10 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
 import {
+  buildRepositoryCreationPreview,
   createRepository,
   type LoadedConfiguration,
   preflightRepositoryCreation,
+  renderRepositoryCreationPreview,
   type RepositoryCreationInput,
   type RepositorySelector,
   type RepositoryTemplate,
@@ -302,6 +304,55 @@ Deno.test("assisted unsafe intersecting patterns and empty visibility alternativ
     assertEquals(result.specification.ready, false);
     assertEquals(result.questions, []);
     assertEquals(result.randomCalls, 0);
+  }
+});
+
+Deno.test("incomplete naming analysis exposes no partial alternatives in specifications or previews", async () => {
+  const loaded = configuration({
+    names: Array.from({ length: 257 }, (_, i) => `service-${i}-*`),
+    visibility: "private",
+  });
+  const cases: readonly {
+    input: RepositoryCreationInput;
+    status: string;
+    ready: boolean;
+  }[] = [
+    { input: { template: "services" }, status: "ambiguous", ready: false },
+    {
+      input: { template: "services", name: "service-0-orders" },
+      status: "explicit",
+      ready: true,
+    },
+    {
+      input: { template: "services", name: "../invalid" },
+      status: "invalid",
+      ready: false,
+    },
+    {
+      input: { template: "services", namingStrategy: "service-0-*" },
+      status: "invalid",
+      ready: false,
+    },
+  ];
+  for (const { input, status, ready } of cases) {
+    const specification = await preflightRepositoryCreation(loaded, input, {
+      randomBytes: () => {
+        throw new Error("Incomplete analysis must not generate");
+      },
+    });
+    assertEquals(specification.ready, ready);
+    assertEquals(specification.choices.name.status, status);
+    assertEquals(specification.choices.name.alternatives, []);
+    const preview = buildRepositoryCreationPreview(loaded, specification);
+    assertEquals(preview.choices.name.alternatives, []);
+    assertEquals(
+      JSON.parse(JSON.stringify(preview)).choices.name.alternatives,
+      [],
+    );
+    assertEquals(
+      renderRepositoryCreationPreview(preview).includes("Pattern:"),
+      false,
+    );
   }
 });
 
