@@ -22,12 +22,20 @@ octosmith template list --path .
 octosmith template validate --path .
 octosmith template permissions --path .
 octosmith resource list --path .
+octosmith resource create services --assisted --path .
 octosmith plan --path .
 octosmith apply --path .
 ```
 
 `template` commands run offline. `resource list`, `plan`, and `apply` need
 GitHub credentials. `apply` changes repositories; inspect the plan first.
+
+`resource create` also changes GitHub and bootstraps a repository through Git.
+By default it is strict and noninteractive. Opt into `--assisted` to choose
+among effective naming patterns and visibility alternatives, or enter a missing
+name. It requires interactive stdin/stderr terminals and cannot be combined with
+`--format json` or `--dry-run`. Explicit arguments always take precedence. Type
+`:cancel` at any question (or send EOF) to stop without creating a repository.
 
 ## Documentation
 

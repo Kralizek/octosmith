@@ -67,6 +67,11 @@ import {
   renderPersistedPlanPreflight,
 } from "./persisted.ts";
 import cliMetadata from "./deno.json" with { type: "json" };
+import {
+  type CreationPromptAdapter,
+  resolveAssistedRepositoryCreation,
+  terminalCreationPrompts,
+} from "./assisted.ts";
 
 /** The Octosmith CLI version. */
 export const VERSION = cliMetadata.version;
@@ -79,6 +84,9 @@ export interface CliExecutionOptions {
   readonly fetch?: typeof globalThis.fetch;
   readonly write?: (value: string) => void;
   readonly writeError?: (value: string) => void;
+  readonly creationPrompts?: CreationPromptAdapter;
+  /** Separate terminal capability dependency; prompts never imply a TTY. */
+  readonly isInteractiveTerminal?: () => boolean;
 }
 
 function createCli(
@@ -498,6 +506,10 @@ function createCli(
             "Visibility: public, private, or internal.",
           )
           .option(
+            "--assisted",
+            "Resolve ambiguous names and visibility interactively (TTY required; not with --dry-run or JSON).",
+          )
+          .option(
             "--dry-run",
             "Preview resolved creation and bootstrap intent offline.",
           )
@@ -517,7 +529,23 @@ function createCli(
           })
           .action(async (commandOptions, template: string) => {
             const format = parseOutputFormat(commandOptions.format);
-            const input = {
+            if (commandOptions.assisted) {
+              if (format === "json") {
+                throw new Error("Cannot combine --assisted with --format json");
+              }
+              if (commandOptions.dryRun) {
+                throw new Error("Cannot combine --assisted with --dry-run");
+              }
+              if (
+                !(options.isInteractiveTerminal ??
+                  (() => Deno.stdin.isTerminal() && Deno.stderr.isTerminal()))()
+              ) {
+                throw new Error(
+                  "--assisted requires an interactive TTY (stdin and stderr)",
+                );
+              }
+            }
+            let input = {
               template,
               ...(commandOptions.name !== undefined && {
                 name: commandOptions.name,
@@ -527,11 +555,46 @@ function createCli(
               }),
             };
             if (!commandOptions.dryRun) {
+              let configuration: LoadedConfiguration | string =
+                commandOptions.path;
+              if (commandOptions.assisted) {
+                try {
+                  configuration = await loadConfigurationDirectory(
+                    commandOptions.path,
+                  );
+                } catch {
+                  // Configuration parser errors can contain sensitive source snippets.
+                  throw new Error(
+                    "Cannot load configuration. Check the directory, YAML syntax, schema, and fragment includes with template validate.",
+                  );
+                }
+                const specification = await resolveAssistedRepositoryCreation(
+                  configuration,
+                  input,
+                  options.creationPrompts ?? terminalCreationPrompts,
+                  writeError,
+                );
+                if (!specification.ready || !specification.repository) {
+                  writeError(renderRepositoryCreationPreview(
+                    buildRepositoryCreationPreview(
+                      configuration,
+                      specification,
+                    ),
+                  ));
+                  throw new ApplyFailedError();
+                }
+                // Freeze the resolved identity; creation revalidates without regenerating.
+                input = {
+                  template,
+                  name: specification.repository.name,
+                  visibility: specification.repository.visibility,
+                };
+              }
               let creationRuntime: ApplyRuntime | undefined;
               const result = await createRepository(
                 {
                   ...input,
-                  configuration: commandOptions.path,
+                  configuration,
                   includeSecrets: commandOptions.includeSecrets,
                   skipMissingValues: commandOptions.skipMissingValues,
                 },

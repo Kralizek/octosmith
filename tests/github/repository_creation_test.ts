@@ -30,6 +30,7 @@ import {
   resolveDesiredState,
 } from "@octosmith/octosmith";
 import { main } from "../../packages/cli/mod.ts";
+import { resolveAssistedRepositoryCreation } from "../../packages/cli/assisted.ts";
 import { currentState } from "../plan/fixtures.ts";
 
 interface Call {
@@ -1498,6 +1499,200 @@ Deno.test("CLI actual creation and collision JSON remain valid with shared authe
     1,
   );
 });
+
+Deno.test("assisted generated identity is revalidated unchanged and collisions never regenerate", async () => {
+  const github = new GitHub();
+  const base = configuration();
+  const loaded: LoadedConfiguration = {
+    ...base,
+    configuration: {
+      ...base.configuration,
+      repositories: {
+        scope: {
+          include: {
+            names: ["api-*", "svc-*"],
+            visibility: ["private", "internal"],
+            teams: ["platform"],
+            properties: { tier: "backend" },
+          },
+        },
+      },
+    },
+  };
+  const answers = ["2", "2"];
+  let randomCalls = 0;
+  const specification = await resolveAssistedRepositoryCreation(
+    loaded,
+    { template: "services" },
+    {
+      prompt: () => {
+        assertEquals(github.calls, []);
+        return Promise.resolve(answers.shift()!);
+      },
+    },
+    () => {
+      throw new Error("Unexpected interaction error");
+    },
+    {
+      randomBytes: (length) => {
+        randomCalls++;
+        return new Uint8Array(length);
+      },
+    },
+  );
+  assertEquals(specification.ready, true);
+  assertEquals(specification.repository?.name, "svc-aaaaaa");
+  assertEquals(randomCalls, 1);
+  const request = {
+    configuration: loaded,
+    template: "services",
+    name: specification.repository!.name,
+    visibility: specification.repository!.visibility,
+  };
+  const options = {
+    client: github.client(),
+    bootstrap: github.bootstrap,
+    randomBytes: () => {
+      throw new Error("Do not generate a second name");
+    },
+  };
+  const result = await createRepository(request, options);
+  assertEquals(result.status, "completed");
+  assertEquals(result.specification?.choices.name.status, "explicit");
+  assertEquals(result.specification?.repository, specification.repository);
+  assertEquals(github.name, "svc-aaaaaa");
+  assertEquals(github.visibility, "internal");
+  assertEquals(github.bootstraps.length, 1);
+  assertEquals(result.deferredReconciliationAttempted, true);
+  const beforeCollision = github.calls.length;
+  const collision = await createRepository(request, options);
+  assertEquals(collision.status, "name_collision");
+  assertEquals(
+    github.calls.slice(beforeCollision).map(({ method }) => method),
+    ["GET"],
+  );
+  assertEquals(
+    github.mutations().filter(({ path }) => path === "/orgs/acme/repos").length,
+    1,
+  );
+  assertEquals(github.bootstraps.length, 1);
+  assertEquals(randomCalls, 1);
+});
+
+for (
+  const { title, names, flags, answers, expectedName } of [
+    {
+      title: "combined ambiguity",
+      names: ["api-*", "svc-*"],
+      flags: [],
+      answers: ["2", "2"],
+      expectedName: /^svc-[a-z0-9]{6}$/,
+    },
+    {
+      title: "manual name correction",
+      names: [],
+      flags: ["--visibility", "internal"],
+      answers: ["../invalid", "orders"],
+      expectedName: /^orders$/,
+    },
+    {
+      title: "explicit name and visibility",
+      names: ["api-*", "svc-*"],
+      flags: ["--name", "api-orders", "--visibility", "internal"],
+      answers: [],
+      expectedName: /^api-orders$/,
+    },
+  ]
+) {
+  Deno.test(
+    "CLI assisted creation completes existing lifecycle: " + title,
+    async () => {
+      const root = await Deno.makeTempDir();
+      const github = new GitHub();
+      const errors: string[] = [];
+      const output: string[] = [];
+      const pending = [...answers];
+      let promptCalls = 0;
+      try {
+        await Deno.mkdir(root + "/templates");
+        await Deno.writeTextFile(
+          root + "/octosmith.yml",
+          [
+            "version: 1",
+            "organization: acme",
+            "repositories:",
+            "  scope:",
+            "    include:",
+            "      visibility: [private, internal]",
+            ...(names.length ? ["      names: " + JSON.stringify(names)] : []),
+            "",
+          ].join("\n"),
+        );
+        await Deno.writeTextFile(
+          root + "/templates/services.yml",
+          [
+            "version: 1",
+            "kind: repository",
+            "match:",
+            "  include: all",
+            "repository: {}",
+            "",
+          ].join("\n"),
+        );
+        assertEquals(
+          await main([
+            "resource",
+            "create",
+            "services",
+            "--assisted",
+            "--path",
+            root,
+            ...flags,
+          ], {
+            isInteractiveTerminal: () => true,
+            creationPrompts: {
+              prompt: () => {
+                promptCalls++;
+                assertEquals(github.calls, []);
+                assert(pending.length > 0, "Unexpected prompt");
+                return Promise.resolve(pending.shift()!);
+              },
+            },
+            credentials: {
+              getEnv: () => {
+                assertEquals(pending, []);
+                return "token";
+              },
+            },
+            fetch: github.fetch,
+            bootstrap: github.bootstrap,
+            write: (message) => output.push(message),
+            writeError: (message) => errors.push(message),
+          }),
+          0,
+          errors.join("\n"),
+        );
+        assertEquals(promptCalls, answers.length);
+        assert(expectedName.test(github.name), github.name);
+        assertEquals(github.visibility, "internal");
+        assertEquals(github.bootstraps.length, 1);
+        assertEquals(
+          github.mutations().filter(({ path }) => path === "/orgs/acme/repos")
+            .length,
+          1,
+        );
+        assertStringIncludes(output.join("\n"), "completed");
+        if (title === "manual name correction") {
+          assertStringIncludes(errors.join("\n"), "Repository name must");
+        } else {
+          assertEquals(errors, []);
+        }
+      } finally {
+        await Deno.remove(root, { recursive: true });
+      }
+    },
+  );
+}
 
 for (const format of ["text", "json"]) {
   Deno.test(

@@ -19,6 +19,21 @@ this directory as their policy input instead of duplicating the configuration.
 Names used in this example are generic and do not represent any specific
 organization.
 
+Creation is strict and noninteractive unless explicitly assisted:
+
+```sh
+# Offline preview; never prompts or creates a repository.
+octosmith resource create code --path examples/configuration --dry-run
+# Actual creation; resolve only ambiguous naming patterns, missing names or visibility.
+octosmith resource create code --path examples/configuration --assisted
+```
+
+Assisted creation requires interactive stdin/stderr terminals and rejects JSON
+and dry-run. Explicit `--name` and `--visibility` take precedence. Single naming
+patterns generate automatically; fixed teams/properties never prompt. Type
+`:cancel` or send EOF to cancel before any repository is created. See
+[creation options and recovery](../../docs/cli/resource-commands.md#resource-create).
+
 The code template demonstrates `repository.post_create_commands`, requiring the
 .NET SDK only on the host performing actual `resource create`. The executables
 run sequentially in the temporary repository root before managed files;

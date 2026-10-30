@@ -169,8 +169,18 @@ commands:
     kind: action
     summary: Create, bootstrap in one local Git commit and push, and reconcile an organization repository; --dry-run remains offline.
     description: |
-      Validates once, creates without initial content, assigns selector metadata,
+      Runs authoritative preflight, creates without initial content, assigns selector metadata,
       verifies scope and unique classification, then uses ordinary reconciliation.
+      Strict mode is noninteractive. Opt-in --assisted requires interactive stdin
+      and stderr terminals and rejects --format json and --dry-run before GitHub
+      access. It prompts only for ambiguous effective naming patterns, required
+      names or ambiguous visibility, never teams or properties. Explicit arguments
+      take precedence; invalid explicit values fail. Numbered choices are limited
+      to effective alternatives. Type :cancel or send EOF to cancel without creation.
+      Each choice re-runs shared preflight; semantic errors and template overlap
+      remain failures. The shared generator resolves selected naming strategies.
+      The resolved name is passed explicitly into final creation preflight so it
+      is not generated twice. Collisions fail without retry or adoption.
       Resolves composed files through ordinary desired-state semantics and creates
       one local commit (empty if no files) and at most one explicit branch push.
       Structured repository.post_create_commands run only during actual creation,
@@ -221,6 +231,9 @@ commands:
           - value: private
           - value: internal
         summary: Explicit visibility when selector constraints leave multiple choices.
+      - name: assisted
+        type: boolean
+        summary: Resolve genuine naming and visibility ambiguities on an interactive TTY; incompatible with JSON and dry-run.
       - name: dry-run
         type: boolean
         summary: Preview resolved identity, bootstrap files and executable names/count, desired resources, and deferred work without GitHub access, local writes or command execution.
@@ -249,6 +262,9 @@ commands:
       - title: Preview creation and bootstrap intent
         content: |
           $ octosmith resource create services --name team-orders-svcs --visibility internal --dry-run
+      - title: Resolve creation ambiguities interactively
+        content: |
+          $ octosmith resource create services --assisted
       - title: Preview with a provisional generated name as structured JSON
         content: |
           $ octosmith resource create services --dry-run --format json

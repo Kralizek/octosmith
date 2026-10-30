@@ -24,6 +24,8 @@ const MAX_NAME_STRATEGIES = 256;
 export interface RepositoryCreationInput {
   readonly template: string;
   readonly name?: string;
+  /** Exact effective naming alternative, not an arbitrary generation pattern. */
+  readonly namingStrategy?: string;
   readonly visibility?: string;
   readonly teams?: readonly string[];
   readonly properties?: Readonly<Record<string, PropertyValue>>;
@@ -53,6 +55,7 @@ export type RepositoryCreationIssueCode =
   | "invalid_name"
   | "name_required"
   | "ambiguous_name_strategy"
+  | "invalid_name_strategy"
   | "name_generation_failed"
   | "metadata_outside_intersection"
   | "invalid_visibility"
@@ -196,6 +199,25 @@ export async function preflightRepositoryCreation(
   const nameStrategyAnalysis = effectiveNameStrategies(nameGroups);
   const nameStrategies = nameStrategyAnalysis.patterns;
   const nameAlternatives = nameStrategies.map((pattern) => ({ pattern }));
+  const selectedStrategy = input.namingStrategy;
+  const strategyValid = selectedStrategy === undefined ||
+    (nameStrategyAnalysis.complete &&
+      nameStrategies.includes(selectedStrategy));
+  if (!strategyValid) {
+    diagnostics.push({
+      code: "invalid_name_strategy",
+      message:
+        "Naming strategy must be a safely resolved effective naming alternative; provide --name if no strategy can be selected",
+      template: resolvedIdentity,
+      path: "namingStrategy",
+    });
+  }
+  const generationStrategy = strategyValid
+    ? selectedStrategy ??
+      (nameStrategyAnalysis.complete && nameStrategies.length === 1
+        ? nameStrategies[0]
+        : undefined)
+    : undefined;
   const properties: Record<string, PropertyValue> = {
     ...effective.requiredProperties,
   };
@@ -373,7 +395,7 @@ export async function preflightRepositoryCreation(
       code: "visibility_ambiguous",
       message: "Choose a visibility with --visibility <" +
         constructibleVisibilities.join("|") +
-        "> or use future assisted creation",
+        "> or use --assisted",
       template: resolvedIdentity,
       path: "visibility",
     });
@@ -416,6 +438,8 @@ export async function preflightRepositoryCreation(
         value: input.name,
       };
     }
+  } else if (!strategyValid) {
+    nameChoice = { status: "invalid", alternatives: nameAlternatives };
   } else if (
     nameStrategies.length === 0 &&
     !hasNameConstraints
@@ -429,19 +453,14 @@ export async function preflightRepositoryCreation(
     });
     nameChoice = { status: "required", alternatives: [] };
   } else if (
-    nameStrategies.length !== 1 || !nameStrategyAnalysis.complete
+    generationStrategy === undefined
   ) {
-    const patterns = new Set([
-      ...nameStrategies,
-      ...(!nameStrategyAnalysis.complete || nameStrategies.length === 0
-        ? nameGroups.flat()
-        : []),
-    ]);
-    const alternatives = [...patterns].sort().map((pattern) => ({ pattern }));
+    // Incomplete analysis must not advertise unproven patterns as selectable.
+    const alternatives = nameStrategyAnalysis.complete ? nameAlternatives : [];
     diagnostics.push({
       code: "ambiguous_name_strategy",
       message:
-        "Choose a name pattern with --name or use future assisted creation",
+        "Provide --name or select an effective naming strategy with --assisted",
       template: resolvedIdentity,
       path: "name",
     });
@@ -460,7 +479,7 @@ export async function preflightRepositoryCreation(
     repository = validateCandidate(input.name);
   } else if (
     input.name === undefined &&
-    nameStrategies.length === 1 &&
+    generationStrategy !== undefined &&
     !hasPriorAmbiguity
   ) {
     const maxAttempts = options.maxNameAttempts ?? DEFAULT_NAME_ATTEMPTS;
@@ -470,7 +489,7 @@ export async function preflightRepositoryCreation(
     try {
       for (let attempt = 0; attempt < maxAttempts; attempt++) {
         const candidateName = generatePatternName(
-          nameStrategies[0],
+          generationStrategy,
           options.randomBytes ?? secureRandomBytes,
         );
         if (validateRepositoryName(candidateName) !== undefined) continue;
@@ -504,7 +523,7 @@ export async function preflightRepositoryCreation(
       diagnostics.push({
         code: "name_generation_failed",
         message: "Could not generate a valid name from pattern " +
-          nameStrategies[0] + " after " + maxAttempts +
+          generationStrategy + " after " + maxAttempts +
           " attempts; provide --name or adjust the selector constraints",
         template: resolvedIdentity,
         path: "name",
@@ -612,6 +631,8 @@ function sanitizeCreationInput(
   return {
     template: input.template,
     ...(input.name !== undefined && { name: input.name }),
+    ...(input.namingStrategy !== undefined &&
+      { namingStrategy: input.namingStrategy }),
     ...(input.visibility !== undefined && { visibility: input.visibility }),
     ...(input.teams !== undefined && { teams: input.teams }),
     ...(input.properties !== undefined && { properties: input.properties }),
