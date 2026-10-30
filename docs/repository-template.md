@@ -89,7 +89,48 @@ priority rule. To cover otherwise unmatched repositories, configure a
 Only declared categories and values are managed under the root's collection
 policies; an omitted field is not automatically a request to reset it. See the
 [resource schema](../schemas/resources/repository.schema.json) for exact JSON
-types, conditionals, and permitted rule kinds.
+types, conditionals, and permitted rule kinds. The create-only
+`post_create_commands` field is an exception: it configures initial bootstrap,
+not ongoing managed state.
+
+### `post_create_commands`
+
+Templates and repository fragments may declare an ordered array of executable
+commands for initial repository creation:
+
+```yaml
+repository:
+  post_create_commands:
+    - command: dotnet
+      args: [new, editorconfig]
+    - command: dotnet
+      args: [new, globaljson]
+  files:
+    .editorconfig:
+      ensure: exact
+      source: files/.editorconfig
+    obsolete.txt:
+      ensure: absent
+```
+
+Each entry requires `command`, a nonempty, non-whitespace string naming an
+executable or executable path. Optional `args` is an array of strings and
+defaults to `[]`. Unknown fields, scalar entries, conditions, and environment
+declarations are rejected. There is no shell mode, argument interpolation,
+runtime-value expansion, or command-specific configuration; arguments are passed
+literally, including spaces, `$`, `%`, and shell punctuation.
+
+The list **replaces the whole inherited list**, preserving its own order; `[]`
+clears it. Commands are never merged by executable name or implicitly appended.
+See [composition precedence](#composition-order-and-precedence).
+
+Commands run only during actual `resource create`, before managed files.
+Plan/apply, inspection, validation, and creation preview never execute them or
+probe executable availability. These are trusted host programs, not a sandbox.
+See
+[execution and file precedence](configuration.md#create-only-bootstrap-commands)
+and the [CLI creation guide](cli/resource-commands.md#resource-create) for host
+requirements, failure reporting, and recovery.
 
 ### `settings`
 
@@ -399,9 +440,10 @@ entry**; rules with the same `type` replace their parameters atomically. An
 explicit later empty array such as `teams: []` clears inherited entries.
 
 Other arrays (such as `settings.topics`, OIDC `claims`, and
-`rulesets.*.bypass_actors`) replace wholesale; YAML authors do not select custom
-merge strategies. Objects such as `files` and `custom_properties` merge by
-object key, with the later entry winning.
+`rulesets.*.bypass_actors`) replace wholesale; `post_create_commands` explicitly
+uses whole-list replacement too. YAML authors do not select custom merge
+strategies. Objects such as `files` and `custom_properties` merge by object key,
+with the later entry winning.
 
 Duplicate identities **within one document** are invalid, even for nested
 collections. Reusing the same identity **across different documents** is the

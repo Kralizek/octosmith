@@ -286,6 +286,56 @@ repository:
         value: eu-north-1
 ```
 
+### Create-only bootstrap commands
+
+The template's
+[`repository.post_create_commands`](repository-template.md#post_create_commands)
+list configures trusted executables for initial creation, not ongoing
+reconciliation. The template reference defines its fields and whole-list
+composition rules.
+
+Commands execute **only** during actual `resource create`, after local Git
+initialization and identity configuration, sequentially in the temporary
+repository root. Plan, apply, inspection, validation, and `--dry-run` never run
+them or probe executable availability. The execution host must have the tools
+installed and accessible on `PATH` (or use an explicit executable path).
+
+Managed files are materialized **after all commands succeed**. Both `exists` and
+`exact` overwrite command-generated files with their resolved declarative bytes;
+`absent` removes generated output at that path. The final `.gitignore` applies
+conventionally to generated files, but explicitly managed present files are
+always included, even if ignored. Remaining generated regular files and managed
+files enter the same single initial commit. All blobs bypass `.gitattributes`
+filters and line-ending conversions, preserving on-disk bytes. Generated
+executable bits are preserved on Linux; native Windows uses regular file mode.
+Paths are checked against the same portable safety rules as managed files,
+including ignored output. Symlinks, special files, case-colliding paths, unsafe
+names, and nested Git directories are rejected; root `.git` internals are
+excluded. Commands must not modify Git metadata or create their own commits.
+
+These are **trusted operator-supplied programs, not a sandbox**. They run with
+the host user's filesystem/network privileges and can have external side
+effects. Octosmith supplies an isolated environment: host `PATH` (plus
+`SYSTEMROOT` on Windows), temporary `HOME`/`XDG_CONFIG_HOME`/temp directories,
+and bootstrap Git settings. It does not forward arbitrary host variables,
+credentials, or runtime secrets. Tools relying on host-specific environment
+configuration may need an explicit executable path or operator setup.
+Executables are launched directly, with no interactive input; stdout/stderr are
+captured, not streamed.
+
+A launch failure or nonzero exit stops the sequence immediately, with no
+materialization, staging, commit, or push afterward. Lifecycle failure
+`post_create_command` reports only the one-based `failedCommand` ordinal, not
+arguments or raw output. Temporary storage is cleaned up; the new remote is
+retained and `pushAttempted` is false. Creation is nontransactional: external
+command side effects are not rolled back. Correct the failure and initialize the
+retained repository manually, then use ordinary plan/apply. Do not rerun create,
+automatically retry commands, or delete the remote. Preview shows ordered
+executable names/count only; generated file counts remain unknown until
+execution. See the
+[CLI creation guide](cli/resource-commands.md#resource-create) for lifecycle
+output and recovery.
+
 ### Fragment composition
 
 Templates support ordered `includes` of reusable, typed fragment documents. The

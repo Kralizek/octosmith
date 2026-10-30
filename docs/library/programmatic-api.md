@@ -58,8 +58,14 @@ invocations.
 Failed preflight specifications produce an unresolved preview with the original
 structured choices, diagnostic codes, and validation details, and no bootstrap
 or resource plan. Hosts should return failure when `preview.ready` is false. The
-CLI performs end-to-end creation without `--dry-run`. Post-create commands and
-assisted choices are not implemented.
+CLI performs end-to-end creation without `--dry-run`. Preview includes ordered
+executable names/count for `repository.post_create_commands`, never arguments;
+it never probes or runs them. The version 1 bootstrap projection adds
+`postCreateCommands` (ordered `{ command }` summaries) and
+`postCreateCommandCount`. Generated file counts remain unknown until execution;
+the preview's file count covers declarative present files only. See the
+[repository creation lifecycle](repository-creation.md) for command execution
+and runner injection. Assisted choices are not implemented.
 
 ## Main API areas
 

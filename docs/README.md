@@ -8,7 +8,8 @@ validate its configuration, and run plan/apply.
 - [Root configuration file](root-configuration.md) — `octosmith.yml`, scope,
   organization policies, fallback selection, and file-delivery options.
 - [Repository template file](repository-template.md) — schema-driven desired
-  state fields, fragment composition, and fallback template behavior.
+  state fields, create-only commands, fragment composition, and fallback
+  template behavior.
 - [Configuration behavior](configuration.md) — runtime values, secrets,
   bootstrap, branch settings, and managed file reconciliation.
 - [CLI command reference](cli/README.md) — navigate commands by workflow.

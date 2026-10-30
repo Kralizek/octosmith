@@ -135,13 +135,33 @@ Git bootstrap uses a private temporary workspace and Git installed on `PATH`. It
 creates exactly one commit, authored and committed by
 `Octosmith <octosmith@users.noreply.github.com>`, with message
 `Initial repository bootstrap`. Identity/configuration is repository-local;
-global/system configuration and hooks are isolated. With no present managed
+global/system configuration and hooks are isolated. With no remaining staged
 files it creates an empty commit, not a placeholder file. `exists` and `exact`
 files use normal desired-state content resolution (including fragments and
-overrides); `absent` files are omitted. Raw blobs preserve resolved UTF-8 bytes
-and line endings even with `.gitattributes` or `.gitignore`. Invalid/escaping
-paths and `.git` aliases are rejected before push. Temporary files are cleaned
-up on success and failure; cleanup errors are reported separately.
+overrides); `absent` files remove generated output. Raw blobs preserve resolved
+UTF-8 bytes and line endings even with `.gitattributes` or `.gitignore`.
+Invalid/escaping paths and `.git` aliases are rejected before push. Temporary
+files are cleaned up on success and failure; cleanup errors are reported
+separately.
+
+Optional
+[`repository.post_create_commands`](../repository-template.md#post_create_commands)
+run sequentially after Git initialization/identity setup and before managed
+files. These trusted executables must be installed on the creation host. They
+receive literal argument arrays, no shell or interactive input, and an isolated
+environment without forwarded host secrets or Git credentials. They are not
+sandboxed and can affect the host or network; stdout/stderr are captured rather
+than streamed. There is no runtime expansion or automatic retry.
+
+Generated files honor the final `.gitignore`; managed files always win and are
+included even if ignored. `ensure: absent` removes generated content before
+staging. All files use raw Git blobs without attribute filters or line-ending
+conversion; `write-tree`/`commit-tree` avoid filter execution during commit,
+too. Unsafe generated paths, symlinks, special files, and Git-internal aliases
+fail before staging; root `.git` is excluded. Commands must not alter Git
+metadata. See
+[bootstrap command execution](../configuration.md#create-only-bootstrap-commands)
+for the execution environment and portable path rules.
 
 The branch is the template-managed `repository.settings.default_branch`, then
 the organization/enterprise default resolved by GitHub on the newly created
@@ -179,13 +199,13 @@ work even if runtime resolution or state reading fails. Deferred settings are
 explicitly named in the regular text report.
 
 Text and JSON separate lifecycle status/stages, identity/URL, metadata
-assignment outcomes, branch, prepared/commit/push progress, initial SHA, managed
-file count, deferred work, and both ordinary reconciliation reports. Only
-`completed` exits 0. `bootstrap_failed` and `bootstrapped_not_reconciled`, as
-well as preflight, collision, creation, assignment, classification or
-reconciliation failures, exit 1. No reconciliation report is invented before
-reconciliation is attempted. API/provider error bodies are omitted to avoid
-exposing runtime values.
+assignment outcomes, branch, prepared/commit/push progress, initial SHA, staged
+file count (including generated files), deferred work, and both ordinary
+reconciliation reports. Only `completed` exits 0. `bootstrap_failed` and
+`bootstrapped_not_reconciled`, as well as preflight, collision, creation,
+assignment, classification or reconciliation failures, exit 1. No reconciliation
+report is invented before reconciliation is attempted. API/provider error bodies
+are omitted to avoid exposing runtime values.
 
 Creation is not transactional: Octosmith never deletes a partially created
 repository. Failed metadata assignments or classification require manual repair
@@ -193,16 +213,20 @@ and verification; ordinary apply cannot discover an out-of-scope repository. Do
 **not** rerun `resource create` for a retained repository: its name will
 collide. Before a push attempt, no bootstrap content was sent; correct the
 failure and initialize the retained repository manually, then run ordinary
-plan/apply. For a rejected push, repair the permissions/policy and inspect
-remote state before manually pushing the intended initial commit. For
-`push_unknown` (for example a lost connection after sending), remote changes are
-uncertain: compare the reported initial SHA with GitHub's branch head before
-taking any action. Never force-push or assume the repository is empty. After a
-confirmed push with failed deferred work, repair the reported failure and run
-fresh plan/apply; verify/set the resolved default branch first if that operation
-failed and ongoing drift enforcement is disabled. Unarchive manually if needed
-before repairs. A cleanup warning requires inspecting local temporary storage.
-After a lost creation response, inspect GitHub before explicitly retrying.
+plan/apply. Command launch/nonzero failures use `post_create_command` and the
+one-based `failedCommand` ordinal, omitting sensitive arguments and raw output.
+Later commands and all content delivery stop; `pushAttempted` remains false. The
+remote is retained and external command side effects are not rolled back. For a
+rejected push, repair the permissions/policy and inspect remote state before
+manually pushing the intended initial commit. For `push_unknown` (for example a
+lost connection after sending), remote changes are uncertain: compare the
+reported initial SHA with GitHub's branch head before taking any action. Never
+force-push or assume the repository is empty. After a confirmed push with failed
+deferred work, repair the reported failure and run fresh plan/apply; verify/set
+the resolved default branch first if that operation failed and ongoing drift
+enforcement is disabled. Unarchive manually if needed before repairs. A cleanup
+warning requires inspecting local temporary storage. After a lost creation
+response, inspect GitHub before explicitly retrying.
 
 `--dry-run` extends preflight with a creation preview, not a drift report
 against an imaginary repository. Text and JSON report:
@@ -212,6 +236,9 @@ against an imaginary repository. Text and JSON report:
 - Bootstrap default branch when template-managed, and composed managed-file
   paths with intended presence/absence. The planned file count counts only
   present files, not absence declarations. File contents are never printed.
+- Ordered post-create executable names and count, never argument values.
+  Generated files cannot be predicted offline; the planned file count remains
+  the declarative present-file count.
 - Concise desired-resource summaries for settings, teams, custom properties,
   Actions, Dependabot, environments, and rulesets. `resolved` means configured
   intent is known, not that any API operation has been calculated or performed.
@@ -234,8 +261,9 @@ generate a different name unless you pass the displayed name explicitly with
 it reports prospective naming patterns and diagnostics instead of generating a
 name just for display. It still fails with a nonzero exit status; JSON remains
 structured on failures. No filesystem writes, Git commands, commits, pushes, or
-bootstrap commands are executed by preview. Post-create commands (#112) and
-assisted prompting (#113) remain future milestones.
+bootstrap commands are executed or probed by preview. Commands also never run
+during ordinary plan/apply, validation, or inspection. Assisted prompting (#113)
+remains a future milestone.
 
 Preview JSON uses `kind: repository_creation_preview` and `version: 1`,
 including unresolved preflight results (`ready: false`). If configuration cannot
@@ -244,3 +272,7 @@ be loaded at all, JSON instead uses
 `configuration_load_error` diagnostic. Raw parser errors are not echoed because
 they may contain sensitive configuration snippets; use `template validate` to
 investigate the configuration.
+
+Version 1 adds `bootstrap.postCreateCommands` (ordered `{ command }` summaries)
+and `bootstrap.postCreateCommandCount`; these additive fields do not change the
+existing structured preview contract or include arguments.
