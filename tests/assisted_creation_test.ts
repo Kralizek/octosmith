@@ -336,6 +336,49 @@ Deno.test("selected naming strategies are checked against the current effective 
   }
 });
 
+Deno.test("explicit names ignore unused naming strategies but retain name validation", async () => {
+  const loaded = withTemplate(
+    configuration({
+      names: ["api-*", "svc-*"],
+      visibility: "private",
+    }, { names: ["api-reserved"] }),
+    { match: { include: { names: ["api-*"] } } },
+  );
+  for (const namingStrategy of ["api-*", "untrusted-*", "svc-*", ""]) {
+    for (
+      const name of [
+        "api-orders",
+        "../invalid",
+        "",
+        "svc-orders",
+        "api-reserved",
+      ]
+    ) {
+      const input = { template: "services", name };
+      const options = {
+        randomBytes: () => {
+          throw new Error("Explicit names must not generate");
+        },
+      };
+      const expected = await preflightRepositoryCreation(
+        loaded,
+        input,
+        options,
+      );
+      const result = await preflightRepositoryCreation(
+        loaded,
+        { ...input, namingStrategy },
+        options,
+      );
+      assertEquals(result.ready, name === "api-orders");
+      assertEquals(result.choices, expected.choices);
+      assertEquals(result.diagnostics, expected.diagnostics);
+      assertEquals(result.repository, expected.repository);
+      assertEquals(result.inputs.namingStrategy, namingStrategy);
+    }
+  }
+});
+
 Deno.test("selected strategy retains bounded exclude retries and classification checks", async () => {
   const loaded = configuration(
     { names: ["api-*", "svc-*"], visibility: "private" },

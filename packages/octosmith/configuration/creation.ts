@@ -24,7 +24,7 @@ const MAX_NAME_STRATEGIES = 256;
 export interface RepositoryCreationInput {
   readonly template: string;
   readonly name?: string;
-  /** Exact effective naming alternative, not an arbitrary generation pattern. */
+  /** Exact effective naming alternative; ignored when an explicit name is supplied. */
   readonly namingStrategy?: string;
   readonly visibility?: string;
   readonly teams?: readonly string[];
@@ -199,7 +199,9 @@ export async function preflightRepositoryCreation(
   const nameStrategyAnalysis = effectiveNameStrategies(nameGroups);
   const nameStrategies = nameStrategyAnalysis.patterns;
   const nameAlternatives = nameStrategies.map((pattern) => ({ pattern }));
-  const selectedStrategy = input.namingStrategy;
+  const selectedStrategy = input.name === undefined
+    ? input.namingStrategy
+    : undefined;
   const strategyValid = selectedStrategy === undefined ||
     (nameStrategyAnalysis.complete &&
       nameStrategies.includes(selectedStrategy));

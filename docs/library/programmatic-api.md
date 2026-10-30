@@ -75,7 +75,8 @@ the fully analyzed intersection; arbitrary or stale patterns produce
 selectable alternatives. Selecting a strategy reuses the ordinary secure
 generator, bounded attempts, exclusions and unique classification checks; it
 never trusts a caller-supplied generation pattern. An explicit `name` takes
-precedence over generation.
+precedence: `namingStrategy` is ignored, even if stale or invalid, while the
+explicit name still undergoes ordinary validation and constraint checks.
 
 Hosts may collect ambiguous visibility, naming-strategy or required-name choices
 and re-run preflight with those inputs. Never prompt around unrelated semantic
