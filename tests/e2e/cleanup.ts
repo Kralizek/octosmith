@@ -4,8 +4,10 @@ import { join } from "@std/path";
 const owner = Deno.env.get("E2E_OWNER");
 const runId = Deno.env.get("E2E_RUN_ID");
 const results = Deno.env.get("E2E_RESULTS");
-if (owner !== "octosmith-tests" || !runId || !results ||
-  !/^[0-9]+-[0-9]+$/.test(runId)) {
+if (
+  owner !== "octosmith-tests" || !runId || !results ||
+  !/^[0-9]+-[0-9]+$/.test(runId)
+) {
   throw new Error("Refusing cleanup outside a validated dedicated E2E run");
 }
 const prefix = `octosmith-e2e-${runId}-`;
@@ -20,7 +22,9 @@ const failed: string[] = [];
 
 async function gh(args: string[]) {
   const output = await new Deno.Command("gh", {
-    args, stdout: "piped", stderr: "piped",
+    args,
+    stdout: "piped",
+    stderr: "piped",
     env: { GH_PROMPT_DISABLED: "1" },
   }).output();
   return {
@@ -33,12 +37,21 @@ async function gh(args: string[]) {
 // Reconcile the registry with actual remote state. A crash between the
 // successful create API call and registry update must not orphan a repo.
 const inventory = await gh([
-  "api", "--paginate", `orgs/${owner}/repos?per_page=100&type=all`,
-  "--jq", ".[] | {name, full_name, id}",
+  "api",
+  "--paginate",
+  `orgs/${owner}/repos?per_page=100&type=all`,
+  "--jq",
+  ".[] | {name, full_name, id}",
 ]);
-if (!inventory.ok) throw new Error("Cannot enumerate test organization for cleanup");
+if (!inventory.ok) {
+  throw new Error("Cannot enumerate test organization for cleanup");
+}
 for (const line of inventory.stdout.split("\n").filter(Boolean)) {
-  const repo = JSON.parse(line) as { name: string; full_name: string; id: number };
+  const repo = JSON.parse(line) as {
+    name: string;
+    full_name: string;
+    id: number;
+  };
   if (!repo.name.startsWith(prefix)) continue;
   if (repo.full_name !== `${owner}/${repo.name}` || repo.name === "fixtures") {
     throw new Error("Unsafe repository identity encountered");
@@ -51,7 +64,12 @@ for (const name of [...names].sort()) {
     failed.push(`Refused unsafe registry entry: ${fullName}`);
     continue;
   }
-  const detail = await gh(["api", `repos/${fullName}`, "--jq", "{id,full_name}"]);
+  const detail = await gh([
+    "api",
+    `repos/${fullName}`,
+    "--jq",
+    "{id,full_name}",
+  ]);
   if (!detail.ok) {
     if (detail.stderr.includes("404")) continue;
     failed.push(`Cannot inspect ${fullName}`);
@@ -59,8 +77,10 @@ for (const name of [...names].sort()) {
   }
   const actual = JSON.parse(detail.stdout) as { id: number; full_name: string };
   const registered = entries.find((entry) => entry.name === name);
-  if (actual.full_name !== fullName ||
-    (registered?.id !== undefined && registered.id !== actual.id)) {
+  if (
+    actual.full_name !== fullName ||
+    (registered?.id !== undefined && registered.id !== actual.id)
+  ) {
     failed.push(`Ownership or ID mismatch: ${fullName}`);
     continue;
   }
@@ -81,7 +101,9 @@ if (summary) {
   await Deno.writeTextFile(
     summary,
     `## Octosmith E2E cleanup\n\nDeleted ${deleted.length} run-created repositories.\n\n` +
-      (failed.length ? `Failures:\n${failed.map((x) => `- ${x}`).join("\n")}\n` : "No cleanup failures.\n"),
+      (failed.length
+        ? `Failures:\n${failed.map((x) => `- ${x}`).join("\n")}\n`
+        : "No cleanup failures.\n"),
     { append: true },
   );
 }
