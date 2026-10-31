@@ -803,8 +803,12 @@ for (const format of ["text", "json"] as const) {
     try {
       const runtime = createGitHubRuntime({
         token: "test-token",
-        fetch: () =>
-          Promise.resolve(json([{ name: "excluded", visibility: "private" }])),
+        fetch: (input) =>
+          Promise.resolve(
+            new URL(String(input)).pathname.endsWith("/users/acme")
+              ? json({ login: "acme", type: "Organization" })
+              : json([{ name: "excluded", visibility: "private" }]),
+          ),
       });
       assertEquals(
         await main(["resource", "list", "--path", root, "--format", format], {
@@ -931,6 +935,11 @@ function fakeInspectionGitHub(
   return (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
+    if (method === "GET" && url.pathname.endsWith("/users/acme")) {
+      return Promise.resolve(
+        json({ login: "acme", type: "Organization" }),
+      );
+    }
     requests.push({ method, url });
     if (
       method === "GET" &&
@@ -2133,6 +2142,11 @@ function fakePreflightGitHub(
     ) return Promise.resolve(json({ message: "Not Found" }, 404));
     const url = new URL(String(input));
     const method = init?.method ?? "GET";
+    if (method === "GET" && url.pathname.endsWith("/users/acme")) {
+      return Promise.resolve(
+        json({ login: "acme", type: "Organization" }),
+      );
+    }
     requests.push({ method, url });
     events.push(method + " " + url.pathname);
     if (method === "GET" && url.pathname.endsWith("/git/ref/heads/master")) {
@@ -2192,6 +2206,9 @@ function fakeGitHub(
       ? JSON.parse(rawBody)
       : undefined;
 
+    if (method === "GET" && url.pathname.endsWith("/users/acme")) {
+      return json({ login: "acme", type: "Organization" });
+    }
     requests.push({ method, url, body });
     if (
       method === "GET" &&
@@ -2836,8 +2853,9 @@ Deno.test("CLI trace writes GitHub calls to stderr before JSON stdout", async ()
       assertEquals(line.includes("?"), false);
     }
 
-    assertEquals(stderr[0], "[organization]");
-    assertStringIncludes(stderr[1], "GET /orgs/acme/repos — 200");
+    assertEquals(stderr[0], "[owner]");
+    assertStringIncludes(stderr[1], "GET /users/acme — 200");
+    assertStringIncludes(stderr[2], "GET /orgs/acme/repos — 200");
 
     const repositoryGroup = stderr.indexOf("[repository: sample]");
     assertEquals(repositoryGroup > 1, true);
@@ -3297,6 +3315,9 @@ function fakeFileDeliveryGitHub(
     const body = typeof rawBody === "string" && rawBody.length > 0
       ? JSON.parse(rawBody)
       : undefined;
+    if (method === "GET" && url.pathname.endsWith("/users/acme")) {
+      return json({ login: "acme", type: "Organization" });
+    }
     requests.push({ method, url, body });
 
     if (method === "GET" && url.pathname === "/api/v3/orgs/acme/repos") {
@@ -3533,6 +3554,11 @@ function fakeSecretGitHub(
     const request = input instanceof Request ? input : undefined;
     const url = new URL(request?.url ?? String(input));
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
+    if (method === "GET" && url.pathname.endsWith("/users/acme")) {
+      return Promise.resolve(
+        json({ login: "acme", type: "Organization" }),
+      );
+    }
     requests.push({ method, url });
 
     if (method === "GET" && url.pathname.endsWith("/git/ref/heads/master")) {
@@ -3580,6 +3606,9 @@ function fakePartialGitHub(
     const body = typeof rawBody === "string" && rawBody.length > 0
       ? JSON.parse(rawBody)
       : undefined;
+    if (method === "GET" && url.pathname.endsWith("/users/acme")) {
+      return json({ login: "acme", type: "Organization" });
+    }
     requests.push({ method, url, body });
 
     if (method === "GET" && url.pathname === "/api/v3/orgs/acme/repos") {

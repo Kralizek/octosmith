@@ -321,6 +321,9 @@ class ReconciliationClient implements GitHubClient {
     path: string,
     options: GitHubRequestOptions = {},
   ): Promise<T> {
+    if (method === "GET" && path === "/users/acme") {
+      return { login: "acme", type: "Organization" } as T;
+    }
     this.requests.push({ method, path, body: options.body });
     const value = await this.respond(method, path, options);
     const response = structuredClone(value) as T;

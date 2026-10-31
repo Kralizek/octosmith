@@ -49,8 +49,9 @@ packaging.
 
 ## Root configuration
 
-The top-level `octosmith.yml` file defines the GitHub organization, scope,
-unmatched-repository handling, and global reconciliation policies. The
+The top-level `octosmith.yml` file defines the GitHub organization or
+authenticated personal account, scope, unmatched-repository handling, and global
+reconciliation policies. The
 [schema-based root configuration reference](root-configuration.md) is the
 canonical description of its fields, allowed values, and fallback selector.
 
@@ -180,26 +181,30 @@ repository:
 
 ### Creation and selector-required metadata
 
-`resource create <template>` now creates an empty organization repository and
-reconciles API-side resources. `--dry-run` remains completely offline/read-only.
-Creation uses `repositories.scope` intersected with the selected template's
-`match`, including excludes; unresolved name/visibility choices fail before
-GitHub access. Teams and properties inferred by preflight are assigned and
-re-read, then the actual repository must be in scope and uniquely classified.
-Boolean selector properties use GitHub's string representation
-(`"true"`/`"false"`). A selector `enabled: true` is compatible with a managed
-custom property `enabled: "true"` (and likewise for `false`). Assignment,
-selector intersection, creation preflight and classification use the same exact
-representation; discovery preserves the strings returned by GitHub. Other
-strings, numbers and arrays are not coerced into boolean matches. Multi-select
-custom-property arrays compare without regard to order across selector matching,
-intersection, preflight and reconciliation. Different values, lengths or
-duplicate counts still differ; comparisons do not reorder inputs.
+`resource create <template>` now creates an empty repository in the configured
+organization or authenticated personal account and reconciles API-side
+resources. `--dry-run` remains completely offline/read-only. Creation uses
+`repositories.scope` intersected with the selected template's `match`, including
+excludes; unresolved name/visibility choices fail before GitHub access. Teams
+and properties inferred by preflight are assigned and re-read, then the actual
+repository must be in scope and uniquely classified. Boolean selector properties
+use GitHub's string representation (`"true"`/`"false"`). A selector
+`enabled: true` is compatible with a managed custom property `enabled: "true"`
+(and likewise for `false`). Assignment, selector intersection, creation
+preflight and classification use the same exact representation; discovery
+preserves the strings returned by GitHub. Other strings, numbers and arrays are
+not coerced into boolean matches. Multi-select custom-property arrays compare
+without regard to order across selector matching, intersection, preflight and
+reconciliation. Different values, lengths or duplicate counts still differ;
+comparisons do not reorder inputs.
 
 Required team membership initially uses read access; declared permissions are
 then reconciled normally. With strict collections, explicitly declare required
 teams/properties rather than configuring collections that would remove them.
 Creation rejects a reconciliation plan that would invalidate classification.
+Personal-account owners must match the authenticated user. Team permissions,
+team-based selectors, and organization custom-property selectors/assignments are
+rejected before personal repository creation or reconciliation.
 
 Managed files remain part of composed configuration and are bootstrapped during
 creation by one local Git commit/push, never Contents writes or file PRs under

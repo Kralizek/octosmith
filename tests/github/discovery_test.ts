@@ -5,10 +5,13 @@ import type {
   RepositoryTemplate,
 } from "@octosmith/octosmith";
 import {
-  discoverRepositories,
+  discoverRepositories as discoverRepositoriesWithOwner,
   type GitHubClient,
   type GitHubQueryValue,
 } from "@octosmith/octosmith";
+import { createGitHubRuntime } from "../../packages/cli/apply.ts";
+
+const ORGANIZATION_OWNER = { login: "acme", type: "Organization" } as const;
 
 interface Request {
   readonly path: string;
@@ -49,6 +52,19 @@ class FakeGitHubClient implements GitHubClient {
 
     return Promise.resolve(responses.shift() as T);
   }
+}
+
+function discoverRepositories(
+  client: GitHubClient,
+  loaded: LoadedConfiguration,
+  repository?: string,
+) {
+  return discoverRepositoriesWithOwner(
+    client,
+    loaded,
+    repository,
+    ORGANIZATION_OWNER,
+  );
 }
 
 Deno.test("targeted discovery fetches only the requested repository and selector metadata", async () => {
@@ -138,7 +154,7 @@ Deno.test("targeted discovery rejects a mismatched organization before calling G
         "other/api",
       ),
     Error,
-    'Repository target organization "other" does not match configured organization "acme"',
+    'Repository target owner "other" does not match configured owner "acme"',
   );
 
   assertEquals(client.requests, []);
@@ -155,7 +171,7 @@ Deno.test("targeted discovery rejects malformed qualified repository targets", a
         "acme/team/api",
       ),
     Error,
-    'Repository target must be a repository name or "organization/repository"',
+    'Repository target must be a repository name or "owner/repository"',
   );
 
   assertEquals(client.requests, []);
@@ -670,6 +686,158 @@ Deno.test("discovery requests an empty page after exactly 100 results", async ()
   ]);
 });
 
+Deno.test("personal discovery lists only repositories owned by the authenticated user", async () => {
+  const loaded = configuration(
+    { scope: { names: ["*"] } },
+    {},
+    undefined,
+    "kralizek",
+  );
+  const client = new FakeGitHubClient({
+    "/users/kralizek": [{ login: "Kralizek", type: "User" }],
+    "/user": [{ login: "kralizek", type: "User" }],
+    "/user/repos?page=1&per_page=100&type=owner": [[
+      {
+        name: "owned",
+        visibility: "private",
+        owner: { login: "Kralizek" },
+      },
+      {
+        name: "shared",
+        visibility: "private",
+        owner: { login: "someone-else" },
+      },
+    ]],
+  });
+
+  const result = await discoverRepositoriesWithOwner(client, loaded);
+
+  assertEquals(result.repositories.map(({ name }) => name), ["owned"]);
+  assertEquals(result.owner, { login: "Kralizek", type: "User" });
+  assertEquals(client.requests.map(requestKeyFromRequest), [
+    "/users/kralizek",
+    "/user",
+    "/user/repos?page=1&per_page=100&type=owner",
+  ]);
+});
+
+Deno.test("GitHub runtime reuses the canonical personal owner for normal discovery", async () => {
+  const loaded = configuration(
+    { scope: { names: ["*"] } },
+    {},
+    undefined,
+    "kralizek",
+  );
+  const requests: string[] = [];
+  const runtime = createGitHubRuntime({
+    token: "test",
+    fetch: (input) => {
+      const url = new URL(String(input));
+      requests.push(url.pathname + url.search);
+      if (url.pathname === "/users/kralizek") {
+        return Promise.resolve(
+          Response.json({ login: "Kralizek", type: "User" }),
+        );
+      }
+      if (url.pathname === "/user") {
+        return Promise.resolve(
+          Response.json({ login: "Kralizek", type: "User" }),
+        );
+      }
+      if (url.pathname === "/user/repos") {
+        return Promise.resolve(
+          Response.json([{
+            name: "owned",
+            visibility: "private",
+            owner: { login: "Kralizek" },
+          }, {
+            name: "shared",
+            visibility: "private",
+            owner: { login: "collaborator" },
+          }]),
+        );
+      }
+      return Promise.resolve(
+        Response.json({ message: "Unexpected request" }, { status: 500 }),
+      );
+    },
+  });
+
+  const result = await runtime.discover(loaded);
+
+  assertEquals(result.repositories.map(({ name }) => name), ["owned"]);
+  assertEquals(runtime.owner, { login: "Kralizek", type: "User" });
+  assertEquals(requests, [
+    "/users/kralizek",
+    "/user",
+    "/user/repos?type=owner&per_page=100&page=1",
+  ]);
+});
+
+for (const declaration of ["teams", "properties"] as const) {
+  Deno.test(`personal discovery rejects organization-only ${declaration} before listing`, async () => {
+    const loaded = configuration(
+      {
+        scope: declaration === "teams"
+          ? { teams: ["platform"] }
+          : { properties: { kind: "service" } },
+      },
+      {},
+      undefined,
+      "kralizek",
+    );
+    const client = new FakeGitHubClient({
+      "/users/kralizek": [{ login: "Kralizek", type: "User" }],
+      "/user": [{ login: "Kralizek", type: "User" }],
+    });
+
+    await assertRejects(
+      () => discoverRepositoriesWithOwner(client, loaded),
+      Error,
+      "does not support organization-only repository declarations",
+    );
+    assertEquals(client.requests.map((request) => request.path), [
+      "/users/kralizek",
+      "/user",
+    ]);
+  });
+}
+
+for (const declaration of ["team permissions", "custom properties"] as const) {
+  Deno.test(`personal discovery rejects organization-only ${declaration} declarations before listing`, async () => {
+    const repository: RepositoryTemplate["repository"] =
+      declaration === "team permissions"
+        ? { teams: [{ name: "platform", permission: "pull" }] }
+        : { customProperties: { kind: "service" } };
+    const loaded = configuration(
+      { scope: { names: ["*"] } },
+      {
+        code: {
+          version: 1,
+          kind: "repository",
+          repository,
+        },
+      },
+      undefined,
+      "kralizek",
+    );
+    const client = new FakeGitHubClient({
+      "/users/kralizek": [{ login: "Kralizek", type: "User" }],
+      "/user": [{ login: "Kralizek", type: "User" }],
+    });
+
+    await assertRejects(
+      () => discoverRepositoriesWithOwner(client, loaded),
+      Error,
+      "does not support organization-only repository declarations",
+    );
+    assertEquals(client.requests.map((request) => request.path), [
+      "/users/kralizek",
+      "/user",
+    ]);
+  });
+}
+
 function requestKeyFromRequest(request: Request): string {
   return requestKey(request.path, request.query);
 }
@@ -688,12 +856,13 @@ function configuration(
   },
   templates: Readonly<Record<string, RepositoryTemplate>> = {},
   include: RepositorySelector | "all" = root.scope,
+  organization = "acme",
 ): LoadedConfiguration {
   return {
     root: "/configuration",
     configuration: {
       version: 1,
-      organization: "acme",
+      organization,
       repositories: {
         scope: {
           include,

@@ -72,11 +72,17 @@ Deno.test("resource list uses the GitHub CLI token without leaking it", async ()
               stderr: new Uint8Array(),
             }),
         },
-        fetch: (_url, init) => {
+        fetch: (url, init) => {
           authorizations.push(
             (init?.headers as Record<string, string>).authorization,
           );
-          return Promise.resolve(Response.json([]));
+          return Promise.resolve(
+            Response.json(
+              new URL(String(url)).pathname.endsWith("/users/acme")
+                ? { login: "acme", type: "Organization" }
+                : [],
+            ),
+          );
         },
         write: (value) => output.push(value),
         writeError: (value) => errors.push(value),
@@ -85,6 +91,7 @@ Deno.test("resource list uses the GitHub CLI token without leaking it", async ()
       errors.join("\n"),
     );
     assertEquals(authorizations.map((header) => header.slice(7)), [
+      "cli-secret",
       "cli-secret",
     ]);
     assertEquals(authorizations[0].startsWith("Bearer "), true);

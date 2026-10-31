@@ -47,6 +47,8 @@ export interface RepositoryCreationBootstrapPreview {
 export interface RepositoryCreationPreview {
   readonly kind: "repository_creation_preview";
   readonly version: 1;
+  readonly owner: string;
+  /** @deprecated Use owner; this remains for output compatibility. */
   readonly organization: string;
   readonly template: string;
   readonly ready: boolean;
@@ -93,6 +95,7 @@ export function buildRepositoryCreationPreview(
   const base = {
     kind: "repository_creation_preview" as const,
     version: 1 as const,
+    owner: loaded.configuration.organization,
     organization: loaded.configuration.organization,
     template: specification.template,
     ready: specification.ready,

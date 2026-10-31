@@ -70,12 +70,13 @@ minted at workflow runtime over a static broad token where practical.
 `octosmith template permissions services --creation --format json` (or text)
 analyzes creation separately from ordinary plan/apply. The output separates:
 
-- **Organization repository creation authorization:** the organization endpoint
-  requires repository Administration: write for fine-grained PATs/GitHub Apps.
-  This is a repository permission used for an organization-level operation, not
-  a fabricated organization Administration permission. Classic PATs require
-  `repo` for private/internal repositories or `public_repo` for public ones. The
-  authenticated actor must be allowed to create the requested visibility.
+- **Repository creation authorization:** organization owners use the
+  organization endpoint and require repository Administration: write for
+  supported fine-grained PATs/GitHub Apps. Personal owners use the
+  authenticated-user endpoint and must match the token's account. Classic PATs
+  require `repo` for private/internal repositories or `public_repo` for public
+  ones. The authenticated actor must be allowed to create the requested
+  visibility.
 - **Selector metadata:** team assignment requires repository Administration:
   write, organization Members: read and metadata access. Repository custom
   property assignment requires Custom properties: write. Definitions must
@@ -91,9 +92,24 @@ analyzes creation separately from ordinary plan/apply. The output separates:
 Organization/enterprise restrictions, SAML SSO authorization, visibility policy,
 enterprise-only internal visibility and installation repository selection can
 still reject a valid offline specification. Ensure a GitHub App installation can
-access the newly created repository as well as invoke creation. Permission
-analysis is not a guarantee of authorization. Ordinary `template permissions`,
-plan and apply do not gain creation-specific authorization requirements.
+access the newly created repository as well as invoke creation. Personal
+accounts cannot use organization team permissions or custom properties; those
+declarations fail preflight before mutation. Permission analysis is not a
+guarantee of authorization. Ordinary `template permissions`, plan and apply do
+not gain creation-specific authorization requirements.
+
+The disposable personal-owner CLI lifecycle test is opt-in. Run it only against
+an account whose token can create and delete private repositories:
+
+```sh
+OCTOSMITH_PERSONAL_OWNER_E2E=1 \
+OCTOSMITH_PERSONAL_OWNER=your-login \
+GITHUB_TOKEN=... \
+deno test -A tests/e2e/personal_owner_test.ts
+```
+
+It creates a uniquely named private repository, runs create/bootstrap followed
+by ordinary plan and apply, then deletes that exact repository during cleanup.
 
 After creation, missing teams/properties or failed classification may leave the
 repository outside management scope. Repair these manually before relying on

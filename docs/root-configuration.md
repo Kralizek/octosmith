@@ -1,9 +1,10 @@
 # Root configuration file reference
 
 `octosmith.yml` is the root of an Octosmith control repository. It declares
-which GitHub organization and repositories are in scope, and sets policies that
-apply to **all** managed repositories. Repository-specific desired state lives
-in [repository templates](repository-template.md).
+which GitHub organization or authenticated personal account and repositories are
+in scope, and sets policies that apply to **all** managed repositories.
+Repository-specific desired state lives in
+[repository templates](repository-template.md).
 
 The authoritative source is
 [`schemas/octosmith.schema.json`](../schemas/octosmith.schema.json), which
@@ -25,8 +26,23 @@ repositories:
     include: all
 ```
 
+For a personal account, keep the same key and use the authenticated user's
+login:
+
+```yaml
+version: 1
+organization: Kralizek
+
+repositories:
+  scope:
+    include: all
+```
+
 - `version` **(required):** exactly `1`.
-- `organization` **(required):** a non-empty GitHub organization name.
+- `organization` **(required):** a non-empty GitHub organization login or
+  personal-account login. For a personal account, Octosmith verifies that it is
+  the authenticated user before any mutation. The historical key remains
+  unchanged for existing configurations.
 - `repositories` **(required):** an object containing `scope`, and optionally
   `settings` and `file_changes`.
 
@@ -57,6 +73,12 @@ A selector must contain at least one of:
 
 When a selector contains multiple fields, **all specified fields must match**.
 `exclude` uses the same predicate as `include`.
+
+Personal-account discovery uses the authenticated user's repository endpoint and
+keeps only repositories whose canonical owner login matches the configured
+account. Organization team selectors/permissions and organization custom
+properties are unsupported for personal owners; they fail before repository
+creation or reconciliation rather than being ignored.
 
 ```yaml
 repositories:

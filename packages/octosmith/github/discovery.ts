@@ -7,10 +7,16 @@ import type {
 } from "../mod.ts";
 import { matchesScope } from "../mod.ts";
 import type { GitHubClient, GitHubQueryValue } from "./client.ts";
+import {
+  assertRepositoryOwnerCapabilities,
+  type ResolvedRepositoryOwner,
+  resolveRepositoryOwner,
+} from "./owner.ts";
 
 interface RepositoryResponse {
   readonly name: string;
   readonly visibility: RepositoryVisibility;
+  readonly owner?: { readonly login: string };
 }
 
 interface RepositoryPropertiesResponse {
@@ -31,6 +37,7 @@ export interface RepositoryDiscoveryFailure {
 export interface RepositoryDiscoveryResult {
   readonly repositories: readonly RepositoryMetadata[];
   readonly failures: readonly RepositoryDiscoveryFailure[];
+  readonly owner?: ResolvedRepositoryOwner;
 }
 
 interface CandidateDiscoveryResult {
@@ -45,15 +52,27 @@ export async function discoverRepositories(
   client: GitHubClient,
   loaded: LoadedConfiguration,
   repository?: string,
+  resolvedOwner?: ResolvedRepositoryOwner,
 ): Promise<RepositoryDiscoveryResult> {
   if (repository !== undefined && repository.length === 0) {
     throw new Error("Repository target must not be empty");
   }
 
-  const organization = loaded.configuration.organization;
+  const configuredOwner = loaded.configuration.organization;
+  if (repository !== undefined) {
+    normalizeRepositoryTarget(repository, configuredOwner);
+  }
+  const owner = resolvedOwner ??
+    await resolveRepositoryOwner(client, configuredOwner);
+  if (owner.login.toLowerCase() !== configuredOwner.toLowerCase()) {
+    throw new Error(
+      `Resolved GitHub owner "${owner.login}" does not match configured owner "${configuredOwner}".`,
+    );
+  }
+  assertRepositoryOwnerCapabilities(loaded, owner);
   const targetRepository = repository === undefined
     ? undefined
-    : normalizeRepositoryTarget(repository, organization);
+    : normalizeRepositoryTarget(repository, owner.login);
   const scopes = [
     loaded.configuration.repositories.scope,
     ...Object.values(loaded.templates).flatMap((template) =>
@@ -75,12 +94,13 @@ export async function discoverRepositories(
       targetRepository,
       referencedTeams,
       referencedProperties,
+      owner,
     );
   }
 
   const discovery = await discoverCandidates(
     client,
-    organization,
+    owner,
     loaded.configuration.repositories.scope.include === "all"
       ? {}
       : loaded.configuration.repositories.scope.include,
@@ -92,7 +112,7 @@ export async function discoverRepositories(
       teamRepositories.set(
         team,
         new Set(
-          (await listTeamRepositories(client, organization, team))
+          (await listTeamRepositories(client, owner.login, team))
             .map((repository) => repository.name),
         ),
       );
@@ -100,7 +120,7 @@ export async function discoverRepositories(
   }
 
   const properties = referencedProperties.size > 0
-    ? await loadRepositoryProperties(client, organization, referencedProperties)
+    ? await loadRepositoryProperties(client, owner.login, referencedProperties)
     : new Map<string, Readonly<Record<string, PropertyValue>>>();
 
   const repositories = discovery.repositories.map((
@@ -121,6 +141,7 @@ export async function discoverRepositories(
       )
       .sort((left, right) => left.name.localeCompare(right.name)),
     failures: discovery.failures,
+    ...(owner.type === "User" && { owner }),
   };
 }
 
@@ -130,13 +151,25 @@ async function discoverTargetRepository(
   repository: string,
   referencedTeams: ReadonlySet<string>,
   referencedProperties: ReadonlySet<string>,
+  owner: ResolvedRepositoryOwner,
 ): Promise<RepositoryDiscoveryResult> {
-  const organization = loaded.configuration.organization;
-  const path = "/repos/" + encodeURIComponent(organization) + "/" +
+  const path = "/repos/" + encodeURIComponent(owner.login) + "/" +
     encodeURIComponent(repository);
 
   try {
     const response = await client.get<RepositoryResponse>(path);
+    if (!isOwnedBy(response, owner)) {
+      return {
+        repositories: [],
+        failures: [{
+          repository,
+          error: new Error(
+            `Repository ${owner.login}/${repository} is not owned by ${owner.login}.`,
+          ),
+        }],
+        ...(owner.type === "User" && { owner }),
+      };
+    }
     const teams = referencedTeams.size > 0
       ? await getAllPages<{ readonly slug: string }>(client, path + "/teams")
       : [];
@@ -174,21 +207,27 @@ async function discoverTargetRepository(
             "Repository " + repository + " is outside the configured scope",
           ),
         }],
+        ...(owner.type === "User" && { owner }),
       };
     }
 
-    return { repositories: [metadata], failures: [] };
+    return {
+      repositories: [metadata],
+      failures: [],
+      ...(owner.type === "User" && { owner }),
+    };
   } catch (error) {
     return {
       repositories: [],
       failures: [{ repository, error }],
+      ...(owner.type === "User" && { owner }),
     };
   }
 }
 
 async function discoverCandidates(
   client: GitHubClient,
-  organization: string,
+  owner: ResolvedRepositoryOwner,
   scope: RepositorySelector,
   teamRepositories: Map<string, ReadonlySet<string>>,
 ): Promise<CandidateDiscoveryResult> {
@@ -201,7 +240,7 @@ async function discoverCandidates(
         try {
           return {
             repository: await client.get<RepositoryResponse>(
-              "/repos/" + encodeURIComponent(organization) + "/" +
+              "/repos/" + encodeURIComponent(owner.login) + "/" +
                 encodeURIComponent(name),
             ),
           };
@@ -213,11 +252,20 @@ async function discoverCandidates(
 
     return {
       repositories: results.flatMap((result) =>
-        "repository" in result ? [result.repository] : []
+        "repository" in result && isOwnedBy(result.repository, owner)
+          ? [result.repository]
+          : []
       ),
       failures: results.flatMap((result) =>
         "error" in result
           ? [{ repository: result.name, error: result.error }]
+          : !isOwnedBy(result.repository, owner)
+          ? [{
+            repository: result.repository.name,
+            error: new Error(
+              `Repository ${owner.login}/${result.repository.name} is not owned by ${owner.login}.`,
+            ),
+          }]
           : []
       ),
     };
@@ -227,7 +275,7 @@ async function discoverCandidates(
     const team = scope.teams[0];
     const repositories = await listTeamRepositories(
       client,
-      organization,
+      owner.login,
       team,
     );
     teamRepositories.set(
@@ -238,17 +286,31 @@ async function discoverCandidates(
   }
 
   const visibility = singleVisibility(scope.visibility);
-
+  const repositories = await getAllPages<RepositoryResponse>(
+    client,
+    owner.type === "Organization"
+      ? "/orgs/" + encodeURIComponent(owner.login) + "/repos"
+      : "/user/repos",
+    owner.type === "Organization"
+      ? { ...(visibility && { type: visibility }) }
+      : { type: "owner" },
+  );
   return {
-    repositories: await getAllPages<RepositoryResponse>(
-      client,
-      "/orgs/" + encodeURIComponent(organization) + "/repos",
-      {
-        ...(visibility && { type: visibility }),
-      },
+    repositories: repositories.filter((repository) =>
+      isOwnedBy(repository, owner) &&
+      (owner.type === "Organization" || !visibility ||
+        repository.visibility === visibility)
     ),
     failures: [],
   };
+}
+
+function isOwnedBy(
+  repository: RepositoryResponse,
+  owner: ResolvedRepositoryOwner,
+): boolean {
+  return owner.type !== "User" ||
+    repository.owner?.login.toLowerCase() === owner.login.toLowerCase();
 }
 
 async function listTeamRepositories(
@@ -338,7 +400,7 @@ function singleVisibility(
 
 function normalizeRepositoryTarget(
   target: string,
-  organization: string,
+  ownerLogin: string,
 ): string {
   const parts = target.split("/");
 
@@ -348,14 +410,16 @@ function normalizeRepositoryTarget(
 
   if (parts.length !== 2 || parts.some((part) => part.length === 0)) {
     throw new Error(
-      'Repository target must be a repository name or "organization/repository"',
+      'Repository target must be a repository name or "owner/repository"',
     );
   }
 
-  const [owner, repository] = parts;
-  if (owner.toLowerCase() !== organization.toLowerCase()) {
+  const [, repository] = parts;
+  if (parts[0].toLowerCase() !== ownerLogin.toLowerCase()) {
     throw new Error(
-      `Repository target organization "${owner}" does not match configured organization "${organization}"`,
+      `Repository target owner "${
+        parts[0]
+      }" does not match configured owner "${ownerLogin}"`,
     );
   }
 

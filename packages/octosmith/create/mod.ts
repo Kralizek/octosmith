@@ -1,5 +1,5 @@
 /**
- * Scaffold a GitHub organization control repository with Octosmith.
+ * Scaffold a GitHub organization or personal-account control repository with Octosmith.
  *
  * Run `deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme`.
  * See the [getting-started guide](https://github.com/Kralizek/octosmith/blob/master/docs/getting-started.md).
@@ -162,7 +162,7 @@ export async function writeScaffold(
 export function parseScaffoldArguments(
   args: readonly string[],
   promptOrganization: () => string | null = () =>
-    prompt("GitHub organization:"),
+    prompt("GitHub organization or personal-account login:"),
 ): ScaffoldOptions {
   let targetDirectory = "github-config";
   let organization: string | undefined;
@@ -220,7 +220,7 @@ export function parseScaffoldArguments(
 
   if (!normalizedOrganization) {
     throw new Error(
-      "GitHub organization is required; pass --organization for non-interactive use",
+      "GitHub organization or personal-account login is required; pass --organization for non-interactive use",
     );
   }
 

@@ -1,4 +1,5 @@
 import {
+  assertRepositoryOwnerCapabilities,
   buildApplyEvaluations,
   buildPlan,
   classifyResource,
@@ -18,6 +19,8 @@ import {
   reportPlannedRepository,
   type RepositoryGitBootstrap,
   resolveDesiredState,
+  type ResolvedRepositoryOwner,
+  resolveRepositoryOwner,
   type ResourceInspection,
   type RuntimeReference,
   type RuntimeReferenceDiagnostic,
@@ -50,6 +53,7 @@ export interface ApplyRuntime {
   readonly client?: GitHubClient;
   readonly value?: RuntimeValueProvider;
   readonly bootstrap?: RepositoryGitBootstrap;
+  readonly owner?: ResolvedRepositoryOwner;
 
   discover(
     loaded: LoadedConfiguration,
@@ -97,6 +101,7 @@ export function createGitHubRuntime(
   let loadedConfiguration: LoadedConfiguration | undefined;
   let fileChanges:
     LoadedConfiguration["configuration"]["repositories"]["fileChanges"];
+  let resolvedOwner: ResolvedRepositoryOwner | undefined;
   const preparedSinks = new Map<
     string,
     import("@octosmith/octosmith").RepositoryMutationSink
@@ -105,17 +110,26 @@ export function createGitHubRuntime(
   return {
     client,
     value: secretValue,
+    get owner() {
+      return resolvedOwner;
+    },
     bootstrap: new LocalGitBootstrap({
       token: () => options.token,
       baseUrl: options.baseUrl,
     }),
 
     async discover(loaded, repository) {
-      options.traceGroup?.("organization");
+      options.traceGroup?.("owner");
       loadedConfiguration = loaded;
-      source = new GitHubRepositoryStateSource(
+      const owner = await resolveRepositoryOwner(
         client,
         loaded.configuration.organization,
+      );
+      resolvedOwner = owner;
+      assertRepositoryOwnerCapabilities(loaded, owner);
+      source = new GitHubRepositoryStateSource(
+        client,
+        owner.login,
       );
       fileChanges = loaded.configuration.repositories.fileChanges ?? {
         mode: "pull_request",
@@ -123,16 +137,21 @@ export function createGitHubRuntime(
       sink = new GitHubRepositoryMutationSink({
         bootstrap: new GitHubRepositoryBootstrap(
           client,
-          loaded.configuration.organization,
+          owner.login,
         ),
         client,
-        owner: loaded.configuration.organization,
+        owner: owner.login,
         secretValue,
         fileChanges,
       });
       preparedSinks.clear();
 
-      return await discoverRepositories(client, loaded, repository);
+      return await discoverRepositories(
+        client,
+        loaded,
+        repository,
+        owner,
+      );
     },
 
     async read(desired, operations) {
@@ -195,7 +214,7 @@ export function createGitHubRuntime(
     },
 
     async recheck(resource) {
-      if (!source || !loadedConfiguration) {
+      if (!source || !loadedConfiguration || !resolvedOwner) {
         throw new Error("GitHub runtime has not discovered repositories yet");
       }
 
@@ -203,6 +222,7 @@ export function createGitHubRuntime(
         client,
         loadedConfiguration,
         resource.desired.repository,
+        resolvedOwner,
       );
       if (
         discovery.failures.length > 0 || discovery.repositories.length !== 1
@@ -337,7 +357,11 @@ export async function apply(
     const diagnostics: RuntimeReferenceDiagnostic[] = [];
 
     try {
-      const inspection = inspectResource(loaded, repository);
+      const inspection = inspectResource(
+        loaded,
+        repository,
+        runtime.owner?.login,
+      );
       options.onResourceInspected?.(inspection);
       if (
         inspection.status === "unmatched" &&

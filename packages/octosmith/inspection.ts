@@ -30,9 +30,10 @@ export interface ResourceInspectionResult {
 export function inspectResource(
   loaded: LoadedConfiguration,
   resource: RepositoryMetadata,
+  owner = loaded.configuration.organization,
 ): ResourceInspection {
   const classification = classifyResource(loaded, resource);
-  const name = loaded.configuration.organization + "/" + resource.name;
+  const name = owner + "/" + resource.name;
   if (classification.status === "invalid") {
     throw new Error(
       "Resource " + name + " matches multiple templates: " +
