@@ -3,7 +3,9 @@ import { E2ERuntime } from "./runtime.ts";
 
 const fixtureRoot = Deno.env.get("E2E_FIXTURES");
 const fixtureSha = Deno.env.get("E2E_FIXTURE_REVISION");
-if (!fixtureRoot || !fixtureSha) throw new Error("Missing pinned fixtures checkout");
+if (!fixtureRoot || !fixtureSha) {
+  throw new Error("Missing pinned fixtures checkout");
+}
 await Deno.stat(fixtureRoot + "/README.md");
 
 const git = await new Deno.Command("git", {
