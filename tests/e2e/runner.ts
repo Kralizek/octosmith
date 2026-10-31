@@ -6,7 +6,9 @@ const runId = Deno.env.get("E2E_RUN_ID");
 const results = Deno.env.get("E2E_RESULTS");
 const fixtures = Deno.env.get("E2E_FIXTURES");
 if (owner !== "octosmith-tests" || !runId || !results || !fixtures) {
-  throw new Error("E2E requires the dedicated octosmith-tests owner and run context");
+  throw new Error(
+    "E2E requires the dedicated octosmith-tests owner and run context",
+  );
 }
 if (!/^[0-9]+-[0-9]+$/.test(runId)) {
   throw new Error("Expected GitHub Actions run ID and attempt");
@@ -19,7 +21,11 @@ const workspace = join(results, "workspace");
 await Deno.mkdir(workspace, { recursive: true });
 
 type Registered = { name: string; fullName: string; id?: number };
-type Outcome = { scenario: string; status: "passed" | "failed"; details: string };
+type Outcome = {
+  scenario: string;
+  status: "passed" | "failed";
+  details: string;
+};
 const registered: Registered[] = [];
 const outcomes: Outcome[] = [];
 
@@ -60,13 +66,17 @@ async function inspect(name: string, expectedPaths: string[]) {
     `repos/${owner}/${name}/branches/${encodeURIComponent(defaultBranch)}`,
   );
   const commit = await ghJson(
-    `repos/${owner}/${name}/git/commits/${(branch.commit as Record<string, string>).sha}`,
+    `repos/${owner}/${name}/git/commits/${
+      (branch.commit as Record<string, string>).sha
+    }`,
   );
   if ((commit.parents as unknown[]).length !== 0) {
     throw new Error("Bootstrap commit is not a single root commit");
   }
   const tree = await ghJson(
-    `repos/${owner}/${name}/git/trees/${(commit.tree as Record<string, string>).sha}?recursive=1`,
+    `repos/${owner}/${name}/git/trees/${
+      (commit.tree as Record<string, string>).sha
+    }?recursive=1`,
   );
   const paths = (tree.tree as { path: string; type: string }[])
     .filter((entry) => entry.type === "blob")
@@ -74,7 +84,11 @@ async function inspect(name: string, expectedPaths: string[]) {
   if (JSON.stringify(paths) !== JSON.stringify([...expectedPaths].sort())) {
     throw new Error(`Unexpected Git tree: ${JSON.stringify(paths)}`);
   }
-  return { repoId: repo.id, sha: (branch.commit as Record<string, string>).sha, paths };
+  return {
+    repoId: repo.id,
+    sha: (branch.commit as Record<string, string>).sha,
+    paths,
+  };
 }
 
 async function createScenario(
@@ -90,7 +104,9 @@ async function createScenario(
   registered.push({ name, fullName });
   await saveRegistry();
   const existing = await execute("gh", ["api", `repos/${fullName}`]);
-  if (existing.ok) throw new Error(`Refusing to adopt existing repository ${fullName}`);
+  if (existing.ok) {
+    throw new Error(`Refusing to adopt existing repository ${fullName}`);
+  }
   if (!existing.stderr.includes("404")) {
     throw new Error(`Cannot establish that ${fullName} is unused`);
   }
@@ -109,7 +125,11 @@ async function createScenario(
       recursive: true,
     });
     await Deno.writeTextFile(join(config, sourcePath), source);
-    declarations.push(`    ${JSON.stringify(path)}:\n      ensure: exact\n      source: ${JSON.stringify(sourcePath)}`);
+    declarations.push(
+      `    ${JSON.stringify(path)}:\n      ensure: exact\n      source: ${
+        JSON.stringify(sourcePath)
+      }`,
+    );
   }
   for (const path of absent) {
     declarations.push(`    ${JSON.stringify(path)}:\n      ensure: absent`);
@@ -127,9 +147,12 @@ async function createScenario(
     "    default_branch: main",
     "    has_issues: false",
     ...(commands.length
-      ? ["  post_create_commands:", ...commands.map((cmd) =>
-        `    - command: sh\n      args: ["-c", ${JSON.stringify(cmd)}]`
-      )]
+      ? [
+        "  post_create_commands:",
+        ...commands.map((cmd) =>
+          `    - command: sh\n      args: ["-c", ${JSON.stringify(cmd)}]`
+        ),
+      ]
       : []),
     ...(declarations.length ? ["  files:", ...declarations] : []),
     "",
@@ -137,32 +160,63 @@ async function createScenario(
   await Deno.writeTextFile(join(config, "templates", "scenario.yml"), yaml);
 
   const create = await execute("deno", [
-    "run", "-A", "packages/cli/mod.ts", "resource", "create", "scenario",
-    "--path", config, "--name", name, "--visibility", "private", "--format", "json",
+    "run",
+    "-A",
+    "packages/cli/mod.ts",
+    "resource",
+    "create",
+    "scenario",
+    "--path",
+    config,
+    "--name",
+    name,
+    "--visibility",
+    "private",
+    "--format",
+    "json",
   ]);
   await Deno.writeTextFile(
     join(results, `${scenario}-create.json`),
-    create.stdout || JSON.stringify({ exit: create.code, stderr: create.stderr }),
+    create.stdout ||
+      JSON.stringify({ exit: create.code, stderr: create.stderr }),
   );
-  if (!create.ok) throw new Error(`Octosmith resource create failed (${create.code})`);
+  if (!create.ok) {
+    throw new Error(`Octosmith resource create failed (${create.code})`);
+  }
 
-  const expectedPaths = [...Object.keys(files), ...(commands.length ? ["generator-output.txt"] : [])];
+  const expectedPaths = [
+    ...Object.keys(files),
+    ...(commands.length ? ["generator-output.txt"] : []),
+  ];
   const observed = await inspect(name, expectedPaths);
   for (const [filePath, expectedContent] of Object.entries(files)) {
     const remote = await ghJson(`repos/${owner}/${name}/contents/${filePath}`);
     if (typeof remote.content !== "string" || remote.encoding !== "base64") {
       throw new Error(`Cannot independently read ${filePath}`);
     }
-    const actual = Uint8Array.from(atob(remote.content.replace(/\\s/g, "")), (char) => char.charCodeAt(0));
+    const actual = Uint8Array.from(
+      atob(remote.content.replace(/\\s/g, "")),
+      (char) => char.charCodeAt(0),
+    );
     const expected = new TextEncoder().encode(expectedContent);
-    if (actual.length !== expected.length || !actual.every((byte, index) => byte === expected[index])) {
+    if (
+      actual.length !== expected.length ||
+      !actual.every((byte, index) => byte === expected[index])
+    ) {
       throw new Error(`Managed content differs remotely: ${filePath}`);
     }
   }
   registered[registered.length - 1].id = observed.repoId as number;
   await saveRegistry();
   const plan = await execute("deno", [
-    "run", "-A", "packages/cli/mod.ts", "plan", "--path", config, "--format", "json",
+    "run",
+    "-A",
+    "packages/cli/mod.ts",
+    "plan",
+    "--path",
+    config,
+    "--format",
+    "json",
   ]);
   if (!plan.ok) throw new Error(`Follow-up plan failed (${plan.code})`);
   const result = JSON.parse(plan.stdout) as Record<string, unknown>;
@@ -173,7 +227,9 @@ async function createScenario(
     join(results, `${scenario}-remote.json`),
     JSON.stringify(observed, null, 2),
   );
-  if (!result || typeof result !== "object") throw new Error("Invalid plan JSON");
+  if (!result || typeof result !== "object") {
+    throw new Error("Invalid plan JSON");
+  }
 }
 
 try {
@@ -208,9 +264,17 @@ try {
         scenario.absent,
         scenario.commands,
       );
-      outcomes.push({ scenario: scenario.name, status: "passed", details: "Created and independently inspected" });
+      outcomes.push({
+        scenario: scenario.name,
+        status: "passed",
+        details: "Created and independently inspected",
+      });
     } catch (error) {
-      outcomes.push({ scenario: scenario.name, status: "failed", details: String(error) });
+      outcomes.push({
+        scenario: scenario.name,
+        status: "failed",
+        details: String(error),
+      });
     }
     await saveOutcomes();
   }
