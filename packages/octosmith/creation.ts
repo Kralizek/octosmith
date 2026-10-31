@@ -32,9 +32,15 @@ import { applyPlan } from "./github/apply.ts";
 import { type GitHubClient, GitHubRequestError } from "./github/client.ts";
 import {
   type CreatedRepository,
-  createOrganizationRepository,
+  createRepositoryForOwner,
 } from "./github/create_repository.ts";
 import { discoverRepositories } from "./github/discovery.ts";
+import {
+  assertRepositoryOwnerCapabilities,
+  RepositoryOwnerResolutionError,
+  type RepositoryOwnerType,
+  resolveRepositoryOwner,
+} from "./github/owner.ts";
 import { readCurrentState } from "./github/read_state.ts";
 import { GitHubRepositoryMutationSink } from "./github/rest_mutation_sink.ts";
 import { GitHubRepositoryStateSource } from "./github/rest_state_source.ts";
@@ -104,7 +110,10 @@ export interface CreateRepositoryOptions extends RepositoryCreationOptions {
 export interface RepositoryCreationResult {
   readonly kind: "repository_creation";
   readonly version: 1;
+  readonly owner?: string;
+  /** @deprecated Use owner; this remains for output compatibility. */
   readonly organization?: string;
+  readonly ownerType?: RepositoryOwnerType;
   readonly template?: string;
   readonly requestedName?: string;
   readonly repository?: CreatedRepository;
@@ -126,7 +135,7 @@ export interface RepositoryCreationResult {
   readonly deferredReport?: Report;
 }
 
-/** Provision, verify, bootstrap once and reconcile an organization repository. */
+/** Provision, verify, bootstrap once and reconcile a repository. */
 export async function createRepository(
   request: RepositoryCreationRequest,
   options: CreateRepositoryOptions,
@@ -134,6 +143,7 @@ export async function createRepository(
   const completedStages: RepositoryCreationStage[] = [];
   let stage: RepositoryCreationStage = "configuration";
   let organization: string | undefined;
+  let ownerType: RepositoryOwnerType | undefined;
   let specification: RepositoryCreationSpecification | undefined;
   let repository: CreatedRepository | undefined;
   let report: Report | undefined;
@@ -153,7 +163,9 @@ export async function createRepository(
   ): RepositoryCreationResult => ({
     kind: "repository_creation",
     version: 1,
+    owner: organization,
     organization,
+    ownerType,
     template: specification?.template,
     requestedName: specification?.repository?.name ?? request.name,
     repository,
@@ -199,13 +211,39 @@ export async function createRepository(
         "Git bootstrap transport is required; provide an authenticated RepositoryGitBootstrap before creating a repository.",
       );
     }
+    stage = "preflight";
+    const client = typeof options.client === "function"
+      ? await options.client()
+      : options.client;
+    const owner = await resolveRepositoryOwner(
+      client,
+      loaded.configuration.organization,
+    );
+    organization = owner.login;
+    ownerType = owner.type;
+    try {
+      assertRepositoryOwnerCapabilities(loaded, owner);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      specification = {
+        ...specification,
+        ready: false,
+        diagnostics: [
+          ...specification.diagnostics,
+          {
+            code: "unsupported_owner_capability",
+            message,
+            template: specification.template,
+            path: "owner",
+          },
+        ],
+      };
+      return result("preflight_rejected", error);
+    }
     completedStages.push(stage);
     const metadata = specification.repository;
     const visibility = specification.repository.visibility;
     stage = "availability";
-    const client = typeof options.client === "function"
-      ? await options.client()
-      : options.client;
     const path = "/repos/" + encodeURIComponent(organization) + "/" +
       encodeURIComponent(metadata.name);
     const existing = await client.request<unknown>("GET", path, {
@@ -223,7 +261,7 @@ export async function createRepository(
     completedStages.push(stage);
     stage = "creation";
     try {
-      repository = await createOrganizationRepository(client, organization, {
+      repository = await createRepositoryForOwner(client, owner, {
         name: metadata.name,
         visibility,
       });
@@ -295,12 +333,12 @@ export async function createRepository(
     stage = "classification";
     const created = repository;
     const selected = specification;
-    const owner = organization;
     const verifyMetadata = async () => {
       const discovery = await discoverRepositories(
         client,
         loaded,
         created.name,
+        owner,
       );
       const actual = discovery.repositories[0];
       if (discovery.failures[0]?.error instanceof GitHubRequestError) {
@@ -377,7 +415,7 @@ export async function createRepository(
             settings: { ...desired.settings, defaultBranch: bootstrap!.branch },
           };
         }
-        const source = new GitHubRepositoryStateSource(client, owner);
+        const source = new GitHubRepositoryStateSource(client, owner.login);
         let current = await readCurrentState(source, desired, undefined, {
           scope: "github-only",
         });
@@ -557,7 +595,7 @@ export async function createRepository(
         );
       }
       return {
-        organization: owner,
+        organization: owner.login,
         startedAt,
         completedAt: new Date(),
         mode: "apply",
@@ -618,7 +656,7 @@ export async function createRepository(
             "Unexpected existing branches; bootstrap stopped.",
           );
         }
-        const source = new GitHubRepositoryStateSource(client, owner);
+        const source = new GitHubRepositoryStateSource(client, owner.login);
         const history = await source.getRepositoryHistory(
           created.name,
           branch,
@@ -677,7 +715,7 @@ export async function createRepository(
         "Unexpected remote branches after the initial push; inspect remote history before deferred reconciliation.",
       );
     }
-    const source = new GitHubRepositoryStateSource(client, organization);
+    const source = new GitHubRepositoryStateSource(client, owner.login);
     if (
       await source.getBranchHead(repository.name, branch) !==
         bootstrap.commitSha
@@ -742,7 +780,7 @@ export async function createRepository(
         ? "Repository retained. Do not rerun resource create. Inspect remote branches before manually completing bootstrap, then run ordinary plan/apply. No automatic push retry or deletion is performed."
         : repository
         ? "Repository retained; never automatically deleted. Repair selector teams/properties and verify scope and unique classification manually. Ordinary plan/apply cannot discover or repair repositories outside scope."
-        : "No repository was adopted. Check credentials, organization policy and name availability before explicitly retrying. If the creation response was lost, inspect GitHub before retrying.",
+        : "No repository was adopted. Check credentials, owner policy and name availability before explicitly retrying. If the creation response was lost, inspect GitHub before retrying.",
     );
   }
 }
@@ -753,8 +791,9 @@ function missingValue(name: string): never {
 
 function safeCreationError(error: unknown): string {
   if (error instanceof CreationStageError) return error.message;
+  if (error instanceof RepositoryOwnerResolutionError) return error.message;
   if (error instanceof GitHubRequestError) {
-    return `GitHub API request failed (HTTP ${error.status}); check authentication, permissions, organization policy and request constraints.`;
+    return `GitHub API request failed (HTTP ${error.status}); check authentication, permissions, owner policy and request constraints.`;
   }
   if (error instanceof RuntimeReferenceError) return error.message;
   return "Creation stage failed; inspect configuration, actual metadata and runtime-value availability. Repository contents and provider/API error bodies are omitted.";

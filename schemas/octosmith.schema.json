@@ -15,7 +15,8 @@
     },
     "organization": {
       "type": "string",
-      "minLength": 1
+      "minLength": 1,
+      "description": "GitHub organization login or authenticated personal-account login. The configuration key is retained for compatibility."
     },
     "repositories": {
       "type": "object",

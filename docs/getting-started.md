@@ -9,9 +9,11 @@ repository and let the scaffolder generate a conservative baseline.
 deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme
 ```
 
-The generated configuration is scoped to the control repository itself. This is
-intentional: the first apply should not unexpectedly manage an entire
-organization.
+The `--organization` value may be an organization login or your personal GitHub
+login; the generated configuration retains the existing `organization:` key.
+Personal-account operations require a token for that same user. The generated
+configuration is scoped to the control repository itself. This is intentional:
+the first apply should not unexpectedly manage an entire account.
 
 Useful options:
 

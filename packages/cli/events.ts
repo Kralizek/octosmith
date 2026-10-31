@@ -14,17 +14,18 @@ export interface RepositoryEventData {
 
 /** Convert a repository report into a resource event. */
 export function toRepositoryEvent(
-  organization: string,
+  owner: string,
   mode: ApplyMode,
   report: RepositoryReport,
   timestamp: Date = new Date(),
+  ownerType: "User" | "Organization" = "Organization",
 ): EventDocument<RepositoryEventData> {
   return {
     type: mode === "plan" ? "resource.planned" : "resource.applied",
     timestamp: timestamp.toISOString(),
     source: {
-      kind: "github.organization",
-      id: organization,
+      kind: ownerType === "User" ? "github.user" : "github.organization",
+      id: owner,
     },
     subject: {
       kind: "github.repository",
@@ -44,14 +45,18 @@ export function toRepositoryEvent(
 
 /** Convert a successful apply-time PR outcome into a lifecycle event. */
 export function toPullRequestEvent(
-  organization: string,
+  owner: string,
   result: PullRequestResult,
   timestamp: Date = new Date(),
+  ownerType: "User" | "Organization" = "Organization",
 ): EventDocument<PullRequestResult> {
   return {
     type: "pull_request." + result.action,
     timestamp: timestamp.toISOString(),
-    source: { kind: "github.organization", id: organization },
+    source: {
+      kind: ownerType === "User" ? "github.user" : "github.organization",
+      id: owner,
+    },
     subject: {
       kind: "github.pull_request",
       id: result.repository + "#" + result.number,

@@ -63,7 +63,8 @@ export type RepositoryCreationIssueCode =
   | "incompatible_constraints"
   | "property_conflict"
   | "template_mismatch"
-  | "template_overlap";
+  | "template_overlap"
+  | "unsupported_owner_capability";
 
 /** Structured name choice available to an assisted creation flow. */
 export interface RepositoryCreationNameChoice {

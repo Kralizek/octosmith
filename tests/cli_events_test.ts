@@ -75,6 +75,19 @@ Deno.test("repository plan report maps to Hooksmith event document", () => {
   });
 });
 
+Deno.test("personal-account PR events identify the resolved user owner", () => {
+  const result: PullRequestResult = {
+    repository: "sample",
+    number: 42,
+    url: "https://github.com/Kralizek/sample/pull/42",
+    action: "opened",
+  };
+  assertEquals(
+    toPullRequestEvent("Kralizek", result, new Date(0), "User").source,
+    { kind: "github.user", id: "Kralizek" },
+  );
+});
+
 Deno.test("failed repository report retains error in Hooksmith event data", () => {
   const event = toRepositoryEvent(
     "acme",

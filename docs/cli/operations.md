@@ -110,7 +110,8 @@ file or FIFO.
   actions
 
 Repository events are emitted as each repository finishes. PR events use
-`source: {kind: "github.organization", id: organization}`,
+`source: {kind: "github.organization", id: owner}` for organization owners and
+`source: {kind: "github.user", id: owner}` for personal accounts,
 `subject: {kind: "github.pull_request", id: "repository#number"}`, producer
 `octosmith`, and the canonical lifecycle result as `data`. They are not emitted
 again when the final report is rendered. The normal report still goes to stdout

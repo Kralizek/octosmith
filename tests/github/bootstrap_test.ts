@@ -92,6 +92,9 @@ class BootstrapClient implements GitHubClient {
   ): unknown {
     const repo = "/repos/acme/sample";
     if (method === "GET") {
+      if (path === "/users/acme") {
+        return { login: "acme", type: "Organization" };
+      }
       if (path === repo) {
         return {
           name: "sample",

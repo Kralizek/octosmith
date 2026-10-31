@@ -167,7 +167,7 @@ commands:
 
   octosmith resource create:
     kind: action
-    summary: Create, bootstrap in one local Git commit and push, and reconcile an organization repository; --dry-run remains offline.
+    summary: Create, bootstrap in one local Git commit and push, and reconcile a repository owned by an organization or the authenticated personal account; --dry-run remains offline.
     description: |
       Runs authoritative preflight, creates without initial content, assigns selector metadata,
       verifies scope and unique classification, then uses ordinary reconciliation.
@@ -181,6 +181,11 @@ commands:
       remain failures. The shared generator resolves selected naming strategies.
       The resolved name is passed explicitly into final creation preflight so it
       is not generated twice. Collisions fail without retry or adoption.
+      The legacy organization: configuration key accepts an organization or
+      authenticated personal-account login. Personal creation is restricted to
+      the authenticated user and excludes collaborator-owned repositories from
+      discovery; team permissions and organization custom properties fail before
+      mutation for personal owners.
       Resolves composed files through ordinary desired-state semantics and creates
       one local commit (empty if no files) and at most one explicit branch push.
       Structured repository.post_create_commands run only during actual creation,
@@ -368,7 +373,7 @@ commands:
       permission API name, and access level. github-output rejects permissions
       unsupported by actions/create-github-app-token, including Actions
       Variables.
-      With --creation and a template, text/JSON separate organization repository
+      With --creation and a template, text/JSON separate repository
       creation authorization, selector metadata and post-creation reconciliation.
       This does not change ordinary plan/apply permissions; github-output is
       unavailable for this lifecycle analysis.

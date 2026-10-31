@@ -19,6 +19,8 @@ import type { RepositoryConfiguration } from "./types.ts";
 
 /** Creation authorization is distinct from ongoing repository reconciliation. */
 export interface RepositoryCreationPermissionAnalysis {
+  readonly owner: string;
+  /** @deprecated Use owner; this remains for output compatibility. */
   readonly organization: string;
   readonly creation: readonly GitHubPermissionRequirement[];
   readonly selectorMetadata: readonly GitHubPermissionRequirement[];
@@ -59,6 +61,7 @@ export function requiredPermissionsForRepositoryCreation(
     );
   }
   return {
+    owner: loaded.configuration.organization,
     organization: loaded.configuration.organization,
     creation: [{
       scope: "repository",
@@ -87,9 +90,9 @@ export function requiredPermissionsForRepositoryCreation(
       ),
     ]),
     constraints: [
-      "Organization repository creation requires Administration: write on a supported fine-grained token/GitHub App, or the appropriate classic PAT repo/public_repo scope, and an actor allowed to create the requested visibility in this organization.",
-      "Organization/enterprise policy, SSO authorization, internal-visibility availability and GitHub App repository installation access can prevent creation or access to the new repository.",
-      "Selector team assignments require repository Administration: write and organization Members: read. Custom property definitions and editing policy must allow repository value assignment.",
+      "Organization creation requires repository Administration: write on a supported fine-grained token/GitHub App, or the appropriate classic PAT repo/public_repo scope, and an actor allowed to create the requested visibility. Personal creation is limited to the authenticated user and uses that account's repository-creation authorization.",
+      "Organization/enterprise policy, account visibility policy, SSO authorization, internal-visibility availability and GitHub App repository installation access can prevent creation or access to the new repository.",
+      "Team permissions and custom-property selectors/assignments are organization-only and are rejected before personal-account repository mutation. For organizations, team assignments require repository Administration: write and organization Members: read; custom-property definitions and editing policy must allow repository value assignment.",
       "API reconciliation uses Contents: read to inspect history. The separate Git bootstrap requires Git-over-HTTPS Contents: write (and Workflows: write for workflow files); no file pull requests or Contents API writes are used.",
       "Git authentication reuses the configured token, but GitHub App, fine-grained PAT, classic PAT and Actions token Git-push authorization differ. Repository installation access, SSO and organization rules can still reject the initial push.",
     ],

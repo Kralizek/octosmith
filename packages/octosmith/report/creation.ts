@@ -7,13 +7,24 @@ export function renderRepositoryCreationResult(
 ): string {
   const lines = [
     `Repository creation: ${result.status}`,
+    ...(result.owner ?? result.organization
+      ? [
+        `Owner: ${result.owner ?? result.organization}${
+          result.ownerType === undefined ? "" : ` (${result.ownerType})`
+        }`,
+      ]
+      : []),
     ...(result.repository
       ? [
         `Repository: ${result.repository.fullName}`,
         `URL: ${result.repository.url}`,
       ]
       : result.requestedName
-      ? [`Requested repository: ${result.organization}/${result.requestedName}`]
+      ? [
+        `Requested repository: ${
+          result.owner ?? result.organization
+        }/${result.requestedName}`,
+      ]
       : []),
     `Completed stages: ${result.completedStages.join(", ") || "none"}`,
     ...(result.bootstrap

@@ -304,9 +304,11 @@ function createCli(
           if (eventOutput) {
             await eventOutput.write(
               toRepositoryEvent(
-                loaded.configuration.organization,
+                runtime.owner?.login ?? loaded.configuration.organization,
                 mode,
                 repositoryReport,
+                undefined,
+                runtime.owner?.type,
               ),
             );
           }
@@ -315,7 +317,12 @@ function createCli(
         const onPullRequest = async (result: PullRequestResult) => {
           if (eventOutput) {
             await eventOutput.write(
-              toPullRequestEvent(loaded.configuration.organization, result),
+              toPullRequestEvent(
+                runtime.owner?.login ?? loaded.configuration.organization,
+                result,
+                undefined,
+                runtime.owner?.type,
+              ),
             );
           }
         };
@@ -381,7 +388,8 @@ function createCli(
           ...repository
         }) => repository);
         const report: Report = {
-          organization: loaded.configuration.organization,
+          organization: runtime.owner?.login ??
+            loaded.configuration.organization,
           startedAt,
           completedAt: new Date(),
           repositories: reportedRepositories,
@@ -809,8 +817,8 @@ function createCli(
               }
               write(renderOutput(format, analysis, (value) =>
                 [
-                  `Creation target organization: ${value.organization}`,
-                  "Organization repository creation authorization:",
+                  `Configured owner: ${value.owner}`,
+                  "Repository creation authorization (organization or personal account):",
                   renderPermissionRequirements(value.creation),
                   "Selector metadata:",
                   renderPermissionRequirements(value.selectorMetadata),

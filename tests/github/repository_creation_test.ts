@@ -42,6 +42,9 @@ interface Call {
 class GitHub {
   readonly calls: Call[] = [];
   exists = false;
+  ownerType: "User" | "Organization" = "Organization";
+  ownerLogin = "acme";
+  authenticatedLogin = "acme";
   name = "api-orders";
   visibility = "internal";
   teams: { slug: string; permission: string }[] = [];
@@ -88,13 +91,25 @@ class GitHub {
     if (overridden) return Promise.resolve(overridden);
     const json = (body: unknown, status = 200) =>
       Promise.resolve(Response.json(body, { status }));
+    if (call.method === "GET" && path.startsWith("/users/")) {
+      return json({ login: this.ownerLogin, type: this.ownerType });
+    }
+    if (call.method === "GET" && path === "/user") {
+      return json({ login: this.authenticatedLogin, type: "User" });
+    }
     if (call.method === "POST" && path === "/orgs/acme/repos") {
       this.exists = true;
       this.name = String(call.body?.name);
       this.visibility = String(call.body?.visibility);
       return json(this.repository(), 201);
     }
-    if (/^\/repos\/acme\/[^/]+$/.test(path)) {
+    if (call.method === "POST" && path === "/user/repos") {
+      this.exists = true;
+      this.name = String(call.body?.name);
+      this.visibility = String(call.body?.visibility);
+      return json(this.repository(), 201);
+    }
+    if (/^\/repos\/[^/]+\/[^/]+$/.test(path)) {
       if (call.method === "GET") {
         return this.exists && path.endsWith("/" + this.name)
           ? json(this.repository())
@@ -199,8 +214,9 @@ class GitHub {
   repository() {
     return {
       name: this.name,
-      full_name: "acme/" + this.name,
-      html_url: "https://github.com/acme/" + this.name,
+      full_name: this.ownerLogin + "/" + this.name,
+      html_url: "https://github.com/" + this.ownerLogin + "/" + this.name,
+      owner: { login: this.ownerLogin },
       visibility: this.visibility,
       description: null,
       homepage: null,
@@ -236,12 +252,13 @@ class GitHub {
 
 function configuration(
   repository: RepositoryConfiguration = {},
+  organization = "acme",
 ): LoadedConfiguration {
   return {
     root: ".",
     configuration: {
       version: 1,
-      organization: "acme",
+      organization,
       repositories: {
         scope: {
           include: {
@@ -280,6 +297,91 @@ function run(
     randomBytes: (length) => new Uint8Array(length),
   });
 }
+
+Deno.test("personal repository creation uses the authenticated owner endpoint", async () => {
+  const github = new GitHub();
+  github.ownerType = "User";
+  github.ownerLogin = "Kralizek";
+  github.authenticatedLogin = "kralizek";
+  const loaded = configuration({
+    settings: { visibility: "private" },
+  }, "Kralizek");
+  const result = await run(github, {
+    ...loaded,
+    configuration: {
+      ...loaded.configuration,
+      repositories: {
+        scope: { include: { names: ["api-*"], visibility: "private" } },
+      },
+    },
+  });
+
+  assertEquals(result.status, "completed", JSON.stringify(result));
+  assertEquals(result.organization, "Kralizek");
+  assertEquals(result.ownerType, "User");
+  assertEquals(
+    github.mutations().filter(({ method }) => method === "POST"),
+    [{
+      method: "POST",
+      path: "/user/repos",
+      body: { name: "api-orders", visibility: "private", auto_init: false },
+    }],
+  );
+  assertEquals(
+    github.calls.filter(({ path }) => path === "/users/Kralizek").length,
+    1,
+  );
+  assertEquals(
+    github.calls.filter(({ path }) => path === "/user").length,
+    1,
+  );
+  assertEquals(
+    github.calls.some(({ path }) => path === "/orgs/acme/repos"),
+    false,
+  );
+});
+
+Deno.test("personal repository creation rejects unsupported organization declarations before mutation", async () => {
+  const github = new GitHub();
+  github.ownerType = "User";
+  github.ownerLogin = "Kralizek";
+  github.authenticatedLogin = "Kralizek";
+  const result = await run(github, configuration({}, "Kralizek"));
+
+  assertEquals(result.status, "preflight_rejected");
+  assertStringIncludes(
+    result.error?.message ?? "",
+    "does not support organization-only repository declarations",
+  );
+  assertEquals(github.mutations(), []);
+});
+
+Deno.test("personal repository creation rejects a different authenticated owner before mutation", async () => {
+  const github = new GitHub();
+  github.ownerType = "User";
+  github.ownerLogin = "someone-else";
+  github.authenticatedLogin = "Kralizek";
+  const loaded = configuration(
+    { settings: { visibility: "private" } },
+    "someone-else",
+  );
+  const result = await run(github, {
+    ...loaded,
+    configuration: {
+      ...loaded.configuration,
+      repositories: {
+        scope: { include: { names: ["api-*"], visibility: "private" } },
+      },
+    },
+  });
+
+  assertEquals(result.status, "preflight_rejected");
+  assertStringIncludes(
+    result.error?.message ?? "",
+    "not the authenticated GitHub user",
+  );
+  assertEquals(github.mutations(), []);
+});
 
 Deno.test("creation verifies actual selectors then uses normal GitHub reconciliation and report", async () => {
   const github = new GitHub();
@@ -1412,6 +1514,7 @@ Deno.test("creation permissions distinguish creation, selector metadata and reco
   const loaded = configuration();
   const regular = requiredPermissionsForConfiguration(loaded, "services");
   const analysis = requiredPermissionsForRepositoryCreation(loaded, "services");
+  assertEquals(analysis.owner, "acme");
   assertEquals(analysis.organization, "acme");
   assertEquals(analysis.creation, [{
     scope: "repository",
@@ -1569,7 +1672,7 @@ Deno.test("assisted generated identity is revalidated unchanged and collisions n
   assertEquals(collision.status, "name_collision");
   assertEquals(
     github.calls.slice(beforeCollision).map(({ method }) => method),
-    ["GET"],
+    ["GET", "GET"],
   );
   assertEquals(
     github.mutations().filter(({ path }) => path === "/orgs/acme/repos").length,
@@ -2194,8 +2297,8 @@ Deno.test("creation library configuration and authentication failures have struc
       throw new Error("PRIVATE-AUTH-DETAIL");
     },
   });
-  assertEquals(auth.status, "creation_failed");
-  assertEquals(auth.failedStage, "availability");
+  assertEquals(auth.status, "preflight_rejected");
+  assertEquals(auth.failedStage, "preflight");
   assertEquals(JSON.stringify(auth).includes("PRIVATE-AUTH-DETAIL"), false);
 });
 
@@ -2278,7 +2381,7 @@ Deno.test("CLI creation configuration and credential failures keep JSON parseabl
     assertEquals(result.kind, "repository_creation");
     assertEquals(
       result.failedStage,
-      path.endsWith("not-found") ? "configuration" : "availability",
+      path.endsWith("not-found") ? "configuration" : "preflight",
     );
     assertEquals(errors, []);
     assertEquals(

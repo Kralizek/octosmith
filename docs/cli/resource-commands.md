@@ -103,24 +103,33 @@ octosmith resource create services --dry-run --format json
 ```
 
 Without `--dry-run`, creation **mutates GitHub** using the same authentication
-as plan/apply. It creates an empty repository in the configured organization,
-assigns required teams/custom properties, re-reads metadata and verifies scope
-and unique template classification, then reconciles safe GitHub-side resources.
-It then bootstraps all composed managed files in one local Git commit and one
-push, re-reads GitHub state and finishes deferred reconciliation. `--dry-run`
-remains an offline, read-only preview. Both paths use the same reusable library
-specification, which resolves the template, validates it with the same semantic
-checks as `template validate`, and reports the effective name, visibility, team,
-and custom-property constraints. If scope/template intersection yields one
-constructible naming pattern, an omitted name is generated from it; patterns
-with no `*` or `?` use their literal name. Use `--name` to override generation,
-or to select among multiple patterns. Visibility is inferred when uniquely
-constrained; use `--visibility` when multiple valid values remain. Ambiguities
-and configuration errors are returned as structured diagnostics (including in
-JSON output) and exit unsuccessfully before any GitHub access in the default
-**strict mode**, which never prompts. Names are generated once per execution; a
-collision fails without adopting an existing repository or generating a
-replacement name.
+as plan/apply. It creates an empty repository in the configured organization or
+authenticated personal account, assigns required teams/custom properties,
+re-reads metadata and verifies scope and unique template classification, then
+reconciles safe GitHub-side resources. It then bootstraps all composed managed
+files in one local Git commit and one push, re-reads GitHub state and finishes
+deferred reconciliation. `--dry-run` remains an offline, read-only preview. Both
+paths use the same reusable library specification, which resolves the template,
+validates it with the same semantic checks as `template validate`, and reports
+the effective name, visibility, team, and custom-property constraints. If
+scope/template intersection yields one constructible naming pattern, an omitted
+name is generated from it; patterns with no `*` or `?` use their literal name.
+Use `--name` to override generation, or to select among multiple patterns.
+Visibility is inferred when uniquely constrained; use `--visibility` when
+multiple valid values remain. Ambiguities and configuration errors are returned
+as structured diagnostics (including in JSON output) and exit unsuccessfully
+before any GitHub access in the default **strict mode**, which never prompts.
+Names are generated once per execution; a collision fails without adopting an
+existing repository or generating a replacement name.
+
+The existing root `organization:` key accepts either an organization login or
+the authenticated personal-account login. Organization creation and discovery
+retain their organization endpoints. Personal creation uses the authenticated
+user endpoint; discovery filters `/user/repos` by canonical owner so shared
+repositories are excluded. Octosmith rejects another personal user's login and
+fails before mutation when organization-only team or custom-property intent is
+configured. Offline previews display the configured owner; execution resolves
+its canonical login and owner type before repository work.
 
 ### Assisted creation
 
@@ -266,7 +275,7 @@ response, inspect GitHub before explicitly retrying.
 `--dry-run` extends preflight with a creation preview, not a drift report
 against an imaginary repository. Text and JSON report:
 
-- Resolved organization, canonical template, name origin, visibility, and
+- Configured owner, canonical template, name origin, visibility, and
   selector-required team/custom-property assignments.
 - Bootstrap default branch when template-managed, and composed managed-file
   paths with intended presence/absence. The planned file count counts only
@@ -286,8 +295,8 @@ against an imaginary repository. Text and JSON report:
   omitted.
 
 Default-branch precedence is template `repository.settings.default_branch`, then
-the organization's default repository branch, then GitHub's documented fallback.
-Offline preview cannot inspect the organization default, so without a
+the owner's default repository branch, then GitHub's documented fallback.
+Offline preview cannot inspect the remote owner or default branch, so without a
 template-managed branch it reports **deferred**, not an invented branch name.
 
 A **generated preview name is provisional and not reserved**. Execution may

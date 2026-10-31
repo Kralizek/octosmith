@@ -33,11 +33,19 @@ contracts. A lazy `client` factory can postpone authentication until preflight
 succeeds. The bootstrap transport is checked before invoking that factory or
 accessing GitHub; omitting it returns `preflight_rejected` without creating a
 repository. The validated name is resolved once, checked remotely, then
-submitted unchanged to `createOrganizationRepository`, with only name,
-visibility and `auto_init: false`. No README, license, Gitignore or commit is
-created. Required teams/custom properties are assigned through the existing
-mutation sink and actually re-read through discovery. Only an in-scope, unique
-match for the explicitly selected template proceeds.
+submitted unchanged to the endpoint selected by the resolved owner type, with
+only name, visibility and `auto_init: false`. Organizations continue to use
+`POST /orgs/{owner}/repos`; the authenticated personal account uses
+`POST /user/repos`. No README, license, Gitignore or commit is created. Required
+teams/custom properties are assigned through the existing mutation sink and
+actually re-read through discovery. Only an in-scope, unique match for the
+explicitly selected template proceeds.
+
+The owner is resolved through `GET /users/{configured-login}` and its canonical
+login/type are reused through creation and verification. Personal owners must
+match `GET /user`; repository discovery uses `GET /user/repos` and excludes
+entries whose canonical repository owner differs. Team permissions and
+organization custom properties fail preflight for personal owners.
 
 Interactive hosts can first call `preflightRepositoryCreation` and resolve only
 its structured ambiguities. Pass an effective pattern as
