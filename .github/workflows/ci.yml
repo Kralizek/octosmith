@@ -83,15 +83,15 @@ jobs:
           repository: {}
           YAML
 
+      # The PR token is an installation token, not a personal-account token.
+      # Keep the Action smoke test offline; live GitHub E2E uses dedicated credentials.
       - name: Smoke test local Action
         uses: ./
         env:
           OCTOSMITH_CLI_ENTRYPOINT: ${{ github.workspace }}/packages/cli/mod.ts
         with:
-          mode: plan
+          mode: validate
           path: ${{ runner.temp }}/octosmith-action-smoke
-          github-token: ${{ github.token }}
-          resource: octosmith
           format: json
 
       - name: Validate packages
