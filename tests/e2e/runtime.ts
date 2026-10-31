@@ -183,7 +183,13 @@ export class E2ERuntime {
   async #executeTerminal(
     args: string[],
   ): Promise<{ code: number; stdout: string; stderr: string }> {
-    const quoted = [Deno.execPath(), "run", "-A", "packages/cli/mod.ts", ...args]
+    const quoted = [
+      Deno.execPath(),
+      "run",
+      "-A",
+      "packages/cli/mod.ts",
+      ...args,
+    ]
       .map((arg) => "'" + arg.replaceAll("'", "'\\''") + "'")
       .join(" ");
     const child = await new Deno.Command("script", {
