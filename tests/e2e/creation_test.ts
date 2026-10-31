@@ -4,7 +4,10 @@ import { E2ERuntime, type Scenario } from "./runtime.ts";
 // Only this file is discovered by the opt-in live E2E test command.
 const generate: Scenario["commands"] = [{
   command: "deno",
-  args: ["eval", "Deno.writeTextFileSync('generator-output.txt', 'generated\\n')"],
+  args: [
+    "eval",
+    "Deno.writeTextFileSync('generator-output.txt', 'generated\\n')",
+  ],
 }];
 
 const scenarios: readonly Scenario[] = [
@@ -39,7 +42,10 @@ const scenarios: readonly Scenario[] = [
     fragment: true,
     files: [
       { target: "README.md", fixture: "README.md" },
-      { target: "docs/architecture.md", content: "Composed from a fragment.\n" },
+      {
+        target: "docs/architecture.md",
+        content: "Composed from a fragment.\n",
+      },
     ],
   },
   {
@@ -61,7 +67,8 @@ const scenarios: readonly Scenario[] = [
     name: "workflow",
     files: [{
       target: ".github/workflows/ci.yml",
-      content: "name: Fixture\non:\n  workflow_dispatch:\njobs:\n  fixture:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo fixture\n",
+      content:
+        "name: Fixture\non:\n  workflow_dispatch:\njobs:\n  fixture:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo fixture\n",
     }],
   },
 ];
