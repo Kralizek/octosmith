@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       suite:
-        description: E2E test suite
+        description: E2E test stage
         required: true
         type: choice
-        default: creation
+        default: validate
         options:
+          - validate
+          - smoke
           - creation
 
 permissions:
@@ -24,9 +26,10 @@ jobs:
     timeout-minutes: 45
     env:
       E2E_OWNER: octosmith-tests
-      E2E_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-      E2E_RESULTS: ${{ github.workspace }}/e2e-results
-      E2E_FIXTURES: ${{ github.workspace }}/e2e-fixtures
+      E2E_RUN_ID: \${{ github.run_id }}-\${{ github.run_attempt }}
+      E2E_RESULTS: \${{ github.workspace }}/e2e-results
+      E2E_FIXTURES: \${{ github.workspace }}/e2e-fixtures
+      E2E_FIXTURE_REVISION: 02bbf1738014862723a699e24688d7033599e3aa
     steps:
       - name: Checkout Octosmith
         uses: actions/checkout@v7
@@ -35,52 +38,55 @@ jobs:
         id: app
         uses: actions/create-github-app-token@v3
         with:
-          client-id: ${{ vars.E2E_APP_CLIENT_ID }}
-          private-key: ${{ secrets.E2E_APP_PRIVATE_KEY }}
+          client-id: \${{ vars.E2E_APP_CLIENT_ID }}
+          private-key: \${{ secrets.E2E_APP_PRIVATE_KEY }}
           owner: octosmith-tests
 
-      - name: Checkout permanent fixtures
+      - name: Checkout pinned fixtures
         uses: actions/checkout@v7
         with:
           repository: octosmith-tests/fixtures
-          token: ${{ steps.app.outputs.token }}
+          token: \${{ steps.app.outputs.token }}
           path: e2e-fixtures
-          # Pin this to a reviewed fixture commit when content expands.
-          ref: main
+          ref: 02bbf1738014862723a699e24688d7033599e3aa
+          persist-credentials: false
 
       - name: Set up Deno
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
 
-      - name: Verify isolated organization
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-        run: |
-          test "$(gh api users/octosmith-tests --jq .type)" = "Organization"
-          gh api installation/repositories --jq '.repositories[].full_name' | grep -Fx 'octosmith-tests/fixtures'
-          git -C e2e-fixtures rev-parse HEAD
+      - name: Validate source without creating repositories
+        run: deno task check
 
-      - name: Validate source
-        run: deno task sync:schemas
-
-      - name: Run creation E2E scenarios
+      - name: Verify isolated organization and fixture revision
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-        run: deno run -A tests/e2e/runner.ts
+          GITHUB_TOKEN: \${{ steps.app.outputs.token }}
+        run: deno run -A tests/e2e/preflight.ts
 
-      - name: Clean up all run-created repositories
-        if: always() && steps.app.outcome == 'success'
+      - name: Run one repository-creation smoke test
+        if: inputs.suite == 'smoke'
         env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GITHUB_TOKEN: \${{ steps.app.outputs.token }}
+        run: deno test -A --filter="creation: declarative" tests/e2e/creation_test.ts
+
+      - name: Run full creation suite
+        if: inputs.suite == 'creation'
+        env:
+          GITHUB_TOKEN: \${{ steps.app.outputs.token }}
+        run: deno task test:e2e
+
+      - name: Recover any run-created repositories
+        if: always() && steps.app.outcome == 'success' && inputs.suite != 'validate'
+        env:
+          GITHUB_TOKEN: \${{ steps.app.outputs.token }}
         run: deno run -A tests/e2e/cleanup.ts
 
       - name: Publish E2E evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: octosmith-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          name: octosmith-e2e-\${{ github.run_id }}-\${{ github.run_attempt }}
           path: e2e-results/
-          if-no-files-found: warn
+          if-no-files-found: ignore
           retention-days: 30
