@@ -29,6 +29,7 @@ export interface Scenario {
     readonly args: readonly string[];
   }[];
   readonly fragment?: boolean;
+  readonly assisted?: boolean;
   readonly expectFailure?: "before-create" | "after-create";
 }
 
@@ -177,6 +178,28 @@ export class E2ERuntime {
     };
   }
 
+  // util-linux script allocates the real PTY required by --assisted.
+  // Arguments are fixed by the test; the repository name is run-prefixed.
+  async #executeTerminal(
+    args: string[],
+  ): Promise<{ code: number; stdout: string; stderr: string }> {
+    const quoted = [Deno.execPath(), "run", "-A", "packages/cli/mod.ts", ...args]
+      .map((arg) => "'" + arg.replaceAll("'", "'\\''") + "'")
+      .join(" ");
+    const child = await new Deno.Command("script", {
+      args: ["-q", "-e", "-c", quoted, "/dev/null"],
+      stdin: "null",
+      stdout: "piped",
+      stderr: "piped",
+      env: { GIT_TERMINAL_PROMPT: "0" },
+    }).output();
+    return {
+      code: child.code,
+      stdout: new TextDecoder().decode(child.stdout),
+      stderr: new TextDecoder().decode(child.stderr),
+    };
+  }
+
   async #prepare(scenario: Scenario, name: string): Promise<string> {
     const root = join(this.#results, "workspaces", scenario.name);
     await Deno.mkdir(join(root, "templates"), { recursive: true });
@@ -310,7 +333,7 @@ export class E2ERuntime {
     await this.#register(name);
     try {
       const path = await this.#prepare(scenario, name);
-      const creation = await this.#execute([
+      const creationArgs = [
         "resource",
         "create",
         "scenario",
@@ -320,9 +343,11 @@ export class E2ERuntime {
         name,
         "--visibility",
         "private",
-        "--format",
-        "json",
-      ]);
+        ...(scenario.assisted ? ["--assisted"] : ["--format", "json"]),
+      ];
+      const creation = scenario.assisted
+        ? await this.#executeTerminal(creationArgs)
+        : await this.#execute(creationArgs);
       await Deno.writeTextFile(
         join(this.#results, scenario.name + "-creation.json"),
         creation.stdout ||
@@ -349,8 +374,15 @@ export class E2ERuntime {
         0,
         "Octosmith creation failed: " + creation.stderr,
       );
-      const outcome = JSON.parse(creation.stdout);
-      assertEquals(outcome.status, "completed");
+      if (scenario.assisted) {
+        assert(
+          creation.stdout.includes("Repository creation: completed"),
+          "Assisted CLI did not report successful completion",
+        );
+      } else {
+        const outcome = JSON.parse(creation.stdout);
+        assertEquals(outcome.status, "completed");
+      }
 
       const expected = new Map<string, Uint8Array>();
       for (const source of scenario.files ?? []) {
