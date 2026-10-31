@@ -64,6 +64,11 @@ const scenarios: readonly Scenario[] = [
     expectFailure: "before-create",
   },
   {
+    name: "assisted",
+    assisted: true,
+    files: [{ target: "README.md", fixture: "README.md" }],
+  },
+  {
     name: "workflow",
     files: [{
       target: ".github/workflows/ci.yml",
