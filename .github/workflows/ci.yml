@@ -66,12 +66,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/octosmith-action-smoke/templates"
           cat > "$RUNNER_TEMP/octosmith-action-smoke/octosmith.yml" <<'YAML'
           version: 1
-          organization: Kralizek
+          organization: octosmith-tests
           repositories:
             scope:
               include:
                 names:
-                  - octosmith
+                  - fixtures
           YAML
           cat > "$RUNNER_TEMP/octosmith-action-smoke/templates/default.yml" <<'YAML'
           version: 1
@@ -79,19 +79,19 @@ jobs:
           match:
             include:
               names:
-                - octosmith
+                - fixtures
           repository: {}
           YAML
 
-      # The PR token is an installation token, not a personal-account token.
-      # Keep the Action smoke test offline; live GitHub E2E uses dedicated credentials.
       - name: Smoke test local Action
         uses: ./
         env:
           OCTOSMITH_CLI_ENTRYPOINT: ${{ github.workspace }}/packages/cli/mod.ts
         with:
-          mode: validate
+          mode: plan
           path: ${{ runner.temp }}/octosmith-action-smoke
+          github-token: ${{ github.token }}
+          resource: fixtures
           format: json
 
       - name: Validate packages
