@@ -1,15 +1,36 @@
-name: E2E App Authentication
+name: Octosmith E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      suite:
+        description: E2E test suite
+        required: true
+        type: choice
+        default: creation
+        options:
+          - creation
 
 permissions:
   contents: read
 
+concurrency:
+  group: octosmith-e2e
+  cancel-in-progress: false
+
 jobs:
-  verify:
+  creation:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      E2E_OWNER: octosmith-tests
+      E2E_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_RESULTS: ${{ github.workspace }}/e2e-results
+      E2E_FIXTURES: ${{ github.workspace }}/e2e-fixtures
     steps:
+      - name: Checkout Octosmith
+        uses: actions/checkout@v7
+
       - name: Generate installation token
         id: app
         uses: actions/create-github-app-token@v3
@@ -18,15 +39,48 @@ jobs:
           private-key: ${{ secrets.E2E_APP_PRIVATE_KEY }}
           owner: octosmith-tests
 
-      - name: Verify organization access
-        env:
-          GH_TOKEN: ${{ steps.app.outputs.token }}
-        run: |
-          gh api orgs/octosmith-tests --jq '{login, id, type}'
+      - name: Checkout permanent fixtures
+        uses: actions/checkout@v7
+        with:
+          repository: octosmith-tests/fixtures
+          token: ${{ steps.app.outputs.token }}
+          path: e2e-fixtures
+          # Pin this to a reviewed fixture commit when content expands.
+          ref: main
 
-      - name: Verify installation
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Verify isolated organization
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
         run: |
-          gh api installation/repositories \
-            --jq '{total_count, repositories: [.repositories[].full_name]}'
+          test "$(gh api users/octosmith-tests --jq .type)" = "Organization"
+          gh api installation/repositories --jq '.repositories[].full_name' | grep -Fx 'octosmith-tests/fixtures'
+          git -C e2e-fixtures rev-parse HEAD
+
+      - name: Validate source
+        run: deno task sync:schemas
+
+      - name: Run creation E2E scenarios
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+        run: deno run -A tests/e2e/runner.ts
+
+      - name: Clean up all run-created repositories
+        if: always() && steps.app.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: deno run -A tests/e2e/cleanup.ts
+
+      - name: Publish E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: octosmith-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e-results/
+          if-no-files-found: warn
+          retention-days: 30
