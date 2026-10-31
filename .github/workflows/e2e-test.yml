@@ -1,0 +1,32 @@
+name: E2E App Authentication
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate installation token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.E2E_APP_CLIENT_ID }}
+          private-key: ${{ secrets.E2E_APP_PRIVATE_KEY }}
+          owner: octosmith-tests
+
+      - name: Verify organization access
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh api orgs/octosmith-tests --jq '{login, id, type}'
+
+      - name: Verify installation
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+        run: |
+          gh api installation/repositories \
+            --jq '{total_count, repositories: [.repositories[].full_name]}'
