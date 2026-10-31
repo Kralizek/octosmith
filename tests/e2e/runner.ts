@@ -146,7 +146,19 @@ async function createScenario(
   );
   if (!create.ok) throw new Error(`Octosmith resource create failed (${create.code})`);
 
-  const observed = await inspect(name, [...Object.keys(files)]);
+  const expectedPaths = [...Object.keys(files), ...(commands.length ? ["generator-output.txt"] : [])];
+  const observed = await inspect(name, expectedPaths);
+  for (const [filePath, expectedContent] of Object.entries(files)) {
+    const remote = await ghJson(`repos/${owner}/${name}/contents/${filePath}`);
+    if (typeof remote.content !== "string" || remote.encoding !== "base64") {
+      throw new Error(`Cannot independently read ${filePath}`);
+    }
+    const actual = Uint8Array.from(atob(remote.content.replace(/\\s/g, "")), (char) => char.charCodeAt(0));
+    const expected = new TextEncoder().encode(expectedContent);
+    if (actual.length !== expected.length || !actual.every((byte, index) => byte === expected[index])) {
+      throw new Error(`Managed content differs remotely: ${filePath}`);
+    }
+  }
   registered[registered.length - 1].id = observed.repoId as number;
   await saveRegistry();
   const plan = await execute("deno", [
