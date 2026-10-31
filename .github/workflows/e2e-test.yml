@@ -31,10 +31,19 @@ jobs:
       - name: Checkout Octosmith
         uses: actions/checkout@v4
 
+      - name: Generate installation token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.E2E_APP_CLIENT_ID }}
+          private-key: ${{ secrets.E2E_APP_PRIVATE_KEY }}
+          owner: octosmith-tests
+
       - name: Checkout permanent fixtures
         uses: actions/checkout@v4
         with:
           repository: octosmith-tests/fixtures
+          token: ${{ steps.app.outputs.token }}
           path: e2e-fixtures
           # Pin this to a reviewed fixture commit when content expands.
           ref: main
@@ -43,14 +52,6 @@ jobs:
         uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-
-      - name: Generate installation token
-        id: app
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.E2E_APP_CLIENT_ID }}
-          private-key: ${{ secrets.E2E_APP_PRIVATE_KEY }}
-          owner: octosmith-tests
 
       - name: Verify isolated organization
         env:
