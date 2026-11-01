@@ -119,8 +119,12 @@ discovery/state/mutation helpers still expect a caller-validated owner.
 Online injected CLI runtimes must expose `client` or `resolveOwner`. Saved-plan
 execution always asserts organization capabilities on the resolved identity,
 including for empty plans. If a runtime omits `resolveOwner`, execution resolves
-the owner through its `client` instead. Client-free test doubles may omit both
-to stay offline; they must not perform GitHub operations.
+the owner through its `client` instead. Missing both capabilities is an error,
+never an implicit offline/test mode. Client-free test doubles must explicitly
+implement `resolveOwner` and return their fixture's organization identity; the
+same organization assertion applies to that identity. No test-only bypass flag
+is provided. Offline validation and creation previews do not use saved-plan
+execution and remain unchanged.
 
 ## Scaffold a control repository
 

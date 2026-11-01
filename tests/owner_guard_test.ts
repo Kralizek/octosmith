@@ -231,6 +231,12 @@ Deno.test("saved plans cannot bypass the owner guard through a custom runtime", 
         return Promise.resolve({ repository: "sample", operations: [] });
       },
     };
+    await assertRejects(
+      () => applyPersistedPlan(runtime, loaded, artifact, () => {}),
+      GitHubOwnerError,
+      "requires owner validation",
+    );
+    assertEquals(execution, []);
     for (
       const response of [
         Response.json({ login: "Acme", type: "User" }),
@@ -278,7 +284,7 @@ Deno.test("saved plans cannot bypass the owner guard through a custom runtime", 
     );
     assertEquals(execution, []);
 
-    for (const mode of ["offline", "client", "resolver"] as const) {
+    for (const mode of ["client", "resolver", "resolver-only"] as const) {
       execution.length = 0;
       const requests: string[] = [];
       let resolutions = 0;
@@ -292,10 +298,10 @@ Deno.test("saved plans cannot bypass the owner guard through a custom runtime", 
         },
       });
       const result = await applyPersistedPlan(
-        mode === "offline" ? runtime : {
+        {
           ...runtime,
-          client,
-          ...(mode === "resolver" && {
+          ...(mode !== "resolver-only" && { client }),
+          ...(mode !== "client" && {
             resolveOwner: (configuration: LoadedConfiguration) => {
               assertEquals(configuration, loaded);
               resolutions++;
@@ -312,7 +318,7 @@ Deno.test("saved plans cannot bypass the owner guard through a custom runtime", 
       );
       assertEquals(result.configuration, "valid");
       assertEquals(requests, mode === "client" ? ["/users/acme"] : []);
-      assertEquals(resolutions, mode === "resolver" ? 1 : 0);
+      assertEquals(resolutions, mode === "client" ? 0 : 1);
       assertEquals(
         execution,
         artifact.resources.length === 0

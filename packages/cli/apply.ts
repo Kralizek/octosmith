@@ -50,7 +50,7 @@ export type ApplyMode = "plan" | "apply";
 
 /** Describes apply runtime. */
 export interface ApplyRuntime {
-  /** Online runtimes must expose a client or resolveOwner; omit both only for offline test doubles. */
+  /** Saved-plan execution requires a client or resolveOwner, including injected test runtimes. */
   readonly client?: GitHubClient;
   readonly value?: RuntimeValueProvider;
   readonly bootstrap?: RepositoryGitBootstrap;

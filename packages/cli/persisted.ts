@@ -3,6 +3,7 @@ import {
   classifyResource,
   equalContentHash,
   type ExecutableResourcePlan,
+  GitHubOwnerError,
   hashCanonical,
   hashEffectiveConfiguration,
   hashEffectiveTemplate,
@@ -81,6 +82,10 @@ export async function applyPersistedPlan(
     : undefined;
   if (owner !== undefined) {
     assertOrganizationOwner(owner);
+  } else {
+    throw new GitHubOwnerError(
+      "Saved-plan execution requires owner validation. Provide an ApplyRuntime.resolveOwner implementation or GitHub client; no changes were applied.",
+    );
   }
 
   const configuration = equalContentHash(
