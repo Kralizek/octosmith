@@ -313,15 +313,21 @@ export class E2ERuntime {
       0,
       "Bootstrap must have exactly one root commit",
     );
-    const paths = isEmptyGitTree(commit.tree.sha)
-      ? []
-      : (await this.#client.get<{
+    let paths: string[];
+    if (isEmptyGitTree(commit.tree.sha)) {
+      // A canonical empty tree is fully identified by its content hash.
+      // GitHub can return 404 when fetching the empty tree through REST.
+      paths = [];
+    } else {
+      const tree = await this.#client.get<{
         tree: { path: string; type: string }[];
       }>("/repos/" + E2E_OWNER + "/" + name + "/git/trees/" + commit.tree.sha, {
         recursive: 1,
-      })).tree.filter((entry) => entry.type === "blob").map((
+      });
+      paths = tree.tree.filter((entry) => entry.type === "blob").map((
         entry,
       ) => entry.path).sort();
+    }
     assertEquals(
       paths,
       [...expected.keys()].sort(),
