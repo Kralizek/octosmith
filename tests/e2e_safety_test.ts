@@ -1,5 +1,10 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
-import { E2E_OWNER, runPrefix, safeRepository } from "./e2e/runtime.ts";
+import {
+  E2E_OWNER,
+  isEmptyGitTree,
+  runPrefix,
+  safeRepository,
+} from "./e2e/runtime.ts";
 
 Deno.test("E2E refuses non-dedicated owners and malformed run IDs", () => {
   assertThrows(() => runPrefix("Kralizek", "123-1"));
@@ -20,4 +25,9 @@ Deno.test("E2E cleanup guard protects fixture and unrelated repositories", () =>
   assert(!safeRepository(prefix, repo("fixtures")));
   assert(!safeRepository(prefix, repo("production")));
   assert(!safeRepository(prefix, repo(prefix + "test", "another-org")));
+});
+
+Deno.test("E2E recognizes only the canonical empty Git tree", () => {
+  assert(isEmptyGitTree("4b825dc642cb6eb9a060e54bf8d69288fbee4904"));
+  assert(!isEmptyGitTree("0000000000000000000000000000000000000000"));
 });
