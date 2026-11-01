@@ -2,16 +2,6 @@ name: Octosmith E2E
 
 on:
   workflow_dispatch:
-    inputs:
-      suite:
-        description: E2E test stage
-        required: true
-        type: choice
-        default: validate
-        options:
-          - validate
-          - smoke
-          - creation
 
 permissions:
   contents: read
@@ -64,21 +54,13 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
         run: deno run -A tests/e2e/preflight.ts
 
-      - name: Run one repository-creation smoke test
-        if: inputs.suite == 'smoke'
-        env:
-          GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-        run: |
-          deno test -A --filter="creation: declarative" tests/e2e/creation_test.ts
-
       - name: Run full creation suite
-        if: inputs.suite == 'creation'
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
         run: deno task test:e2e
 
       - name: Recover any run-created repositories
-        if: always() && steps.app.outcome == 'success' && inputs.suite != 'validate'
+        if: always() && steps.app.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
         run: deno run -A tests/e2e/cleanup.ts
