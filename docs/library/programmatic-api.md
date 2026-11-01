@@ -116,6 +116,12 @@ actionable `GitHubOwnerError` (with `httpStatus` for API failures). The GitHub
 CLI runtime caches resolution per configured owner for that runtime; low-level
 discovery/state/mutation helpers still expect a caller-validated owner.
 
+Online injected CLI runtimes must expose `client` or `resolveOwner`. Saved-plan
+execution always asserts organization capabilities on the resolved identity,
+including for empty plans. If a runtime omits `resolveOwner`, execution resolves
+the owner through its `client` instead. Client-free test doubles may omit both
+to stay offline; they must not perform GitHub operations.
+
 ## Scaffold a control repository
 
 The package also exposes `./create` for `deno create`:

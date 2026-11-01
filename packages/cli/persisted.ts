@@ -1,4 +1,5 @@
 import {
+  assertOrganizationOwner,
   classifyResource,
   equalContentHash,
   type ExecutableResourcePlan,
@@ -12,6 +13,7 @@ import {
   projectOwnedCurrentState,
   type PullRequestResult,
   resolveDesiredState,
+  resolveGitHubOwner,
   restoreEvaluations,
   type RuntimeReferenceDiagnostic,
   secretPolicyDiagnostics,
@@ -69,7 +71,17 @@ export async function applyPersistedPlan(
     );
   }
 
-  await runtime.resolveOwner?.(loaded);
+  const owner = runtime.resolveOwner
+    ? await runtime.resolveOwner(loaded)
+    : runtime.client
+    ? await resolveGitHubOwner(
+      runtime.client,
+      loaded.configuration.organization,
+    )
+    : undefined;
+  if (owner !== undefined) {
+    assertOrganizationOwner(owner);
+  }
 
   const configuration = equalContentHash(
       await hashEffectiveConfiguration(loaded.configuration),
