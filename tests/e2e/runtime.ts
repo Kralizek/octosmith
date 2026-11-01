@@ -8,6 +8,15 @@ import {
 
 export const E2E_OWNER = "octosmith-tests";
 
+// SHA-1 of the canonical empty Git tree (git hash-object -t tree --stdin).
+// GitHub's Trees API may return 404 for this object even when a root commit
+// referencing it is present and the repository has been bootstrapped.
+const EMPTY_GIT_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904";
+
+export function isEmptyGitTree(sha: string): boolean {
+  return sha === EMPTY_GIT_TREE_SHA;
+}
+
 export interface ResourceEntry {
   readonly name: string;
   readonly fullName: string;
@@ -304,14 +313,15 @@ export class E2ERuntime {
       0,
       "Bootstrap must have exactly one root commit",
     );
-    const tree = await this.#client.get<{
-      tree: { path: string; type: string }[];
-    }>("/repos/" + E2E_OWNER + "/" + name + "/git/trees/" + commit.tree.sha, {
-      recursive: 1,
-    });
-    const paths = tree.tree.filter((entry) => entry.type === "blob").map((
-      entry,
-    ) => entry.path).sort();
+    const paths = isEmptyGitTree(commit.tree.sha)
+      ? []
+      : (await this.#client.get<{
+        tree: { path: string; type: string }[];
+      }>("/repos/" + E2E_OWNER + "/" + name + "/git/trees/" + commit.tree.sha, {
+        recursive: 1,
+      })).tree.filter((entry) => entry.type === "blob").map((
+        entry,
+      ) => entry.path).sort();
     assertEquals(
       paths,
       [...expected.keys()].sort(),
