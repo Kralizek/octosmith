@@ -630,6 +630,9 @@ Deno.test("saved cleanup plan enforces its branch through the real CLI preparati
     token: "test",
     fetch: async (input, options) => {
       const url = new URL(String(input));
+      if (url.pathname === "/users/acme") {
+        return Response.json({ login: "acme", type: "Organization" });
+      }
       if (url.pathname === "/orgs/acme/repos") {
         return Response.json([{ name: "sample", visibility: "private" }]);
       }
@@ -1028,6 +1031,9 @@ for (const mode of ["direct", "pull_request"]) {
         token: "test",
         fetch: async (input, options) => {
           const path = new URL(String(input)).pathname;
+          if (path === "/users/acme") {
+            return Response.json({ login: "acme", type: "Organization" });
+          }
           if (path === "/orgs/acme/repos") {
             return Response.json([{ name: "sample", visibility: "private" }]);
           }

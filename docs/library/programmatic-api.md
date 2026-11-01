@@ -96,6 +96,8 @@ The package's default export surface includes:
 - plan construction and operation types
 - structured reports and text rendering
 - GitHub discovery and state readers
+- canonical owner resolution (`resolveGitHubOwner`) and current
+  organization-only capability validation (`assertOrganizationOwner`)
 - GitHub mutation sinks and apply helpers
 - resource inspection and template classification
 - worst-case GitHub permission analysis
@@ -104,6 +106,15 @@ The package's default export surface includes:
 The package intentionally contains the reusable engine. CLI argument parsing,
 console output selection, and Hooksmith event serialization live in
 `@octosmith/cli`.
+
+`resolveGitHubOwner(client, configuredOwner)` calls `GET /users/{owner}` and
+returns a `GitHubOwner` with canonical `login` and `type` (`Organization` or
+`User`). Identity resolution is separate from `assertOrganizationOwner(owner)`,
+so future personal-account capabilities can reuse the same identity contract.
+Resolution failures, malformed responses and unsupported types raise a safe,
+actionable `GitHubOwnerError` (with `httpStatus` for API failures). The GitHub
+CLI runtime caches resolution per configured owner for that runtime; low-level
+discovery/state/mutation helpers still expect a caller-validated owner.
 
 ## Scaffold a control repository
 

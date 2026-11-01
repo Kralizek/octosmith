@@ -1,5 +1,11 @@
 # Resource inspection and creation
 
+Online inspection and creation use the same organization-only owner guard as
+[plan/apply](plan-and-apply.md). A personal account or unresolved owner is
+rejected before repository creation, metadata changes or Git bootstrap.
+`resource create --dry-run` and `template validate` remain offline: they do not
+resolve the owner or require credentials, and do not prove remote eligibility.
+
 ## Automatic initialization during apply
 
 Newly created repositories do not need an initial README or commit:

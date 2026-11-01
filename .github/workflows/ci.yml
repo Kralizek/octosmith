@@ -66,12 +66,12 @@ jobs:
           mkdir -p "$RUNNER_TEMP/octosmith-action-smoke/templates"
           cat > "$RUNNER_TEMP/octosmith-action-smoke/octosmith.yml" <<'YAML'
           version: 1
-          organization: Kralizek
+          organization: github
           repositories:
             scope:
               include:
                 names:
-                  - octosmith
+                  - docs
           YAML
           cat > "$RUNNER_TEMP/octosmith-action-smoke/templates/default.yml" <<'YAML'
           version: 1
@@ -79,7 +79,7 @@ jobs:
           match:
             include:
               names:
-                - octosmith
+                - docs
           repository: {}
           YAML
 
@@ -91,7 +91,7 @@ jobs:
           mode: plan
           path: ${{ runner.temp }}/octosmith-action-smoke
           github-token: ${{ github.token }}
-          resource: octosmith
+          resource: docs
           format: json
 
       - name: Validate packages

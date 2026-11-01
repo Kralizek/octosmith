@@ -1565,6 +1565,9 @@ async function withCli(
     token: "test-token",
     fetch: async (input, init) => {
       const url = new URL(String(input));
+      if (url.pathname === "/users/acme") {
+        return Response.json({ login: "acme", type: "Organization" });
+      }
       const method = init?.method ?? "GET";
       const options = {
         query: Object.fromEntries(url.searchParams),

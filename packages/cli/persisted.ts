@@ -69,6 +69,8 @@ export async function applyPersistedPlan(
     );
   }
 
+  await runtime.resolveOwner?.(loaded);
+
   const configuration = equalContentHash(
       await hashEffectiveConfiguration(loaded.configuration),
       artifact.configuration,
