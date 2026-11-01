@@ -68,7 +68,8 @@ jobs:
         if: inputs.suite == 'smoke'
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
-        run: deno test -A --filter="creation: declarative" tests/e2e/creation_test.ts
+        run: |
+          deno test -A --filter="creation: declarative" tests/e2e/creation_test.ts
 
       - name: Run full creation suite
         if: inputs.suite == 'creation'
