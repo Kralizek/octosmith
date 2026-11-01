@@ -34,6 +34,14 @@ jobs:
       - name: Checkout Octosmith
         uses: actions/checkout@v7
 
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Validate source without creating repositories
+        run: deno task check
+
       - name: Generate installation token
         id: app
         uses: actions/create-github-app-token@v3
@@ -50,14 +58,6 @@ jobs:
           path: e2e-fixtures
           ref: 02bbf1738014862723a699e24688d7033599e3aa
           persist-credentials: false
-
-      - name: Set up Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-
-      - name: Validate source without creating repositories
-        run: deno task check
 
       - name: Verify isolated organization and fixture revision
         env:
