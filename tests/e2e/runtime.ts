@@ -480,9 +480,24 @@ export class E2ERuntime {
       }
     }
     await Deno.mkdir(this.#results, { recursive: true });
+    const evidencePath = join(this.#results, "cleanup.json");
+    let previous: {
+      deleted?: string[];
+      attempts?: { deleted: string[]; failed: string[] }[];
+    } = {};
+    try {
+      previous = JSON.parse(await Deno.readTextFile(evidencePath));
+    } catch (error) {
+      if (!(error instanceof Deno.errors.NotFound)) throw error;
+    }
+    const evidence = {
+      deleted: [...new Set([...(previous.deleted ?? []), ...deleted])],
+      failed,
+      attempts: [...(previous.attempts ?? []), { deleted, failed }],
+    };
     await Deno.writeTextFile(
-      join(this.#results, "cleanup.json"),
-      JSON.stringify({ deleted, failed }, null, 2) + "\n",
+      evidencePath,
+      JSON.stringify(evidence, null, 2) + "\n",
     );
     if (failed.length) {
       throw new Error("E2E cleanup incomplete: " + failed.join("; "));
