@@ -1,5 +1,13 @@
 # Plan and apply
 
+Online workflows currently require a GitHub organization. Before discovery or
+mutation, Octosmith resolves `organization:` through `GET /users/{owner}` and
+uses GitHub's canonical login. Personal accounts (`User`), unexpected account
+types, and resolution failures stop `plan` and `apply` (including saved plans)
+with an actionable error and no GitHub mutations. Set `organization:` to an
+organization login; personal-account support is a separate effort
+([#125](https://github.com/Kralizek/octosmith/issues/125)).
+
 ## plan
 
 ```sh

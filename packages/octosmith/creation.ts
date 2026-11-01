@@ -31,6 +31,11 @@ import {
 import { applyPlan } from "./github/apply.ts";
 import { type GitHubClient, GitHubRequestError } from "./github/client.ts";
 import {
+  assertOrganizationOwner,
+  GitHubOwnerError,
+  resolveGitHubOwner,
+} from "./github/owner.ts";
+import {
   type CreatedRepository,
   createOrganizationRepository,
 } from "./github/create_repository.ts";
@@ -164,8 +169,11 @@ export async function createRepository(
       failedStage: stage,
       error: {
         message: safeCreationError(error),
-        ...(error instanceof GitHubRequestError &&
-          { httpStatus: error.status }),
+        ...(error instanceof GitHubRequestError
+          ? { httpStatus: error.status }
+          : error instanceof GitHubOwnerError && error.httpStatus !== undefined
+          ? { httpStatus: error.httpStatus }
+          : {}),
       },
     }),
     ...(recovery !== undefined && { recovery }),
@@ -178,7 +186,7 @@ export async function createRepository(
   });
 
   try {
-    const loaded = typeof request.configuration === "string"
+    let loaded = typeof request.configuration === "string"
       ? await loadConfigurationDirectory(request.configuration)
       : request.configuration;
     organization = loaded.configuration.organization;
@@ -199,13 +207,20 @@ export async function createRepository(
         "Git bootstrap transport is required; provide an authenticated RepositoryGitBootstrap before creating a repository.",
       );
     }
-    completedStages.push(stage);
     const metadata = specification.repository;
     const visibility = specification.repository.visibility;
-    stage = "availability";
     const client = typeof options.client === "function"
       ? await options.client()
       : options.client;
+    const resolvedOwner = await resolveGitHubOwner(client, organization);
+    assertOrganizationOwner(resolvedOwner);
+    organization = resolvedOwner.login;
+    loaded = {
+      ...loaded,
+      configuration: { ...loaded.configuration, organization },
+    };
+    completedStages.push(stage);
+    stage = "availability";
     const path = "/repos/" + encodeURIComponent(organization) + "/" +
       encodeURIComponent(metadata.name);
     const existing = await client.request<unknown>("GET", path, {
@@ -752,6 +767,7 @@ function missingValue(name: string): never {
 }
 
 function safeCreationError(error: unknown): string {
+  if (error instanceof GitHubOwnerError) return error.message;
   if (error instanceof CreationStageError) return error.message;
   if (error instanceof GitHubRequestError) {
     return `GitHub API request failed (HTTP ${error.status}); check authentication, permissions, organization policy and request constraints.`;

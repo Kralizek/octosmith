@@ -88,6 +88,9 @@ class GitHub {
     if (overridden) return Promise.resolve(overridden);
     const json = (body: unknown, status = 200) =>
       Promise.resolve(Response.json(body, { status }));
+    if (call.method === "GET" && path === "/users/acme") {
+      return json({ login: "acme", type: "Organization" });
+    }
     if (call.method === "POST" && path === "/orgs/acme/repos") {
       this.exists = true;
       this.name = String(call.body?.name);
@@ -263,6 +266,27 @@ function configuration(
     },
   };
 }
+
+Deno.test("creation resolves canonical organization identity before availability and mutation", async () => {
+  const github = new GitHub();
+  github.override = ({ path }) =>
+    path === "/users/ACME"
+      ? Response.json({ login: "acme", type: "Organization" })
+      : undefined;
+  const loaded = configuration();
+  const result = await createRepository({
+    configuration: {
+      ...loaded,
+      configuration: { ...loaded.configuration, organization: "ACME" },
+    },
+    template: "services",
+    name: "api-orders",
+  }, { client: github.client(), bootstrap: github.bootstrap });
+  assertEquals(result.status, "completed");
+  assertEquals(result.organization, "acme");
+  assertEquals(github.calls[0], { method: "GET", path: "/users/ACME" });
+  assertEquals(github.mutations()[0].path, "/orgs/acme/repos");
+});
 
 function run(
   github: GitHub,
@@ -1569,7 +1593,7 @@ Deno.test("assisted generated identity is revalidated unchanged and collisions n
   assertEquals(collision.status, "name_collision");
   assertEquals(
     github.calls.slice(beforeCollision).map(({ method }) => method),
-    ["GET"],
+    ["GET", "GET"],
   );
   assertEquals(
     github.mutations().filter(({ path }) => path === "/orgs/acme/repos").length,
@@ -2194,8 +2218,8 @@ Deno.test("creation library configuration and authentication failures have struc
       throw new Error("PRIVATE-AUTH-DETAIL");
     },
   });
-  assertEquals(auth.status, "creation_failed");
-  assertEquals(auth.failedStage, "availability");
+  assertEquals(auth.status, "preflight_rejected");
+  assertEquals(auth.failedStage, "preflight");
   assertEquals(JSON.stringify(auth).includes("PRIVATE-AUTH-DETAIL"), false);
 });
 
@@ -2278,7 +2302,7 @@ Deno.test("CLI creation configuration and credential failures keep JSON parseabl
     assertEquals(result.kind, "repository_creation");
     assertEquals(
       result.failedStage,
-      path.endsWith("not-found") ? "configuration" : "availability",
+      path.endsWith("not-found") ? "configuration" : "preflight",
     );
     assertEquals(errors, []);
     assertEquals(

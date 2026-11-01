@@ -33,6 +33,13 @@ import { apply } from "../packages/cli/apply.ts";
 import { executeExecutableResources } from "../packages/cli/execution.ts";
 import { main } from "../packages/cli/mod.ts";
 
+function resolveTestOwner(loaded: LoadedConfiguration) {
+  return Promise.resolve({
+    login: loaded.configuration.organization,
+    type: "Organization" as const,
+  });
+}
+
 Deno.test("bootstrap persisted plans round trip and reject concurrent initialization", async () => {
   const loaded: LoadedConfiguration = {
     root: ".",
@@ -82,6 +89,7 @@ Deno.test("bootstrap persisted plans round trip and reject concurrent initializa
   let preparations = 0;
   let applications = 0;
   const runtime = {
+    resolveOwner: resolveTestOwner,
     discover: () => Promise.resolve({ repositories: [metadata], failures: [] }),
     read: () =>
       Promise.resolve(
@@ -172,6 +180,7 @@ Deno.test("persisted cleanup owns only its reserved snapshot and rejects changed
       () =>
         applyPersistedPlan(
           {
+            resolveOwner: resolveTestOwner,
             discover: () =>
               Promise.resolve({ repositories: [metadata], failures: [] }),
             read: () => Promise.resolve(changed),
@@ -460,6 +469,7 @@ for (
           ...flag,
         ], {
           runtime: {
+            resolveOwner: resolveTestOwner,
             value: (name) => {
               sources.push(name);
               return "legacy-runtime-secret";
@@ -526,6 +536,7 @@ for (const version of [1, 2]) {
       const reports: unknown[] = [];
       let prepared = 0;
       const runtime = {
+        resolveOwner: resolveTestOwner,
         value: (name: string) => {
           sources.push(name);
           return "runtime-secret-never-serialize";
@@ -1493,6 +1504,7 @@ for (
     };
     const applied: string[] = [];
     const runtime = {
+      resolveOwner: resolveTestOwner,
       discover: (_loaded: LoadedConfiguration, repository?: string) =>
         Promise.resolve({
           repositories: [{
@@ -1923,6 +1935,7 @@ Deno.test("persisted apply rechecks state immediately before mutation", async ()
   let reads = 0;
   let applies = 0;
   const runtime = {
+    resolveOwner: resolveTestOwner,
     discover: () =>
       Promise.resolve({
         repositories: [{
@@ -2004,6 +2017,7 @@ for (const withEnvironmentUpdate of [false, true]) {
     const executed: ExecutableResourcePlan[] = [];
     const diagnostics: string[] = [];
     const runtime = {
+      resolveOwner: resolveTestOwner,
       value: (name: string): string => {
         throw new MissingRuntimeValueError(name);
       },
@@ -2169,6 +2183,7 @@ Deno.test("persisted apply requires every secret used by reviewed operations bef
       () =>
         applyPersistedPlan(
           {
+            resolveOwner: resolveTestOwner,
             value: (name) => {
               if (name === missing) throw new MissingRuntimeValueError(name);
               return "available";
@@ -2233,6 +2248,7 @@ Deno.test("persisted apply retains reviewed values and rejects new skip requests
   );
   let prepared: ExecutableResourcePlan | undefined;
   const runtime = {
+    resolveOwner: resolveTestOwner,
     value: () => {
       throw new MissingRuntimeValueError("SOURCE");
     },

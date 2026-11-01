@@ -684,6 +684,7 @@ for (const policy of ["error", "ignore"] as const) {
             assertEquals(
               requests.map(({ method, url }) => [method, url.pathname]),
               [
+                ["GET", "/api/v3/users/acme"],
                 ["GET", "/api/v3/orgs/acme/repos"],
               ],
             );
@@ -787,7 +788,7 @@ Deno.test("resource list traces discovery separately from JSON and does not reso
       unmatched: 1,
     });
     assertStringIncludes(errors.join("\n"), "GET /orgs/acme/repos");
-    assertEquals(requests.length, 1);
+    assertEquals(requests.length, 2);
   } finally {
     globalThis.fetch = originalFetch;
     if (previous === undefined) Deno.env.delete("GITHUB_TOKEN");
@@ -803,8 +804,14 @@ for (const format of ["text", "json"] as const) {
     try {
       const runtime = createGitHubRuntime({
         token: "test-token",
-        fetch: () =>
-          Promise.resolve(json([{ name: "excluded", visibility: "private" }])),
+        fetch: (input) =>
+          Promise.resolve(
+            json(
+              new URL(String(input)).pathname === "/users/acme"
+                ? { login: "acme", type: "Organization" }
+                : [{ name: "excluded", visibility: "private" }],
+            ),
+          ),
       });
       assertEquals(
         await main(["resource", "list", "--path", root, "--format", format], {
@@ -932,6 +939,12 @@ function fakeInspectionGitHub(
     const url = new URL(input instanceof Request ? input.url : String(input));
     const method = init?.method ?? "GET";
     requests.push({ method, url });
+    if (
+      method === "GET" &&
+      url.pathname.replace(/^\/api\/v3/, "") === "/users/acme"
+    ) {
+      return Promise.resolve(json({ login: "acme", type: "Organization" }));
+    }
     if (
       method === "GET" &&
       url.pathname.endsWith("/contents/" + BOOTSTRAP_FILE_PATH)
@@ -1082,7 +1095,10 @@ Deno.test("template-scoped plan and apply succeed when no repositories match", a
       });
       assertEquals(
         requests.map(({ method, url }) => [method, url.pathname]),
-        [["GET", "/api/v3/orgs/acme/repos"]],
+        [
+          ["GET", "/api/v3/users/acme"],
+          ["GET", "/api/v3/orgs/acme/repos"],
+        ],
       );
     }
   } finally {
@@ -1440,7 +1456,7 @@ Deno.test("CLI reports an out-of-scope targeted repository without mutation", as
     assertEquals(mutations(requests), []);
     assertEquals(
       requests.map((request) => request.url.pathname),
-      ["/api/v3/repos/acme/outside"],
+      ["/api/v3/users/acme", "/api/v3/repos/acme/outside"],
     );
     const rendered = output.join("\n");
     assertStringIncludes(rendered, "outside — failed");
@@ -1491,7 +1507,10 @@ Deno.test("CLI does not select fallback for an excluded target", async () => {
     });
     assertEquals(
       requests.map(({ method, url }) => [method, url.pathname]),
-      [["GET", "/api/v3/repos/acme/excluded"]],
+      [
+        ["GET", "/api/v3/users/acme"],
+        ["GET", "/api/v3/repos/acme/excluded"],
+      ],
     );
     assertEquals(mutations(requests), []);
   } finally {
@@ -2135,6 +2154,9 @@ function fakePreflightGitHub(
     const method = init?.method ?? "GET";
     requests.push({ method, url });
     events.push(method + " " + url.pathname);
+    if (method === "GET" && url.pathname === "/api/v3/users/acme") {
+      return Promise.resolve(json({ login: "acme", type: "Organization" }));
+    }
     if (method === "GET" && url.pathname.endsWith("/git/ref/heads/master")) {
       return Promise.resolve(json({ object: { sha: "head" } }));
     }
@@ -2193,6 +2215,9 @@ function fakeGitHub(
       : undefined;
 
     requests.push({ method, url, body });
+    if (method === "GET" && url.pathname === "/api/v3/users/acme") {
+      return json({ login: "acme", type: "Organization" });
+    }
     if (
       method === "GET" &&
       url.pathname.endsWith("/contents/" + BOOTSTRAP_FILE_PATH)
@@ -2837,7 +2862,8 @@ Deno.test("CLI trace writes GitHub calls to stderr before JSON stdout", async ()
     }
 
     assertEquals(stderr[0], "[organization]");
-    assertStringIncludes(stderr[1], "GET /orgs/acme/repos — 200");
+    assertStringIncludes(stderr[1], "GET /users/acme — 200");
+    assertStringIncludes(stderr[2], "GET /orgs/acme/repos — 200");
 
     const repositoryGroup = stderr.indexOf("[repository: sample]");
     assertEquals(repositoryGroup > 1, true);
@@ -3299,6 +3325,9 @@ function fakeFileDeliveryGitHub(
       : undefined;
     requests.push({ method, url, body });
 
+    if (method === "GET" && url.pathname === "/api/v3/users/acme") {
+      return json({ login: "acme", type: "Organization" });
+    }
     if (method === "GET" && url.pathname === "/api/v3/orgs/acme/repos") {
       return json([{ name: "sample", visibility: "private" }]);
     }
@@ -3535,6 +3564,9 @@ function fakeSecretGitHub(
     const method = (init?.method ?? request?.method ?? "GET").toUpperCase();
     requests.push({ method, url });
 
+    if (method === "GET" && url.pathname === "/api/v3/users/acme") {
+      return Promise.resolve(json({ login: "acme", type: "Organization" }));
+    }
     if (method === "GET" && url.pathname.endsWith("/git/ref/heads/master")) {
       return Promise.resolve(json({ object: { sha: "head" } }));
     }
@@ -3582,6 +3614,9 @@ function fakePartialGitHub(
       : undefined;
     requests.push({ method, url, body });
 
+    if (method === "GET" && url.pathname === "/api/v3/users/acme") {
+      return json({ login: "acme", type: "Organization" });
+    }
     if (method === "GET" && url.pathname === "/api/v3/orgs/acme/repos") {
       return json([
         { name: "sample", visibility: "private" },

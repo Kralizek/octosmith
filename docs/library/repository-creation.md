@@ -32,12 +32,18 @@ console.log(renderRepositoryCreationResult(result));
 contracts. A lazy `client` factory can postpone authentication until preflight
 succeeds. The bootstrap transport is checked before invoking that factory or
 accessing GitHub; omitting it returns `preflight_rejected` without creating a
-repository. The validated name is resolved once, checked remotely, then
-submitted unchanged to `createOrganizationRepository`, with only name,
-visibility and `auto_init: false`. No README, license, Gitignore or commit is
-created. Required teams/custom properties are assigned through the existing
-mutation sink and actually re-read through discovery. Only an in-scope, unique
-match for the explicitly selected template proceeds.
+repository. Online preflight resolves the configured owner with
+`resolveGitHubOwner` and applies `assertOrganizationOwner` before name
+availability or any mutation. Personal accounts, unexpected types and owner API
+failures return `preflight_rejected` with safe, actionable diagnostics;
+supported organizations use the canonical login throughout creation, metadata,
+bootstrap and reconciliation. Offline preflight/preview does not resolve the
+owner. The validated name is resolved once, checked remotely, then submitted
+unchanged to `createOrganizationRepository`, with only name, visibility and
+`auto_init: false`. No README, license, Gitignore or commit is created. Required
+teams/custom properties are assigned through the existing mutation sink and
+actually re-read through discovery. Only an in-scope, unique match for the
+explicitly selected template proceeds.
 
 Interactive hosts can first call `preflightRepositoryCreation` and resolve only
 its structured ambiguities. Pass an effective pattern as

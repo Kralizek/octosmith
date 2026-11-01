@@ -44,6 +44,11 @@ function policyRuntime(current = policyCurrent()) {
   const desired: DesiredState[] = [];
   const executed: ExecutableResourcePlan[] = [];
   const runtime: ApplyRuntime = {
+    resolveOwner: (loaded) =>
+      Promise.resolve({
+        login: loaded.configuration.organization,
+        type: "Organization",
+      }),
     value: (name) => {
       sources.push(name);
       return secretValue;

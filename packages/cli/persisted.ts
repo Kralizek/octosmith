@@ -1,7 +1,9 @@
 import {
+  assertOrganizationOwner,
   classifyResource,
   equalContentHash,
   type ExecutableResourcePlan,
+  GitHubOwnerError,
   hashCanonical,
   hashEffectiveConfiguration,
   hashEffectiveTemplate,
@@ -12,6 +14,7 @@ import {
   projectOwnedCurrentState,
   type PullRequestResult,
   resolveDesiredState,
+  resolveGitHubOwner,
   restoreEvaluations,
   type RuntimeReferenceDiagnostic,
   secretPolicyDiagnostics,
@@ -66,6 +69,22 @@ export async function applyPersistedPlan(
     throw new Error(
       "Cannot use --skip-missing-values when applying a saved plan. " +
         "Create a new plan with --skip-missing-values instead; saved plans replay exactly as reviewed.",
+    );
+  }
+
+  const owner = runtime.resolveOwner
+    ? await runtime.resolveOwner(loaded)
+    : runtime.client
+    ? await resolveGitHubOwner(
+      runtime.client,
+      loaded.configuration.organization,
+    )
+    : undefined;
+  if (owner !== undefined) {
+    assertOrganizationOwner(owner);
+  } else {
+    throw new GitHubOwnerError(
+      "Saved-plan execution requires owner validation. Provide an ApplyRuntime.resolveOwner implementation or GitHub client; no changes were applied.",
     );
   }
 

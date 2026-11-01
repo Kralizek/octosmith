@@ -30,15 +30,18 @@ import { executeExecutableResources } from "./execution.ts";
 import {
   applyPlan,
   type ApplyPlanResult,
+  assertOrganizationOwner,
   discoverRepositories,
   FetchGitHubClient,
   type GitHubClient,
+  type GitHubOwner,
   GitHubRepositoryBootstrap,
   GitHubRepositoryMutationSink,
   GitHubRepositoryStateSource,
   type GitHubResponseTrace,
   readCurrentState,
   type RepositoryDiscoveryResult,
+  resolveGitHubOwner,
 } from "@octosmith/octosmith";
 import { resolveTemplateIdentity } from "./template.ts";
 
@@ -47,9 +50,13 @@ export type ApplyMode = "plan" | "apply";
 
 /** Describes apply runtime. */
 export interface ApplyRuntime {
+  /** Saved-plan execution requires a client or resolveOwner, including injected test runtimes. */
   readonly client?: GitHubClient;
   readonly value?: RuntimeValueProvider;
   readonly bootstrap?: RepositoryGitBootstrap;
+
+  /** Resolve online owner identity; saved-plan execution independently enforces organization capabilities. */
+  resolveOwner?(loaded: LoadedConfiguration): Promise<GitHubOwner>;
 
   discover(
     loaded: LoadedConfiguration,
@@ -101,10 +108,23 @@ export function createGitHubRuntime(
     string,
     import("@octosmith/octosmith").RepositoryMutationSink
   >();
+  const owners = new Map<string, Promise<GitHubOwner>>();
+  const resolveOwner = async (loaded: LoadedConfiguration) => {
+    const configuredOwner = loaded.configuration.organization;
+    let resolution = owners.get(configuredOwner);
+    if (!resolution) {
+      resolution = resolveGitHubOwner(client, configuredOwner);
+      owners.set(configuredOwner, resolution);
+    }
+    const owner = await resolution;
+    assertOrganizationOwner(owner);
+    return owner;
+  };
 
   return {
     client,
     value: secretValue,
+    resolveOwner,
     bootstrap: new LocalGitBootstrap({
       token: () => options.token,
       baseUrl: options.baseUrl,
@@ -112,10 +132,15 @@ export function createGitHubRuntime(
 
     async discover(loaded, repository) {
       options.traceGroup?.("organization");
-      loadedConfiguration = loaded;
+      const owner = await resolveOwner(loaded);
+      const resolvedConfiguration: LoadedConfiguration = {
+        ...loaded,
+        configuration: { ...loaded.configuration, organization: owner.login },
+      };
+      loadedConfiguration = resolvedConfiguration;
       source = new GitHubRepositoryStateSource(
         client,
-        loaded.configuration.organization,
+        owner.login,
       );
       fileChanges = loaded.configuration.repositories.fileChanges ?? {
         mode: "pull_request",
@@ -123,16 +148,20 @@ export function createGitHubRuntime(
       sink = new GitHubRepositoryMutationSink({
         bootstrap: new GitHubRepositoryBootstrap(
           client,
-          loaded.configuration.organization,
+          owner.login,
         ),
         client,
-        owner: loaded.configuration.organization,
+        owner: owner.login,
         secretValue,
         fileChanges,
       });
       preparedSinks.clear();
 
-      return await discoverRepositories(client, loaded, repository);
+      return await discoverRepositories(
+        client,
+        resolvedConfiguration,
+        repository,
+      );
     },
 
     async read(desired, operations) {
