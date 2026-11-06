@@ -1,12 +1,12 @@
 import { assertEquals } from "@std/assert";
 import {
   buildPlan,
-  GitHubRepositoryMutationSink,
-  readCurrentState,
   type DesiredState,
   type GitHubClient,
+  GitHubRepositoryMutationSink,
   type GitHubRequestOptions,
   type Label,
+  readCurrentState,
   type RepositoryStateSource,
 } from "@octosmith/octosmith";
 import { currentRepositorySettings } from "../plan/fixtures.ts";
@@ -133,7 +133,10 @@ Deno.test("label lifecycle reconciles external drift and strict deletions", asyn
   }]);
   await reconcile(desired);
   assertEquals(client.labels.get("security"), desired.labels![0]);
-  assertEquals(client.labels.get("severity:high")?.description, "Keep this description");
+  assertEquals(
+    client.labels.get("severity:high")?.description,
+    "Keep this description",
+  );
 
   // Explicit mode does not own or delete unexpected labels.
   client.externalUpsert({ name: "external", color: "123456" });
@@ -155,10 +158,13 @@ Deno.test("label lifecycle reconciles external drift and strict deletions", asyn
   assertEquals((await reconcile(strict)).length, 0);
 
   // Declared empty strict collections delete all remaining labels.
-  assertEquals((await reconcile({ ...strict, labels: [] })).map((op) => op.type), [
-    "delete-label",
-    "delete-label",
-  ]);
+  assertEquals(
+    (await reconcile({ ...strict, labels: [] })).map((op) => op.type),
+    [
+      "delete-label",
+      "delete-label",
+    ],
+  );
   assertEquals(client.labels.size, 0);
   assertEquals(client.mutations, [
     "create:security",
