@@ -171,7 +171,7 @@ Deno.test("label lifecycle reconciles external drift and strict deletions", asyn
     "create:severity:high",
     "update:Security",
     "delete:external",
-    "delete:security",
     "delete:severity:high",
+    "delete:security",
   ]);
 });
