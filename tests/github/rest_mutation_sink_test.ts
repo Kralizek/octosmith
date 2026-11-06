@@ -9,6 +9,63 @@ import {
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
+Deno.test("labels use POST, PATCH and DELETE with encoded existing names", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+  await sink.apply("sample", {
+    type: "create-label",
+    label: {
+      name: "security",
+      color: "b60205",
+      description: "Security findings",
+    },
+  });
+  await sink.apply("sample", {
+    type: "update-label",
+    name: "severity:medium / review",
+    label: { name: "severity:medium / review", color: "fbca04" },
+  });
+  await sink.apply("sample", {
+    type: "update-label",
+    name: "security",
+    label: { name: "Security", color: "b60205", description: "" },
+  });
+  await sink.apply("sample", {
+    type: "delete-label",
+    name: "severity:low / old",
+  });
+  assertEquals(client.requests, [
+    {
+      method: "POST",
+      path: "/repos/acme/sample/labels",
+      body: {
+        name: "security",
+        color: "b60205",
+        description: "Security findings",
+      },
+    },
+    {
+      method: "PATCH",
+      path: "/repos/acme/sample/labels/severity%3Amedium%20%2F%20review",
+      body: { new_name: "severity:medium / review", color: "fbca04" },
+    },
+    {
+      method: "PATCH",
+      path: "/repos/acme/sample/labels/security",
+      body: { new_name: "Security", color: "b60205", description: "" },
+    },
+    {
+      method: "DELETE",
+      path: "/repos/acme/sample/labels/severity%3Alow%20%2F%20old",
+      body: undefined,
+    },
+  ]);
+});
+
 Deno.test("squash title and message changes are sent in the same repository PATCH", async () => {
   const current = currentState();
   const plan = buildPlan({

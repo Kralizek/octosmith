@@ -36,6 +36,12 @@
         "$ref": "#/$defs/teamPermission"
       }
     },
+    "labels": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/label"
+      }
+    },
     "custom_properties": {
       "type": "object",
       "additionalProperties": {
@@ -82,6 +88,27 @@
   },
   "required": [],
   "$defs": {
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "color"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "pattern": "\\S"
+        },
+        "color": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{6}$"
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 100
+        }
+      }
+    },
     "ownedStringList": {
       "type": "array",
       "uniqueItems": true,

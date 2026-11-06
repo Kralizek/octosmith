@@ -344,6 +344,8 @@ function describeItem(item: ApplyItemReport): string {
     case "dependabot-secret":
       return "Dependabot secret " + String(details.name) +
         actionSuffix(details);
+    case "label":
+      return "Label " + String(details.name) + actionSuffix(details);
     case "team-permission": {
       const action = details.action;
       const permission = action === "grant"

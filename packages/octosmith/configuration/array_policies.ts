@@ -9,6 +9,7 @@
 export type ArrayCompositionPolicy =
   | "replace"
   | "name"
+  | "labelName"
   | "type"
   | "secretDestination"
   | "variableDestination";
@@ -19,6 +20,7 @@ export const arrayCompositionPolicies: Readonly<
 > = {
   postCreateCommands: "replace",
   teams: "name",
+  labels: "labelName",
   rulesets: "name",
   environments: "name",
   "actions.secrets": "secretDestination",

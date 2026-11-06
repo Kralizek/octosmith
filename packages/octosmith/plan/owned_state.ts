@@ -177,6 +177,27 @@ export function projectOwnedCurrentState(
     };
   }
 
+  if (desired.labels !== undefined) {
+    const byName = new Map(
+      desired.labels.map((label) => [label.name.toLowerCase(), label]),
+    );
+    projected.labels = (current.labels ?? [])
+      .filter((label) => strict || byName.has(label.name.toLowerCase()))
+      .map((label) => {
+        const owned = byName.get(label.name.toLowerCase());
+        return {
+          name: label.name,
+          ...(owned !== undefined && {
+            color: label.color.toLowerCase(),
+            ...(owned.description !== undefined && {
+              description: label.description ?? "",
+            }),
+          }),
+        };
+      })
+      .sort((left, right) => left.name.localeCompare(right.name));
+  }
+
   if (desired.teams !== undefined) {
     projected.teams = projectNamedCollection(
       current.teams,

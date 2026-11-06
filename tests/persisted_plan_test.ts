@@ -40,6 +40,111 @@ function resolveTestOwner(loaded: LoadedConfiguration) {
   });
 }
 
+Deno.test("label plans round trip and track only owned state", async () => {
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "acme",
+      repositories: { scope: { include: "all" } },
+    },
+    templates: {
+      "repository:issues": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: {
+          labels: [{ name: "security", color: "b60205" }, {
+            name: "new",
+            color: "ffffff",
+            description: "New",
+          }],
+        },
+      },
+    },
+  };
+  const desired = await resolveDesiredState(loaded, {
+    name: "sample",
+    teams: [],
+    properties: {},
+  }, () => "unused");
+  const current = currentState({
+    labels: [{ name: "security", color: "123456", description: "keep" }, {
+      name: "extra",
+      color: "aaaaaa",
+    }],
+  });
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    current,
+    desired,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }]);
+  assertEquals(
+    parsePersistedPlanArtifact(JSON.parse(JSON.stringify(artifact)))
+      .resources[0].operations,
+    plan.operations,
+  );
+  const projected = projectOwnedCurrentState(current, desired, plan.operations);
+  assertEquals(
+    projectOwnedCurrentState(
+      {
+        ...current,
+        labels: [{
+          name: "security",
+          color: "123456",
+          description: "changed but unowned",
+        }, { name: "different extra", color: "bbbbbb" }],
+      },
+      desired,
+      plan.operations,
+    ),
+    projected,
+  );
+  assertNotEquals(
+    projectOwnedCurrentState(
+      { ...current, labels: [{ name: "security", color: "ffffff" }] },
+      desired,
+      plan.operations,
+    ),
+    projected,
+  );
+  const malformed = JSON.parse(JSON.stringify(artifact));
+  malformed.resources[0].operations[0].label.color = "#b60205";
+  assertThrows(() => parsePersistedPlanArtifact(malformed), Error);
+  const strict = { ...desired, collections: "strict" as const };
+  const strictPlan = buildPlan(current, strict);
+  assertEquals(
+    projectOwnedCurrentState({
+      ...current,
+      labels: [
+        { name: "security", color: "123456", description: "unowned change" },
+        { name: "extra", color: "ffffff", description: "also unowned" },
+      ],
+    }, strict),
+    projectOwnedCurrentState(current, strict),
+  );
+  const strictArtifact = await createPersistedPlanArtifact(loaded, [{
+    current,
+    desired: strict,
+    plan: strictPlan,
+    evaluations: buildApplyEvaluations(strict, strictPlan.operations, current),
+  }]);
+  assertEquals(
+    parsePersistedPlanArtifact(JSON.parse(JSON.stringify(strictArtifact)))
+      .resources[0].operations,
+    strictPlan.operations,
+  );
+  assertNotEquals(
+    projectOwnedCurrentState({
+      ...current,
+      labels: current.labels!.slice(0, 1),
+    }, strict),
+    projectOwnedCurrentState(current, strict),
+  );
+});
+
 Deno.test("bootstrap persisted plans round trip and reject concurrent initialization", async () => {
   const loaded: LoadedConfiguration = {
     root: ".",

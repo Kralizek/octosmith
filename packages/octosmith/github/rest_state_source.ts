@@ -8,6 +8,7 @@ import type {
   CurrentRuleset,
   CustomPropertyValue,
   Environment,
+  Label,
   RepositoryPermission,
   RepositoryVisibility,
   SecretName,
@@ -185,6 +186,20 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
         subjectClaimTemplate: { source: "default" },
         immutableSubject: false,
       };
+  }
+
+  /** Read every label page, retaining descriptions as ordinary metadata. */
+  async getLabels(repository: string): Promise<readonly Label[]> {
+    const labels = await getAllPages<{
+      readonly name: string;
+      readonly color: string;
+      readonly description: string | null;
+    }>(this.client, this.repo(repository) + "/labels");
+    return labels.map((label) => ({
+      name: label.name,
+      color: label.color.toLowerCase(),
+      description: label.description ?? "",
+    }));
   }
 
   async getTeams(repository: string): Promise<readonly TeamPermission[]> {

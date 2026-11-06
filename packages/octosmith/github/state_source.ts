@@ -6,6 +6,7 @@ import type {
   CurrentRuleset,
   CustomPropertyValue,
   Environment,
+  Label,
   SecretName,
   TeamPermission,
   Variable,
@@ -43,6 +44,9 @@ export interface RepositoryStateSource {
   ): Promise<CurrentActionsOidcSettings>;
 
   getTeams(repository: string): Promise<readonly TeamPermission[]>;
+
+  /** Read labels when managed; optional for older custom sources not using labels. */
+  getLabels?(repository: string): Promise<readonly Label[]>;
 
   getActionsSecrets(repository: string): Promise<readonly SecretName[]>;
 

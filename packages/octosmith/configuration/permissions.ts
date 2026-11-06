@@ -201,6 +201,12 @@ function potentialOperationTypes(
     if (repository.teams.length > 0) types.push("set-team-permission");
     if (strict) types.push("remove-team-permission");
   }
+  if (repository.labels !== undefined) {
+    if (repository.labels.length > 0) {
+      types.push("create-label", "update-label");
+    }
+    if (strict) types.push("delete-label");
+  }
   if (repository.rulesets !== undefined) {
     if (repository.rulesets.length > 0) {
       types.push("create-ruleset", "update-ruleset");

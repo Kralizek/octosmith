@@ -615,6 +615,8 @@ function collectionItemKey(
     readonly to?: string;
   };
   switch (policy) {
+    case "labelName":
+      return entry.name!.toLowerCase();
     case "name":
       return entry.name!;
     case "type":

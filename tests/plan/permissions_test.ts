@@ -73,6 +73,18 @@ Deno.test("team permission operations include repository and organization requir
   ]);
 });
 
+Deno.test("label mutations require Issues write permission", () => {
+  for (
+    const type of ["create-label", "update-label", "delete-label"] as const
+  ) {
+    assertEquals(requiredPermissionsForOperationType(type), [{
+      scope: "repository",
+      permission: "issues",
+      access: "write",
+    }]);
+  }
+});
+
 Deno.test("file operations use pull-request delivery permissions by default", () => {
   assertEquals(requiredPermissionsForOperationType("update-file"), [
     {

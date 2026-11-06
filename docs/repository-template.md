@@ -188,6 +188,58 @@ repository:
       - production
 ```
 
+### `labels`
+
+Manage repository labels during ordinary plan/apply and repository creation:
+
+```yaml
+repository:
+  labels:
+    - name: security
+      color: B60205
+      description: Security vulnerabilities and remediation findings
+    - name: severity:critical
+      color: B60205
+      description: Critical security finding severity
+    - name: severity:high
+      color: D93F0B
+      description: High security finding severity
+    - name: severity:medium
+      color: FBCA04
+      description: Medium security finding severity
+    - name: severity:low
+      color: 0E8A16
+      description: Low security finding severity
+```
+
+Each label requires a non-whitespace `name` (at most 50 characters) and a
+six-digit hexadecimal `color` without `#`. Optional `description` is at most 100
+characters. Omit it to preserve an existing description; set it to `""` to clear
+it. Colors compare case-insensitively. Label identities are also
+case-insensitive; a spelling-case change updates the existing label rather than
+creating or deleting it. Renaming to a different identity is not inferred.
+
+Omitting `labels` leaves the collection unmanaged, even in strict mode. With
+`collection_management: explicit`, Octosmith creates missing named labels and
+updates differing definitions without removing other labels. An empty list is
+non-destructive in explicit mode. With `collection_management: strict`, a
+declared list also removes every unlisted label, including GitHub defaults;
+`labels: []` removes all labels. **Deleting a label also removes it from issues
+and pull requests.** Review strict deletion plans before applying them.
+
+Fragments merge labels by case-insensitive name. A later definition replaces the
+entire inherited label entry, and `[]` resets the inherited list.
+Case-insensitive duplicates in one declaration are rejected. Label ordering does
+not determine issue priority. Octosmith manages definitions, not label
+assignments on existing issues or pull requests.
+
+GitHub access requires repository **Issues: write** for mutations (a token with
+Pull requests: write is also accepted by GitHub's label endpoints). Reading
+declared labels is paginated, and errors are not treated as an empty collection.
+Saved plans include label operations and owned label state for stale-plan
+checks. Custom state-source implementations must implement `getLabels` to manage
+labels; existing integrations that omit label configuration need no new method.
+
 ### `actions`
 
 The optional `actions` object supports:

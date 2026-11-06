@@ -134,6 +134,9 @@ const operationPermissions = {
     organization("members", "read"),
     repository("metadata", "read"),
   ],
+  "create-label": [repository("issues", "write")],
+  "update-label": [repository("issues", "write")],
+  "delete-label": [repository("issues", "write")],
   "remove-team-permission": [
     repository("administration", "write"),
     organization("members", "read"),

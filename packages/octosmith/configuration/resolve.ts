@@ -196,6 +196,12 @@ export async function resolveDesiredState(
     ...(template.repository?.teams && {
       teams: template.repository.teams.map(normalizeTeamPermission),
     }),
+    ...(template.repository.labels !== undefined && {
+      labels: template.repository.labels.map((label) => ({
+        ...label,
+        color: label.color.toLowerCase(),
+      })),
+    }),
     ...(template.repository?.customProperties && {
       customProperties: template.repository.customProperties,
     }),

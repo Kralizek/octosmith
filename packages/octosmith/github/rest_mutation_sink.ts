@@ -256,6 +256,34 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       case "update-actions-oidc":
         await this.updateOidc(repository, operation.settings);
         return;
+      case "create-label":
+        await this.#client.request("POST", this.repo(repository) + "/labels", {
+          body: operation.label,
+        });
+        return;
+      case "update-label":
+        await this.#client.request(
+          "PATCH",
+          this.repo(repository) + "/labels/" +
+            encodeURIComponent(operation.name),
+          {
+            body: {
+              new_name: operation.label.name,
+              color: operation.label.color,
+              ...(operation.label.description !== undefined && {
+                description: operation.label.description,
+              }),
+            },
+          },
+        );
+        return;
+      case "delete-label":
+        await this.#client.request(
+          "DELETE",
+          this.repo(repository) + "/labels/" +
+            encodeURIComponent(operation.name),
+        );
+        return;
       case "set-team-permission":
         await this.#client.request(
           "PUT",

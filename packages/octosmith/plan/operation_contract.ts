@@ -52,6 +52,9 @@ export function persistedOperationContract(
       case "set-custom-property":
       case "set-team-permission":
       case "remove-team-permission":
+      case "create-label":
+      case "update-label":
+      case "delete-label":
       case "set-actions-variable":
       case "remove-actions-variable":
       case "remove-actions-secret":
@@ -464,6 +467,30 @@ export function assertPersistedOperationsExecutable(
         requireNonEmpty(operation.name, "custom property name");
         break;
 
+      case "create-label":
+      case "update-label":
+        requireNonEmpty(operation.label.name, "label name");
+        if (
+          operation.label.name.length > 50 ||
+          !/^[0-9a-fA-F]{6}$/.test(operation.label.color) ||
+          (operation.label.description?.length ?? 0) > 100
+        ) {
+          throw new Error("Invalid executable label definition");
+        }
+        if (operation.type === "update-label") {
+          requireNonEmpty(operation.name, "existing label name");
+          if (
+            operation.name.toLowerCase() !== operation.label.name.toLowerCase()
+          ) {
+            throw new Error("Label updates must preserve their identity");
+          }
+        }
+        break;
+
+      case "delete-label":
+        requireNonEmpty(operation.name, "label name");
+        break;
+
       case "set-team-permission":
         requireNonEmpty(operation.permission.team, "team name");
         requireNonEmpty(
@@ -631,6 +658,9 @@ export function persistedOperationSecretSources(
       case "update-actions-oidc":
       case "set-team-permission":
       case "remove-team-permission":
+      case "create-label":
+      case "update-label":
+      case "delete-label":
       case "set-actions-variable":
       case "remove-actions-variable":
       case "remove-actions-secret":

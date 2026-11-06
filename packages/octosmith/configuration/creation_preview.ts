@@ -7,6 +7,7 @@ export interface RepositoryCreationResourceSummary {
   readonly category:
     | "settings"
     | "teams"
+    | "labels"
     | "custom_properties"
     | "actions"
     | "dependabot"
@@ -158,6 +159,16 @@ export function buildRepositoryCreationPreview(
     repository.teams?.map((team) => team.name + ": " + team.permission),
     { count: repository.teams?.length ?? 0 },
   );
+  if (repository.labels !== undefined) {
+    summarize(
+      "labels",
+      repository.labels,
+      repository.labels.map((label) => label.name),
+      {
+        count: repository.labels.length,
+      },
+    );
+  }
   summarize(
     "custom_properties",
     repository.customProperties,

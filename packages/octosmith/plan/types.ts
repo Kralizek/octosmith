@@ -1,6 +1,7 @@
 import type {
   CollectionManagementMode,
   DesiredSecret,
+  Label,
   SecretName,
   TeamPermission,
   Variable,
@@ -50,6 +51,7 @@ export type ApplyItemType =
   | "actions-secret"
   | "dependabot-secret"
   | "team-permission"
+  | "label"
   | "ruleset"
   | "environment"
   | "file";
@@ -71,6 +73,9 @@ export type Operation =
   | UpdateActionsOidcSettingsOperation
   | SetTeamPermissionOperation
   | RemoveTeamPermissionOperation
+  | CreateLabelOperation
+  | UpdateLabelOperation
+  | DeleteLabelOperation
   | SetActionsVariableOperation
   | RemoveActionsVariableOperation
   | SetActionsSecretOperation
@@ -135,6 +140,25 @@ export interface SetTeamPermissionOperation {
 export interface RemoveTeamPermissionOperation {
   readonly type: "remove-team-permission";
   readonly team: string;
+}
+
+/** Create a repository label without replacing an existing label. */
+export interface CreateLabelOperation {
+  readonly type: "create-label";
+  readonly label: Label;
+}
+
+/** Update the existing label identified by its original name. */
+export interface UpdateLabelOperation {
+  readonly type: "update-label";
+  readonly name: string;
+  readonly label: Label;
+}
+
+/** Remove an undeclared label only under strict collection management. */
+export interface DeleteLabelOperation {
+  readonly type: "delete-label";
+  readonly name: string;
 }
 
 /** Describes set actions variable operation. */

@@ -50,6 +50,34 @@ async function preview(
   return buildRepositoryCreationPreview(loaded, specification);
 }
 
+Deno.test("creation preview includes configured label intent without remote work", async () => {
+  const base = configuration("all");
+  const loaded = {
+    ...base,
+    templates: {
+      "repository:services": {
+        ...base.templates["repository:services"],
+        repository: { labels: [{ name: "security", color: "b60205" }] },
+      },
+    },
+  };
+  const result = await preview(loaded, {
+    template: "services",
+    name: "sample",
+    visibility: "private",
+  });
+  assertEquals(
+    result.resources.find((resource) => resource.category === "labels"),
+    {
+      category: "labels",
+      status: "resolved",
+      fields: [],
+      targets: ["security"],
+      count: 1,
+    },
+  );
+});
+
 Deno.test({
   name:
     "creation preview resolves explicit identity and defers remote branch and reconciliation",

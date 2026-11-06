@@ -23,6 +23,9 @@ export async function readCurrentState(
   } = {},
 ): Promise<CurrentState> {
   const repository = desired.repository;
+  if (desired.labels !== undefined && source.getLabels === undefined) {
+    throw new Error("Repository state source does not support labels");
+  }
   const strict = desired.collections === "strict";
   const githubOnly = options.scope === "github-only";
   const scopedSettings = githubOnly
@@ -47,6 +50,7 @@ export async function readCurrentState(
     actionsVariables,
     dependabotSecrets,
     teams,
+    labels,
     rulesets,
     environments,
   ] = await Promise.all([
@@ -72,6 +76,9 @@ export async function readCurrentState(
       : Promise.resolve([]),
     desired.teams !== undefined
       ? source.getTeams(repository)
+      : Promise.resolve([]),
+    desired.labels !== undefined
+      ? source.getLabels!(repository)
       : Promise.resolve([]),
     desired.rulesets !== undefined && scopedHistory?.initialized !== false
       ? source.getRulesets(repository)
@@ -203,6 +210,15 @@ export async function readCurrentState(
           desired.dependabot?.secrets?.some((secret) => secret.name === name)
         ),
     },
+    ...(desired.labels !== undefined && {
+      labels: strict
+        ? labels
+        : labels.filter((label) =>
+          desired.labels!.some((owned) =>
+            owned.name.toLowerCase() === label.name.toLowerCase()
+          )
+        ),
+    }),
     teams: desired.teams === undefined
       ? []
       : strict
