@@ -2,6 +2,7 @@ import type {
   CollectionManagementMode,
   DesiredSecret,
   Environment,
+  Label,
   TeamPermission,
   Variable,
 } from "../types.ts";
@@ -37,6 +38,7 @@ export interface CurrentState {
   readonly dependabot: CurrentDependabot;
   readonly copilot?: CurrentCopilotSettings;
   readonly teams: readonly TeamPermission[];
+  readonly labels?: readonly Label[];
   readonly rulesets: readonly CurrentRuleset[];
   readonly environments: readonly Environment[];
   /** Branch used for the managed-file snapshot; defaults to settings.defaultBranch. */
@@ -60,6 +62,7 @@ export interface DesiredState {
   readonly actions?: DesiredActions;
   readonly dependabot?: DesiredDependabot;
   readonly teams?: readonly TeamPermission[];
+  readonly labels?: readonly Label[];
   readonly rulesets?: readonly DesiredRuleset[];
   readonly environments?: readonly DesiredEnvironment[];
   readonly files?: readonly DesiredFile[];

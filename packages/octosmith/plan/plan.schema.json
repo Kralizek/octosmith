@@ -48,6 +48,21 @@
     }
   ],
   "$defs": {
+    "label": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "color"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 50,
+          "pattern": "\\S"
+        },
+        "color": { "type": "string", "pattern": "^[0-9a-fA-F]{6}$" },
+        "description": { "type": "string", "maxLength": 100 }
+      }
+    },
     "resourceV1": {
       "allOf": [
         { "$ref": "#/$defs/resource" },
@@ -353,6 +368,44 @@
             },
             "team": {
               "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "label"],
+          "properties": {
+            "type": { "const": "create-label" },
+            "label": { "$ref": "#/$defs/label" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name", "label"],
+          "properties": {
+            "type": { "const": "update-label" },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50,
+              "pattern": "\\S"
+            },
+            "label": { "$ref": "#/$defs/label" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "name"],
+          "properties": {
+            "type": { "const": "delete-label" },
+            "name": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 50,
+              "pattern": "\\S"
             }
           }
         },
@@ -768,6 +821,7 @@
             "actions-secret",
             "dependabot-secret",
             "team-permission",
+            "label",
             "ruleset",
             "environment",
             "file"

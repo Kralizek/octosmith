@@ -42,6 +42,13 @@ export interface Variable {
   readonly value: string;
 }
 
+/** A repository label; an omitted description remains unmanaged on update. */
+export interface Label {
+  readonly name: string;
+  readonly color: string;
+  readonly description?: string;
+}
+
 /** Describes environment. */
 export interface Environment {
   readonly name: string;

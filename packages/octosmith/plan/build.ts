@@ -149,6 +149,7 @@ export function buildPlan(
     ),
   );
   planTeams(current, desired, operations, collections);
+  planLabels(current, desired, operations, collections);
   if (
     githubOnly
       ? !empty && !pending
@@ -316,6 +317,51 @@ function planActions(
       ),
     ),
   );
+}
+
+function planLabels(
+  current: CurrentState,
+  desired: DesiredState,
+  operations: Operation[],
+  collections: CollectionManagementMode,
+): void {
+  if (desired.labels === undefined) return;
+  assertUnique(
+    desired.labels.map((label) => label.name.toLowerCase()),
+    "label",
+  );
+  const desiredNames = new Set(
+    desired.labels.map((label) => label.name.toLowerCase()),
+  );
+  const existing = current.labels ?? [];
+  if (collections === "strict") {
+    for (const label of existing) {
+      if (!desiredNames.has(label.name.toLowerCase())) {
+        operations.push({ type: "delete-label", name: label.name });
+      }
+    }
+  }
+  const byName = new Map(
+    existing.map((label) => [label.name.toLowerCase(), label]),
+  );
+  for (const label of desired.labels) {
+    const previous = byName.get(label.name.toLowerCase());
+    const normalized = { ...label, color: label.color.toLowerCase() };
+    if (!previous) {
+      operations.push({ type: "create-label", label: normalized });
+    } else if (
+      previous.name !== label.name ||
+      previous.color.toLowerCase() !== normalized.color ||
+      (label.description !== undefined &&
+        (previous.description ?? "") !== label.description)
+    ) {
+      operations.push({
+        type: "update-label",
+        name: previous.name,
+        label: normalized,
+      });
+    }
+  }
 }
 
 function planTeams(
@@ -853,6 +899,18 @@ export function buildApplyEvaluations(
     }
   }
 
+  for (const label of desired.labels ?? []) {
+    if (
+      !has((operation) =>
+        (operation.type === "create-label" ||
+          operation.type === "update-label") &&
+        operation.label.name.toLowerCase() === label.name.toLowerCase()
+      )
+    ) {
+      evaluations.push({ type: "label", details: { name: label.name } });
+    }
+  }
+
   for (const permission of desired.teams ?? []) {
     if (
       !has((operation) =>
@@ -1049,6 +1107,22 @@ function operationEvaluation(
       return {
         type: "dependabot-secret",
         details: { name: operation.secret, action: "remove" },
+        operation,
+      };
+    case "create-label":
+    case "update-label":
+      return {
+        type: "label",
+        details: {
+          ...operation.label,
+          action: operation.type === "create-label" ? "create" : "update",
+        },
+        operation,
+      };
+    case "delete-label":
+      return {
+        type: "label",
+        details: { name: operation.name, action: "delete" },
         operation,
       };
     case "set-team-permission": {

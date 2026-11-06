@@ -45,6 +45,65 @@ async function writeFragment(
   await Deno.writeTextFile(fullPath, [...lines, ""].join("\n"));
 }
 
+Deno.test("label fragments merge case-insensitive names, reset and reject duplicates", async () => {
+  const root = await createRoot();
+  try {
+    await writeFragment(root, "labels.yml", [
+      "version: 1",
+      "kind: fragment",
+      "resource: repository",
+      "repository:",
+      "  labels:",
+      "    - name: security",
+      "      color: b60205",
+      "      description: inherited",
+      "    - name: bug",
+      "      color: d73a4a",
+    ]);
+    const header = [
+      "version: 1",
+      "kind: repository",
+      "match:",
+      "  include: all",
+      "includes:",
+      "  - ../fragments/labels.yml",
+      "repository:",
+    ];
+    await writeTemplate(root, [
+      ...header,
+      "  labels:",
+      "    - name: Security",
+      "      color: ffffff",
+    ]);
+    const loaded = await loadConfigurationDirectory(root);
+    assertEquals(loaded.templates["repository:sample"].repository.labels, [
+      { name: "Security", color: "ffffff" },
+      { name: "bug", color: "d73a4a" },
+    ]);
+    await writeTemplate(root, [...header, "  labels: []"]);
+    assertEquals(
+      (await loadConfigurationDirectory(root)).templates["repository:sample"]
+        .repository.labels,
+      [],
+    );
+    await writeTemplate(root, [
+      ...header,
+      "  labels:",
+      "    - name: security",
+      "      color: b60205",
+      "    - name: Security",
+      "      color: ffffff",
+    ]);
+    await assertRejects(
+      () => loadConfigurationDirectory(root),
+      Error,
+      "Duplicate identity",
+    );
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("composes nested fragments relative to the declaring fragment", async () => {
   const root = await createRoot();
   try {

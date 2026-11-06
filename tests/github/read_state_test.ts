@@ -57,6 +57,14 @@ class FakeStateSource implements RepositoryStateSource {
     ]);
   }
 
+  getLabels(repository: string) {
+    this.calls.push("labels:" + repository);
+    return Promise.resolve([
+      { name: "Security", color: "b60205", description: "managed" },
+      { name: "unmanaged", color: "ffffff", description: "leave alone" },
+    ]);
+  }
+
   getActionsSecrets(repository: string) {
     this.calls.push("actions-secrets:" + repository);
     return Promise.resolve(["OWNED", "EXTRA"]);
@@ -128,6 +136,25 @@ class FakeStateSource implements RepositoryStateSource {
     );
   }
 }
+
+Deno.test("labels are read only when declared and explicit ownership is case-insensitive", async () => {
+  const source = new FakeStateSource();
+  const base = { repository: "sample", template: "issues" };
+  await readCurrentState(source, base);
+  assertEquals(source.calls.includes("labels:sample"), false);
+  const desired = { ...base, labels: [{ name: "security", color: "b60205" }] };
+  const explicit = await readCurrentState(source, desired);
+  assertEquals(explicit.labels, [{
+    name: "Security",
+    color: "b60205",
+    description: "managed",
+  }]);
+  const strict = await readCurrentState(source, {
+    ...desired,
+    collections: "strict",
+  });
+  assertEquals(strict.labels?.length, 2);
+});
 
 Deno.test("authoritative files use an immutable snapshot even with no managed paths", async () => {
   const source = new FakeStateSource();

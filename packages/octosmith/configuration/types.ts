@@ -1,5 +1,6 @@
 import type {
   CollectionManagementMode,
+  Label,
   MergeCommitMessage,
   MergeCommitTitle,
   PropertyValue,
@@ -107,6 +108,7 @@ export interface RepositoryConfiguration {
   readonly actions?: ActionsConfiguration;
   readonly dependabot?: DependabotConfiguration;
   readonly teams?: readonly TeamPermissionConfiguration[];
+  readonly labels?: readonly Label[];
   readonly rulesets?: readonly RulesetConfiguration[];
   readonly environments?: readonly EnvironmentConfiguration[];
   readonly files?: Readonly<Record<string, FileConfiguration>>;

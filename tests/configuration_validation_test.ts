@@ -21,6 +21,52 @@ const template = {
   repository: {},
 };
 
+Deno.test("repository labels validate names, colors and descriptions", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(join(root, "templates"));
+    await Deno.writeTextFile(
+      join(root, "octosmith.yml"),
+      JSON.stringify(configuration),
+    );
+    for (
+      const labels of [
+        [],
+        [{
+          name: "security",
+          color: "B60205",
+          description: "Security findings",
+        }],
+        [{ name: "severity:medium", color: "fbca04" }],
+      ]
+    ) {
+      await Deno.writeTextFile(
+        join(root, "templates/default.yml"),
+        JSON.stringify({ ...template, repository: { labels } }),
+      );
+      assertEquals(await validateConfigurationDirectory(root), []);
+    }
+    for (
+      const label of [
+        { name: "", color: "b60205" },
+        { name: "   ", color: "b60205" },
+        { name: "security", color: "#b60205" },
+        { name: "security", color: "zzzzzz" },
+        { name: "security" },
+        { name: "security", color: "b60205", description: "x".repeat(101) },
+      ]
+    ) {
+      await Deno.writeTextFile(
+        join(root, "templates/default.yml"),
+        JSON.stringify({ ...template, repository: { labels: [label] } }),
+      );
+      await assertRejects(() => loadConfigurationDirectory(root), Error);
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("default branch drift validates ignore and enforce and preserves omitted desired branch", async () => {
   const root = await Deno.makeTempDir();
   try {

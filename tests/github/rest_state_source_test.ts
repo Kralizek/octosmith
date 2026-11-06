@@ -9,6 +9,61 @@ import {
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
+Deno.test("labels paginate and normalize null descriptions and color case", async () => {
+  const pages: number[] = [];
+  const source = new GitHubRepositoryStateSource(
+    new FetchGitHubClient({
+      token: "test",
+      fetch: (input) => {
+        const url = new URL(String(input));
+        assertEquals(url.pathname, "/repos/acme/sample/labels");
+        const page = Number(url.searchParams.get("page"));
+        pages.push(page);
+        return Promise.resolve(Response.json(
+          page === 1
+            ? Array.from(
+              { length: 100 },
+              (_, index) => ({
+                name: "label-" + index,
+                color: "B60205",
+                description: null,
+              }),
+            )
+            : [{ name: "last", color: "FBCA04", description: "last page" }],
+        ));
+      },
+    }),
+    "acme",
+  );
+  const labels = await source.getLabels("sample");
+  assertEquals(pages, [1, 2]);
+  assertEquals(labels.length, 101);
+  assertEquals(labels[0], {
+    name: "label-0",
+    color: "b60205",
+    description: "",
+  });
+  assertEquals(labels[100], {
+    name: "last",
+    color: "fbca04",
+    description: "last page",
+  });
+});
+
+Deno.test("label API failures are not treated as an empty collection", async () => {
+  const source = new GitHubRepositoryStateSource(
+    new FetchGitHubClient({
+      token: "test",
+      fetch: () =>
+        Promise.resolve(
+          Response.json({ message: "Forbidden" }, { status: 403 }),
+        ),
+    }),
+    "acme",
+  );
+  await assertRejects(() => source.getLabels("sample"), GitHubRequestError);
+});
+
 Deno.test("repository history distinguishes empty repositories from API failures", async () => {
   for (
     const [status, message, empty] of [
