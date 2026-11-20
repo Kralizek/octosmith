@@ -7,6 +7,7 @@ import {
   GitHubOwnerError,
   loadConfigurationDirectory,
   type LoadedConfiguration,
+  type Operation,
   resolveDesiredState,
 } from "@octosmith/octosmith";
 import { createGitHubRuntime, main } from "../packages/cli/mod.ts";
@@ -252,6 +253,7 @@ Deno.test("saved plans cannot bypass the owner guard through a custom runtime", 
           return Promise.resolve(response.clone());
         },
       });
+
       await assertRejects(
         () =>
           applyPersistedPlan(
@@ -326,5 +328,145 @@ Deno.test("saved plans cannot bypass the owner guard through a custom runtime", 
           : ["discover", "read", "prepare", "recheck", "apply"],
       );
     }
+  }
+});
+
+Deno.test("personal saved plans require authenticated identity and preflight all owner capabilities", async () => {
+  const loaded: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "alice",
+      owner: "alice",
+      repositories: { scope: { include: "all" } },
+    },
+    templates: {
+      "repository:default": {
+        version: 1,
+        kind: "repository",
+        match: { include: "all" },
+        repository: {},
+      },
+    },
+  };
+  const runtime: ApplyRuntime = {
+    resolveOwner: () => Promise.resolve({ login: "Alice", type: "User" }),
+    discover: () => {
+      throw new Error("Unexpected discovery");
+    },
+    read: () => {
+      throw new Error("Unexpected read");
+    },
+    prepare: () => {
+      throw new Error("Unexpected prepare");
+    },
+    recheck: () => {
+      throw new Error("Unexpected recheck");
+    },
+    apply: () => {
+      throw new Error("Unexpected apply");
+    },
+  };
+  const requests: string[] = [];
+  let login = "Mallory";
+  const client = new FetchGitHubClient({
+    token: "test",
+    fetch: (input, init) => {
+      const path = new URL(String(input)).pathname;
+      requests.push(`${init?.method} ${path}`);
+      return Promise.resolve(Response.json(
+        path === "/user" ? { login } : { login: "Alice", type: "User" },
+      ));
+    },
+  });
+  const empty = await createPersistedPlanArtifact(loaded, []);
+  await assertRejects(
+    () => applyPersistedPlan(runtime, loaded, empty, () => {}),
+    GitHubOwnerError,
+    "requires a GitHub client",
+  );
+  await assertRejects(
+    () => applyPersistedPlan({ ...runtime, client }, loaded, empty, () => {}),
+    GitHubOwnerError,
+    "does not match configured personal owner",
+  );
+  assertEquals(requests, ["GET /users/alice", "GET /user"]);
+  login = "Alice";
+  assertEquals(
+    await applyPersistedPlan(
+      { ...runtime, client },
+      loaded,
+      empty,
+      () => {},
+    ),
+    { configuration: "valid", resources: [] },
+  );
+
+  const desired = await resolveDesiredState(
+    loaded,
+    { name: "sample", teams: [], properties: {} },
+    () => "unused",
+  );
+  const current = currentState();
+  const plan = buildPlan(current, desired);
+  const artifact = await createPersistedPlanArtifact(loaded, [{
+    desired,
+    current,
+    plan,
+    evaluations: buildApplyEvaluations(desired, plan.operations, current),
+  }]);
+  const bypassActors = [{
+    actorType: "team",
+    actorId: 7,
+    bypassMode: "always",
+  }] as const;
+  const cases: readonly (readonly [Operation, string])[] = [
+    [
+      { type: "remove-team-permission", team: "platform" },
+      "team permissions",
+    ],
+    [
+      { type: "set-custom-property", name: "tier", value: "service" },
+      "organization custom properties",
+    ],
+    [{
+      type: "update-repository-settings",
+      settings: { visibility: "internal" },
+    }, "internal visibility"],
+    [{
+      type: "update-actions-oidc",
+      settings: { subjectClaimTemplate: { source: "organization" } },
+    }, "organization-specific OIDC claims"],
+    [{
+      type: "create-ruleset",
+      ruleset: {
+        name: "guard",
+        target: "push",
+        enforcement: "active",
+        bypassActors,
+        rules: [],
+      },
+    }, "team-based ruleset bypass actors"],
+    [{
+      type: "update-ruleset",
+      id: 1,
+      changes: { name: "guard", bypassActors },
+    }, "team-based ruleset bypass actors"],
+  ];
+  for (const [operation, reason] of cases) {
+    const resource = artifact.resources[0];
+    await assertRejects(
+      () =>
+        applyPersistedPlan({ ...runtime, client }, loaded, {
+          ...artifact,
+          resources: [resource, {
+            ...resource,
+            name: "other",
+            operations: [operation],
+          }],
+        }, () => {}),
+      GitHubOwnerError,
+      reason,
+    );
   }
 });

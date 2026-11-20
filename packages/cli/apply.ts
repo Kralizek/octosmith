@@ -50,12 +50,12 @@ export type ApplyMode = "plan" | "apply";
 
 /** Describes apply runtime. */
 export interface ApplyRuntime {
-  /** Saved-plan execution requires a client or resolveOwner, including injected test runtimes. */
+  /** Required for personal saved-plan replay; organization replay may use resolveOwner. */
   readonly client?: GitHubClient;
   readonly value?: RuntimeValueProvider;
   readonly bootstrap?: RepositoryGitBootstrap;
 
-  /** Resolve online owner identity; saved-plan execution independently enforces organization capabilities. */
+  /** Resolve online owner identity for organization saved-plan replay. */
   resolveOwner?(loaded: LoadedConfiguration): Promise<GitHubOwner>;
 
   discover(

@@ -40,20 +40,21 @@ Deno.test("personal repository creation uses the authenticated-user endpoint and
     token: "test",
     fetch: (input, init) => {
       const path = new URL(String(input)).pathname;
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
       calls.push({
         method: init?.method ?? "GET",
         path,
-        ...(init?.body && { body: JSON.parse(String(init.body)) }),
+        ...(body && { body }),
       });
-      const request = init?.body
-        ? JSON.parse(String(init.body)) as { name: string }
-        : { name: "" };
+      if (path === "/user") {
+        return Promise.resolve(Response.json({ login: "alice" }));
+      }
 
       return Promise.resolve(
         Response.json({
-          name: request.name,
-          full_name: "Alice/" + request.name,
-          html_url: "https://github.com/Alice/" + request.name,
+          name: body.name,
+          full_name: "Alice/" + body.name,
+          html_url: "https://github.com/Alice/" + body.name,
           owner: { login: "Alice" },
         }, { status: 201 }),
       );
@@ -72,26 +73,33 @@ Deno.test("personal repository creation uses the authenticated-user endpoint and
     "User",
     { name: "public-sample", visibility: "public" },
   );
-  assertEquals(calls, [{
-    method: "POST",
-    path: "/user/repos",
-    body: { name: "sample", private: true, auto_init: false },
-  }, {
-    method: "POST",
-    path: "/user/repos",
-    body: { name: "public-sample", private: false, auto_init: false },
-  }]);
+  assertEquals(calls, [
+    { method: "GET", path: "/user" },
+    {
+      method: "POST",
+      path: "/user/repos",
+      body: { name: "sample", private: true, auto_init: false },
+    },
+    { method: "GET", path: "/user" },
+    {
+      method: "POST",
+      path: "/user/repos",
+      body: { name: "public-sample", private: false, auto_init: false },
+    },
+  ]);
 
   const mismatched = new FetchGitHubClient({
     token: "test",
-    fetch: () =>
+    fetch: (input) =>
       Promise.resolve(
-        Response.json({
-          name: "sample",
-          full_name: "Alice/sample",
-          html_url: "https://github.com/Alice/sample",
-          owner: { login: "Mallory" },
-        }, { status: 201 }),
+        new URL(String(input)).pathname === "/user"
+          ? Response.json({ login: "Alice" })
+          : Response.json({
+            name: "sample",
+            full_name: "Alice/sample",
+            html_url: "https://github.com/Alice/sample",
+            owner: { login: "Mallory" },
+          }, { status: 201 }),
       ),
   });
   await assertRejects(
@@ -103,6 +111,37 @@ Deno.test("personal repository creation uses the authenticated-user endpoint and
     Error,
     "unexpected repository identity",
   );
+});
+
+Deno.test("personal REST repository creation rejects internal visibility and a mismatched token before POST", async () => {
+  const calls: string[] = [];
+  const client = new FetchGitHubClient({
+    token: "test",
+    fetch: (input, init) => {
+      calls.push(`${init?.method} ${new URL(String(input)).pathname}`);
+      return Promise.resolve(Response.json({ login: "Mallory" }));
+    },
+  });
+  await assertRejects(
+    () =>
+      createRepositoryForOwner(client, "Alice", "User", {
+        name: "sample",
+        visibility: "internal",
+      }),
+    Error,
+    "do not support internal visibility",
+  );
+  assertEquals(calls, []);
+  await assertRejects(
+    () =>
+      createRepositoryForOwner(client, "Alice", "User", {
+        name: "sample",
+        visibility: "private",
+      }),
+    Error,
+    "does not match configured personal owner",
+  );
+  assertEquals(calls, ["GET /user"]);
 });
 
 Deno.test("personal repository creation rejects an authenticated-user mismatch before mutation", async () => {

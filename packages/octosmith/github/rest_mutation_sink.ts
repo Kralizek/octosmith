@@ -14,6 +14,10 @@ import type {
   Variable,
 } from "../mod.ts";
 import { type GitHubClient, GitHubRequestError } from "./client.ts";
+import {
+  assertAuthenticatedPersonalOwner,
+  assertOwnerSupportsOperation,
+} from "./owner.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 import type { PullRequestResult } from "../report/types.ts";
 import { reconcileFilePullRequest } from "./file_pull_request.ts";
@@ -90,6 +94,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #scope: ReconciliationScope;
   #bootstrapSnapshot?: ManagedFileSnapshot;
   #filesReconciled = false;
+  #ownerVerification?: Promise<void>;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
     this.#bootstrap = options.bootstrap;
@@ -176,64 +181,24 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   async finish(repository: string): Promise<void> {
     if (this.#scope === "github-only") return;
     if (this.#fileChanges.mode === "pull_request" && !this.#filesReconciled) {
-      await this.applyFileChanges(
+      await this.verifyOwner();
+      await this.#applyFileChanges(
         repository,
         this.#preparedFileChanges?.operations ?? [],
       );
     }
   }
 
-  private assertOwnerSupports(operation: Operation): void {
+  private async verifyOwner(): Promise<void> {
     if (this.#ownerType !== "User") return;
-    let unsupported: string | undefined;
-    switch (operation.type) {
-      case "set-team-permission":
-      case "remove-team-permission":
-        unsupported = "team permissions";
-        break;
-      case "set-custom-property":
-        unsupported = "organization custom properties";
-        break;
-      case "update-repository-settings":
-        if (operation.settings.visibility === "internal") {
-          unsupported = "internal visibility";
-        }
-        break;
-      case "update-actions-oidc":
-        if (
-          operation.settings.subjectClaimTemplate?.source === "organization"
-        ) {
-          unsupported = "organization-specific OIDC claims";
-        }
-        break;
-      case "create-ruleset":
-        if (
-          operation.ruleset.bypassActors.some((actor) =>
-            actor.actorType === "team"
-          )
-        ) {
-          unsupported = "team-based ruleset bypass actors";
-        }
-        break;
-      case "update-ruleset":
-        if (
-          operation.changes.bypassActors?.some((actor) =>
-            actor.actorType === "team"
-          )
-        ) {
-          unsupported = "team-based ruleset bypass actors";
-        }
-        break;
-    }
-    if (unsupported !== undefined) {
-      throw new Error(
-        `Personal GitHub accounts do not support ${unsupported}; no changes were applied.`,
-      );
-    }
+    await (this.#ownerVerification ??= assertAuthenticatedPersonalOwner(
+      this.#client,
+      this.#owner,
+    ));
   }
 
   async apply(repository: string, operation: Operation): Promise<void> {
-    this.assertOwnerSupports(operation);
+    assertOwnerSupportsOperation(this.#ownerType, operation);
     if (
       this.#scope === "github-only" && (
         isFileOperation(operation) || operation.type === "initialize-repository"
@@ -244,6 +209,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       );
     }
 
+    await this.verifyOwner();
     switch (operation.type) {
       case "initialize-repository": {
         if (!this.#bootstrap) {
@@ -290,7 +256,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         return;
       }
       case "update-repository-settings":
-        await this.updateRepositorySettings(repository, operation.settings);
+        await this.#updateRepositorySettings(repository, operation.settings);
         return;
       case "set-custom-property":
         await this.#client.request(
@@ -307,10 +273,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "update-actions-settings":
-        await this.updateActions(repository, operation.settings);
+        await this.#updateActions(repository, operation.settings);
         return;
       case "update-actions-oidc":
-        await this.updateOidc(repository, operation.settings);
+        await this.#updateOidc(repository, operation.settings);
         return;
       case "create-label":
         await this.#client.request("POST", this.repo(repository) + "/labels", {
@@ -360,7 +326,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "set-actions-variable":
-        await this.setActionsVariable(repository, operation.variable);
+        await this.#setActionsVariable(repository, operation.variable);
         return;
       case "remove-actions-variable":
         await this.#client.request(
@@ -370,7 +336,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "set-actions-secret":
-        await this.setSecret(
+        await this.#setSecret(
           this.repo(repository) + "/actions/secrets",
           operation.secret.name,
           operation.secret.source,
@@ -384,7 +350,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "set-dependabot-secret":
-        await this.setSecret(
+        await this.#setSecret(
           this.repo(repository) + "/dependabot/secrets",
           operation.secret.name,
           operation.secret.source,
@@ -423,7 +389,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "create-environment":
-        await this.applyEnvironment(
+        await this.#applyEnvironment(
           repository,
           operation.environment,
           true,
@@ -433,7 +399,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "update-environment":
-        await this.applyEnvironment(
+        await this.#applyEnvironment(
           repository,
           operation.environment,
           false,
@@ -460,7 +426,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 
           if (!this.#preparedFileChanges.applied) {
             try {
-              await this.applyFileChanges(
+              await this.#applyFileChanges(
                 repository,
                 this.#preparedFileChanges.operations,
               );
@@ -471,13 +437,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
             }
           }
         } else {
-          await this.applyFileChanges(repository, [operation]);
+          await this.#applyFileChanges(repository, [operation]);
         }
         return;
     }
   }
 
-  async updateRepositorySettings(
+  async #updateRepositorySettings(
     repository: string,
     settings: DesiredRepositorySettings,
   ): Promise<void> {
@@ -498,7 +464,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async updateActions(
+  async #updateActions(
     repository: string,
     settings: DesiredActionsSettings,
   ): Promise<void> {
@@ -557,7 +523,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async updateOidc(
+  async #updateOidc(
     repository: string,
     settings: DesiredActionsOidcSettings,
   ): Promise<void> {
@@ -591,7 +557,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     });
   }
 
-  async setActionsVariable(
+  async #setActionsVariable(
     repository: string,
     variable: Variable,
   ): Promise<void> {
@@ -614,7 +580,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
   }
 
-  async applyEnvironment(
+  async #applyEnvironment(
     repository: string,
     environment: DesiredEnvironment,
     create: boolean,
@@ -630,7 +596,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     if (environment.variables !== undefined) {
-      await this.syncEnvironmentVariables(
+      await this.#syncEnvironmentVariables(
         base,
         environment.variables,
         collections,
@@ -639,7 +605,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     if (environment.secrets !== undefined) {
-      await this.syncEnvironmentSecrets(
+      await this.#syncEnvironmentSecrets(
         base,
         environment.secrets,
         collections,
@@ -648,7 +614,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async syncEnvironmentVariables(
+  async #syncEnvironmentVariables(
     base: string,
     variables: readonly Variable[],
     collections: "explicit" | "strict",
@@ -693,7 +659,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async syncEnvironmentSecrets(
+  async #syncEnvironmentSecrets(
     base: string,
     secrets: readonly import("../mod.ts").DesiredSecret[],
     collections: "explicit" | "strict",
@@ -723,11 +689,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     for (const secret of secrets) {
-      await this.setSecret(base + "/secrets", secret.name, secret.source);
+      await this.#setSecret(base + "/secrets", secret.name, secret.source);
     }
   }
 
-  async setSecret(base: string, name: string, source: string): Promise<void> {
+  async #setSecret(base: string, name: string, source: string): Promise<void> {
     const publicKey = await this.#client.get<{
       readonly key_id: string;
       readonly key: string;
@@ -749,7 +715,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
   }
 
-  async applyFileChanges(
+  async #applyFileChanges(
     repository: string,
     plannedOperations: readonly PlannedFileOperation[],
   ): Promise<void> {

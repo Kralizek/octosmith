@@ -1,5 +1,6 @@
 import type { RepositoryVisibility } from "../types.ts";
 import type { GitHubClient } from "./client.ts";
+import { assertAuthenticatedPersonalOwner, GitHubOwnerError } from "./owner.ts";
 
 /** Validated identity supplied to GitHub without optional repository defaults. */
 export interface OrganizationRepositoryCreationRequest {
@@ -22,6 +23,14 @@ export async function createRepositoryForOwner(
   type: "Organization" | "User",
   request: OrganizationRepositoryCreationRequest,
 ): Promise<CreatedRepository> {
+  if (type === "User") {
+    if (request.visibility === "internal") {
+      throw new GitHubOwnerError(
+        "Personal GitHub accounts do not support internal visibility; no changes were applied.",
+      );
+    }
+    await assertAuthenticatedPersonalOwner(client, owner);
+  }
   const response = await client.request<{
     readonly name: string;
     readonly full_name: string;

@@ -1,5 +1,6 @@
 import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import type { NormalizedConfiguration } from "../configuration/types.ts";
+import type { Operation } from "../plan/types.ts";
 
 /** Canonical GitHub identity, independent of workflow capabilities. */
 export interface GitHubOwner {
@@ -114,29 +115,12 @@ export async function resolveGitHubOwnerContext(
     );
   }
   if (owner.type === "User") {
-    let authenticated: unknown;
-    try {
-      authenticated = await client.get<unknown>("/user");
-    } catch (error) {
-      const status = error instanceof GitHubRequestError
-        ? error.status
-        : undefined;
+    if (owner.login.toLowerCase() !== declaration.login.toLowerCase()) {
       throw new GitHubOwnerError(
-        `Cannot verify the authenticated personal account` +
-          (status === undefined ? "" : ` (HTTP ${status})`) +
-          ". Use a token that identifies the configured user and has access to personal repositories; no changes were applied.",
-        status,
+        `Resolved GitHub login does not match configured personal owner "${declaration.login}"; no changes were applied.`,
       );
     }
-    if (
-      typeof authenticated !== "object" || authenticated === null ||
-      !("login" in authenticated) || typeof authenticated.login !== "string" ||
-      authenticated.login.toLowerCase() !== owner.login.toLowerCase()
-    ) {
-      throw new GitHubOwnerError(
-        `Authenticated GitHub user does not match configured personal owner "${owner.login}". Personal repositories can only be provisioned for the authenticated user; no changes were applied.`,
-      );
-    }
+    await assertAuthenticatedPersonalOwner(client, owner.login);
   }
   return {
     ...owner,
@@ -154,6 +138,79 @@ export async function resolveGitHubOwnerContext(
         organizationOidc: false,
       },
   };
+}
+
+/** Verify that the client used for a personal write authenticates as its owner. */
+export async function assertAuthenticatedPersonalOwner(
+  client: GitHubClient,
+  owner: string,
+): Promise<void> {
+  let authenticated: unknown;
+  try {
+    authenticated = await client.get<unknown>("/user");
+  } catch (error) {
+    const status = error instanceof GitHubRequestError
+      ? error.status
+      : undefined;
+    throw new GitHubOwnerError(
+      "Cannot verify the authenticated personal account" +
+        (status === undefined ? "" : ` (HTTP ${status})`) +
+        ". Use a token that identifies the configured user and has access to personal repositories; no changes were applied.",
+      status,
+    );
+  }
+  if (
+    typeof authenticated !== "object" || authenticated === null ||
+    !("login" in authenticated) || typeof authenticated.login !== "string" ||
+    authenticated.login.toLowerCase() !== owner.toLowerCase()
+  ) {
+    throw new GitHubOwnerError(
+      `Authenticated GitHub user does not match configured personal owner "${owner}". Personal repositories can only be provisioned for the authenticated user; no changes were applied.`,
+    );
+  }
+}
+
+/** Reject an operation that is unavailable for the declared owner kind. */
+export function assertOwnerSupportsOperation(
+  type: GitHubOwner["type"],
+  operation: Operation,
+): void {
+  if (type !== "User") return;
+  let unsupported: string | undefined;
+  switch (operation.type) {
+    case "set-team-permission":
+    case "remove-team-permission":
+      unsupported = "team permissions";
+      break;
+    case "set-custom-property":
+      unsupported = "organization custom properties";
+      break;
+    case "update-repository-settings":
+      if (operation.settings.visibility === "internal") {
+        unsupported = "internal visibility";
+      }
+      break;
+    case "update-actions-oidc":
+      if (operation.settings.subjectClaimTemplate?.source === "organization") {
+        unsupported = "organization-specific OIDC claims";
+      }
+      break;
+    case "create-ruleset":
+    case "update-ruleset": {
+      const actors = operation.type === "create-ruleset"
+        ? operation.ruleset.bypassActors
+        : operation.changes.bypassActors;
+      if (actors?.some((actor) => actor.actorType === "team")) {
+        unsupported = "team-based ruleset bypass actors";
+      }
+      break;
+    }
+  }
+  if (unsupported !== undefined) {
+    throw new GitHubOwnerError(
+      `Personal GitHub accounts do not support ${unsupported}; no changes were applied.`,
+    );
+  }
 }
 
 /** Enforce current organization-only capabilities without changing identity resolution. */

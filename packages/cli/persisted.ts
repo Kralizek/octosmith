@@ -1,4 +1,5 @@
 import {
+  assertOwnerSupportsOperation,
   classifyResource,
   equalContentHash,
   type ExecutableResourcePlan,
@@ -73,22 +74,23 @@ export async function applyPersistedPlan(
     );
   }
 
-  const owner = runtime.resolveOwner
+  const declaration = getGitHubOwnerDeclaration(loaded.configuration);
+  if (declaration.type === "User" && !runtime.client) {
+    throw new GitHubOwnerError(
+      "Personal saved-plan execution requires a GitHub client to verify the authenticated owner; no changes were applied.",
+    );
+  }
+  const owner = declaration.type === "Organization" && runtime.resolveOwner
     ? await runtime.resolveOwner(loaded)
     : runtime.client
-    ? await resolveGitHubOwnerContext(
-      runtime.client,
-      getGitHubOwnerDeclaration(loaded.configuration),
-    )
+    ? await resolveGitHubOwnerContext(runtime.client, declaration)
     : undefined;
   if (owner === undefined) {
     throw new GitHubOwnerError(
       "Saved-plan execution requires owner validation. Provide an ApplyRuntime.resolveOwner implementation or GitHub client; no changes were applied.",
     );
   }
-  const expectedType = loaded.configuration.owner === undefined
-    ? "Organization"
-    : "User";
+  const expectedType = declaration.type;
   if (owner.type !== expectedType) {
     throw new GitHubOwnerError(
       owner.type === "User" && expectedType === "Organization"
@@ -97,19 +99,10 @@ export async function applyPersistedPlan(
     );
   }
   validateOwnerCapabilities(loaded);
-  if (
-    loaded.configuration.owner !== undefined &&
-    artifact.resources.some((resource) =>
-      resource.operations.some((operation) =>
-        operation.type === "set-team-permission" ||
-        operation.type === "remove-team-permission" ||
-        operation.type === "set-custom-property"
-      )
-    )
-  ) {
-    throw new GitHubOwnerError(
-      "Saved plan includes organization-only team or custom-property operations for a personal account; no changes were applied.",
-    );
+  for (const resource of artifact.resources) {
+    for (const operation of resource.operations) {
+      assertOwnerSupportsOperation(owner.type, operation);
+    }
   }
 
   const configuration = equalContentHash(

@@ -304,7 +304,10 @@ export async function preflightRepositoryCreation(
   const explicitNameIsValid = input.name !== undefined &&
     validateRepositoryName(input.name) === undefined;
   const desiredVisibility = template.repository.settings?.visibility;
-  let constructibleVisibilities = [...effective.visibility];
+  const personalOwner = loaded.configuration.owner !== undefined;
+  let constructibleVisibilities = effective.visibility.filter((visibility) =>
+    !personalOwner || visibility !== "internal"
+  );
   if (desiredVisibility !== undefined) {
     if (!constructibleVisibilities.includes(desiredVisibility)) {
       diagnostics.push({
@@ -343,11 +346,14 @@ export async function preflightRepositoryCreation(
   let visibility: RepositoryCreationVisibilityChoice;
   if (
     input.visibility !== undefined &&
-    !isRepositoryVisibility(input.visibility)
+    (!isRepositoryVisibility(input.visibility) ||
+      (personalOwner && input.visibility === "internal"))
   ) {
     diagnostics.push({
       code: "invalid_visibility",
-      message: "Visibility must be public, private, or internal",
+      message: personalOwner
+        ? "Visibility for a personal GitHub owner must be public or private"
+        : "Visibility must be public, private, or internal",
       template: resolvedIdentity,
       path: "visibility",
     });

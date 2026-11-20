@@ -2,6 +2,7 @@ import sodium from "libsodium-wrappers";
 import { buildPlan } from "@octosmith/octosmith";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
+  FetchGitHubClient,
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryMutationSink,
@@ -1118,6 +1119,36 @@ Deno.test("personal mutation sink rejects unsupported organization operations be
     "do not support organization custom properties",
   );
   assertEquals(client.requests, []);
+});
+
+Deno.test("personal mutation sink verifies the token before apply or implicit file reconciliation", async () => {
+  for (const method of ["apply", "finish"] as const) {
+    const calls: string[] = [];
+    const client = new FetchGitHubClient({
+      token: "test",
+      fetch: (input, init) => {
+        calls.push(`${init?.method} ${new URL(String(input)).pathname}`);
+        return Promise.resolve(Response.json({ login: "Mallory" }));
+      },
+    });
+    const sink = new GitHubRepositoryMutationSink({
+      client,
+      owner: "alice",
+      ownerType: "User",
+      secretValue: () => "unused",
+      fileChanges: { mode: "pull_request" },
+    });
+    await assertRejects(
+      () =>
+        method === "finish" ? sink.finish("sample") : sink.apply("sample", {
+          type: "update-repository-settings",
+          settings: { hasIssues: false },
+        }),
+      Error,
+      "does not match configured personal owner",
+    );
+    assertEquals(calls, ["GET /user"]);
+  }
 });
 
 Deno.test("Actions secrets are sealed with GitHub's public key", async () => {
