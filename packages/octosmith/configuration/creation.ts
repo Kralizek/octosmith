@@ -179,7 +179,34 @@ export async function preflightRepositoryCreation(
     template,
     resolvedIdentity,
   );
-  if (!intersection.reachable || intersection.effective === undefined) {
+  const personalOwner = loaded.configuration.owner !== undefined;
+  const unsupportedInputs = personalOwner
+    ? [
+      {
+        path: "teams",
+        capability: "team permissions",
+        count: input.teams?.length,
+      },
+      {
+        path: "properties",
+        capability: "organization custom properties",
+        count: Object.keys(input.properties ?? {}).length,
+      },
+    ].filter(({ count }) => count)
+    : [];
+  for (const { path, capability } of unsupportedInputs) {
+    diagnostics.push({
+      code: "owner_capability",
+      message:
+        `Personal GitHub accounts do not support ${capability}. Remove the ${path} input or configure an organization.`,
+      template: resolvedIdentity,
+      path,
+    });
+  }
+  if (
+    unsupportedInputs.length > 0 || !intersection.reachable ||
+    intersection.effective === undefined
+  ) {
     return {
       template: resolvedIdentity,
       ready: false,
@@ -304,7 +331,6 @@ export async function preflightRepositoryCreation(
   const explicitNameIsValid = input.name !== undefined &&
     validateRepositoryName(input.name) === undefined;
   const desiredVisibility = template.repository.settings?.visibility;
-  const personalOwner = loaded.configuration.owner !== undefined;
   let constructibleVisibilities = effective.visibility.filter((visibility) =>
     !personalOwner || visibility !== "internal"
   );

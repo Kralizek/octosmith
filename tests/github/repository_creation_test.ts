@@ -161,22 +161,8 @@ Deno.test("personal repository creation rejects an authenticated-user mismatch b
       );
     },
   });
-  const loaded = configuration();
-  const personal: LoadedConfiguration = {
-    ...loaded,
-    configuration: {
-      ...loaded.configuration,
-      owner: "Alice",
-      organization: "Alice",
-      repositories: {
-        scope: {
-          include: { names: ["api-*"], visibility: "private" },
-        },
-      },
-    },
-  };
   const result = await createRepository({
-    configuration: personal,
+    configuration: personalConfiguration(),
     template: "services",
     name: "api-personal",
     visibility: "private",
@@ -194,6 +180,64 @@ Deno.test("personal repository creation rejects an authenticated-user mismatch b
     { method: "GET", path: "/user" },
   ]);
 });
+
+Deno.test("personal creation rejects explicit organization metadata before contacting GitHub", async (t) => {
+  const cases = [
+    { path: "teams", input: { teams: ["platform"] } },
+    { path: "properties", input: { properties: { tier: "backend" } } },
+  ] as const;
+  for (const { path, input } of cases) {
+    await t.step(path, async () => {
+      const calls: string[] = [];
+      const client = new FetchGitHubClient({
+        token: "test",
+        fetch: () => {
+          calls.push("GitHub");
+          throw new Error("Preflight should not contact GitHub");
+        },
+      });
+      const result = await createRepository({
+        configuration: personalConfiguration(),
+        template: "services",
+        name: "api-personal",
+        visibility: "private",
+        ...input,
+      }, {
+        client,
+        bootstrap: {
+          bootstrap: () => {
+            calls.push("bootstrap");
+            throw new Error("Bootstrap must not run");
+          },
+        },
+      });
+      assertEquals(calls, []);
+      assertEquals(result.status, "preflight_rejected");
+      assertEquals(result.failedStage, "preflight");
+      assertEquals(
+        result.specification?.diagnostics.map(({ code, path }) => [code, path]),
+        [["owner_capability", path]],
+      );
+    });
+  }
+});
+
+function personalConfiguration(): LoadedConfiguration {
+  const loaded = configuration();
+  return {
+    ...loaded,
+    configuration: {
+      ...loaded.configuration,
+      owner: "Alice",
+      organization: "Alice",
+      repositories: {
+        scope: {
+          include: { names: ["api-*"], visibility: "private" },
+        },
+      },
+    },
+  };
+}
 
 interface Call {
   method: string;
