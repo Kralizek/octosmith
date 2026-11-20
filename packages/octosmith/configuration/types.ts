@@ -14,10 +14,27 @@ import type {
   SquashMergeCommitTitle,
 } from "../types.ts";
 
-/** Describes configuration. */
-export interface Configuration {
+/** Shared fields in the root YAML configuration. */
+interface ConfigurationBase {
   readonly version: 1;
+  readonly repositories: RepositoriesConfiguration;
+}
+
+/** Root YAML configuration explicitly targets an organization or user account. */
+export type Configuration =
+  & ConfigurationBase
+  & (
+    | { readonly organization: string; readonly owner?: never }
+    | { readonly owner: string; readonly organization?: never }
+  );
+
+/** Configuration normalized for shared repository runtime APIs. */
+export interface NormalizedConfiguration {
+  readonly version: 1;
+  /** Configured organization, or the personal owner normalized to the same field. */
   readonly organization: string;
+  /** Present only when YAML explicitly targets a personal account. */
+  readonly owner?: string;
   readonly repositories: RepositoriesConfiguration;
 }
 

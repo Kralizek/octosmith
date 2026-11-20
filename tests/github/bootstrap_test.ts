@@ -37,6 +37,8 @@ interface Commit {
 
 class BootstrapClient implements GitHubClient {
   defaultBranch = "master";
+  ownerType: "Organization" | "User" = "Organization";
+  authenticatedLogin = "acme";
   readonly refs = new Map<string, string>();
   readonly trees = new Map<string, Tree>();
   readonly commits = new Map<string, Commit>();
@@ -92,6 +94,10 @@ class BootstrapClient implements GitHubClient {
   ): unknown {
     const repo = "/repos/acme/sample";
     if (method === "GET") {
+      if (path === "/users/acme") {
+        return { login: "acme", type: this.ownerType };
+      }
+      if (path === "/user") return { login: this.authenticatedLogin };
       if (path === repo) {
         return {
           name: "sample",
@@ -807,6 +813,26 @@ Deno.test("cleanup rejects changed ownership and saved SHAs without writing", as
     client.requests.filter((request) => request.method !== "GET"),
     [],
   );
+});
+
+Deno.test("standalone bootstrap verifies the authenticated personal owner before writing", async () => {
+  const client = new BootstrapClient();
+  client.ownerType = "User";
+  client.authenticatedLogin = "other-user";
+  const bootstrap = new GitHubRepositoryBootstrap(client, "acme");
+  await assertRejects(
+    () => bootstrap.initialize("sample", "main"),
+    Error,
+    "does not match configured personal owner",
+  );
+  assertEquals(
+    client.requests.map(({ method, path }) => `${method} ${path}`),
+    ["GET /users/acme", "GET /user"],
+  );
+
+  client.authenticatedLogin = "ACME";
+  await bootstrap.initialize("sample", "main");
+  assertEquals(client.files()[BOOTSTRAP_FILE_PATH], BOOTSTRAP_FILE_CONTENT);
 });
 
 Deno.test("concurrent initialization never overwrites user content or configures protections", async () => {

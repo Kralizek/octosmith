@@ -5,12 +5,13 @@ import type {
   RepositorySelector,
   RepositoryVisibility,
 } from "../mod.ts";
-import { matchesScope } from "../mod.ts";
+import { matchesScope, validateOwnerCapabilities } from "../mod.ts";
 import type { GitHubClient, GitHubQueryValue } from "./client.ts";
 
 interface RepositoryResponse {
   readonly name: string;
   readonly visibility: RepositoryVisibility;
+  readonly owner?: { readonly login?: string };
 }
 
 interface RepositoryPropertiesResponse {
@@ -46,14 +47,20 @@ export async function discoverRepositories(
   loaded: LoadedConfiguration,
   repository?: string,
 ): Promise<RepositoryDiscoveryResult> {
+  validateOwnerCapabilities(loaded);
   if (repository !== undefined && repository.length === 0) {
     throw new Error("Repository target must not be empty");
   }
 
   const organization = loaded.configuration.organization;
+  const personalOwner = loaded.configuration.owner !== undefined;
   const targetRepository = repository === undefined
     ? undefined
-    : normalizeRepositoryTarget(repository, organization);
+    : normalizeRepositoryTarget(
+      repository,
+      organization,
+      personalOwner ? "owner" : "organization",
+    );
   const scopes = [
     loaded.configuration.repositories.scope,
     ...Object.values(loaded.templates).flatMap((template) =>
@@ -81,6 +88,7 @@ export async function discoverRepositories(
   const discovery = await discoverCandidates(
     client,
     organization,
+    personalOwner,
     loaded.configuration.repositories.scope.include === "all"
       ? {}
       : loaded.configuration.repositories.scope.include,
@@ -132,11 +140,20 @@ async function discoverTargetRepository(
   referencedProperties: ReadonlySet<string>,
 ): Promise<RepositoryDiscoveryResult> {
   const organization = loaded.configuration.organization;
+  const personalOwner = loaded.configuration.owner !== undefined;
   const path = "/repos/" + encodeURIComponent(organization) + "/" +
     encodeURIComponent(repository);
 
   try {
     const response = await client.get<RepositoryResponse>(path);
+    if (
+      personalOwner &&
+      response.owner?.login?.toLowerCase() !== organization.toLowerCase()
+    ) {
+      throw new Error(
+        `Repository "${repository}" is not owned by configured personal account "${organization}"; no changes were applied.`,
+      );
+    }
     const teams = referencedTeams.size > 0
       ? await getAllPages<{ readonly slug: string }>(client, path + "/teams")
       : [];
@@ -171,7 +188,10 @@ async function discoverTargetRepository(
         failures: [{
           repository,
           error: new Error(
-            "Repository " + repository + " is outside the configured scope",
+            "Repository " + repository +
+              " is outside the configured scope (actual name: " +
+              JSON.stringify(metadata.name) + ", visibility: " +
+              JSON.stringify(metadata.visibility) + ")",
           ),
         }],
       };
@@ -189,6 +209,7 @@ async function discoverTargetRepository(
 async function discoverCandidates(
   client: GitHubClient,
   organization: string,
+  personalOwner: boolean,
   scope: RepositorySelector,
   teamRepositories: Map<string, ReadonlySet<string>>,
 ): Promise<CandidateDiscoveryResult> {
@@ -213,7 +234,12 @@ async function discoverCandidates(
 
     return {
       repositories: results.flatMap((result) =>
-        "repository" in result ? [result.repository] : []
+        "repository" in result &&
+          (!personalOwner ||
+            result.repository.owner?.login?.toLowerCase() ===
+              organization.toLowerCase())
+          ? [result.repository]
+          : []
       ),
       failures: results.flatMap((result) =>
         "error" in result
@@ -242,10 +268,21 @@ async function discoverCandidates(
   return {
     repositories: await getAllPages<RepositoryResponse>(
       client,
-      "/orgs/" + encodeURIComponent(organization) + "/repos",
+      personalOwner
+        ? "/user/repos"
+        : "/orgs/" + encodeURIComponent(organization) + "/repos",
       {
-        ...(visibility && { type: visibility }),
+        ...(personalOwner && { affiliation: "owner" }),
+        ...(visibility && personalOwner && { visibility }),
+        ...(visibility && !personalOwner && { type: visibility }),
       },
+    ).then((repositories) =>
+      personalOwner
+        ? repositories.filter((repository) =>
+          repository.owner?.login?.toLowerCase() ===
+            organization.toLowerCase()
+        )
+        : repositories
     ),
     failures: [],
   };
@@ -338,7 +375,8 @@ function singleVisibility(
 
 function normalizeRepositoryTarget(
   target: string,
-  organization: string,
+  configuredOwner: string,
+  ownerLabel: "owner" | "organization",
 ): string {
   const parts = target.split("/");
 
@@ -348,14 +386,14 @@ function normalizeRepositoryTarget(
 
   if (parts.length !== 2 || parts.some((part) => part.length === 0)) {
     throw new Error(
-      'Repository target must be a repository name or "organization/repository"',
+      `Repository target must be a repository name or "${ownerLabel}/repository"`,
     );
   }
 
-  const [owner, repository] = parts;
-  if (owner.toLowerCase() !== organization.toLowerCase()) {
+  const [targetOwner, repository] = parts;
+  if (targetOwner.toLowerCase() !== configuredOwner.toLowerCase()) {
     throw new Error(
-      `Repository target organization "${owner}" does not match configured organization "${organization}"`,
+      `Repository target ${ownerLabel} "${targetOwner}" does not match configured ${ownerLabel} "${configuredOwner}"`,
     );
   }
 

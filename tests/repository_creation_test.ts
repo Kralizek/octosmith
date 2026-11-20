@@ -305,6 +305,29 @@ Deno.test("creation preflight accepts explicit name and visibility to resolve am
   assertEquals(randomCalls, 0);
 });
 
+Deno.test("personal creation preflight rejects explicit internal visibility with unrestricted selectors", async () => {
+  const base = configuration({ include: "all" }, {
+    "repository:services": repositoryTemplate({ include: "all" }),
+  });
+  const loaded: LoadedConfiguration = {
+    ...base,
+    configuration: {
+      ...base.configuration,
+      owner: base.configuration.organization,
+    },
+  };
+  const result = await preflightRepositoryCreation(loaded, {
+    template: "services",
+    name: "sample",
+    visibility: "internal",
+  });
+  assertEquals(result.ready, false);
+  assertEquals(result.choices.visibility.alternatives, ["public", "private"]);
+  assertEquals(result.diagnostics.map(({ code, path }) => [code, path]), [
+    ["invalid_visibility", "visibility"],
+  ]);
+});
+
 Deno.test("creation preflight handles visibility ambiguity and template settings", async () => {
   const multiple = configuration(
     {

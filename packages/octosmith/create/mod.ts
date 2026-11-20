@@ -1,7 +1,8 @@
 /**
- * Scaffold a GitHub organization control repository with Octosmith.
+ * Scaffold a GitHub owner control repository with Octosmith.
  *
- * Run `deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme`.
+ * Run `deno create jsr:@octosmith/octosmith@0 github-config -- --organization acme`
+ * or use `--owner` for a personal GitHub account.
  * See the [getting-started guide](https://github.com/Kralizek/octosmith/blob/master/docs/getting-started.md).
  *
  * @module
@@ -47,6 +48,7 @@ import manualEventStreamingReadmeTemplate from "./templates/readme/event-streami
 export interface ScaffoldOptions {
   readonly targetDirectory: string;
   readonly organization: string;
+  readonly owner?: string;
   readonly collectionManagement: CollectionManagementMode;
   readonly defaultBranch: string;
   readonly workflows: boolean;
@@ -73,7 +75,12 @@ export function buildScaffold(
   const files: ScaffoldFile[] = [
     {
       path: "octosmith.yml",
-      content: renderTemplate(configurationTemplate, common),
+      content: renderTemplate(
+        options.owner === undefined
+          ? configurationTemplate
+          : configurationTemplate.replace("organization:", "owner:"),
+        common,
+      ),
     },
     {
       path: "templates/default.yml",
@@ -166,6 +173,7 @@ export function parseScaffoldArguments(
 ): ScaffoldOptions {
   let targetDirectory = "github-config";
   let organization: string | undefined;
+  let owner: string | undefined;
   let collectionManagement: CollectionManagementMode = "explicit";
   let defaultBranch = "main";
   let workflows = true;
@@ -188,6 +196,9 @@ export function parseScaffoldArguments(
     switch (value) {
       case "--organization":
         organization = requireValue(args, ++index, value);
+        break;
+      case "--owner":
+        owner = requireValue(args, ++index, value);
         break;
       case "--collection-management": {
         const mode = requireValue(args, ++index, value);
@@ -214,13 +225,16 @@ export function parseScaffoldArguments(
   }
 
   const normalizedTargetDirectory = targetDirectory.trim();
-  const normalizedOrganization = (organization ?? promptOrganization() ?? "")
+  if (organization !== undefined && owner !== undefined) {
+    throw new Error("Specify exactly one of --organization or --owner");
+  }
+  const configuredLogin = (organization ?? owner ?? promptOrganization() ?? "")
     .trim();
   const normalizedDefaultBranch = defaultBranch.trim();
 
-  if (!normalizedOrganization) {
+  if (!configuredLogin) {
     throw new Error(
-      "GitHub organization is required; pass --organization for non-interactive use",
+      "GitHub owner is required; pass --organization or --owner for non-interactive use",
     );
   }
 
@@ -234,7 +248,8 @@ export function parseScaffoldArguments(
 
   return {
     targetDirectory: normalizedTargetDirectory,
-    organization: normalizedOrganization,
+    organization: configuredLogin,
+    ...(owner !== undefined && { owner: configuredLogin }),
     collectionManagement,
     defaultBranch: normalizedDefaultBranch,
     workflows,

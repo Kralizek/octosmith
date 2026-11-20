@@ -97,6 +97,42 @@ repository:
   return root;
 }
 
+Deno.test("creation authorization headings match the target account type", async () => {
+  const root = await Deno.makeTempDir();
+  try {
+    await Deno.mkdir(root + "/templates");
+    await Deno.writeTextFile(
+      root + "/templates/sample.yml",
+      "version: 1\nkind: repository\nmatch:\n  include: all\nrepository: {}\n",
+    );
+    for (
+      const [declaration, target, heading] of [
+        ["owner: alice", "owner: alice", "Personal"],
+        ["organization: acme", "organization: acme", "Organization"],
+      ]
+    ) {
+      await Deno.writeTextFile(
+        root + "/octosmith.yml",
+        `version: 1\n${declaration}\nrepositories:\n  scope:\n    include: all\n`,
+      );
+      const output: string[] = [];
+      assertEquals(
+        await main(
+          ["template", "permissions", "sample", "--creation", "--path", root],
+          { write: (text) => output.push(text) },
+        ),
+        0,
+      );
+      assertEquals(output[0].split("\n").slice(0, 2), [
+        `Creation target ${target}`,
+        `${heading} repository creation authorization:`,
+      ]);
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
+
 Deno.test("permission analysis is offline, composed and structured", async () => {
   const root = await configuration();
   const output: string[] = [];

@@ -1,9 +1,9 @@
 # Root configuration file reference
 
 `octosmith.yml` is the root of an Octosmith control repository. It declares
-which GitHub organization and repositories are in scope, and sets policies that
-apply to **all** managed repositories. Repository-specific desired state lives
-in [repository templates](repository-template.md).
+which GitHub owner and repositories are in scope, and sets policies that apply
+to **all** managed repositories. Repository-specific desired state lives in
+[repository templates](repository-template.md).
 
 The authoritative source is
 [`schemas/octosmith.schema.json`](../schemas/octosmith.schema.json), which
@@ -26,9 +26,34 @@ repositories:
 ```
 
 - `version` **(required):** exactly `1`.
-- `organization` **(required):** a non-empty GitHub organization name.
+- Exactly one of `organization` or `owner` **(required):** a non-empty login.
+  `organization` must resolve to a GitHub Organization; `owner` must resolve to
+  the authenticated personal GitHub User. They are distinct declarations, not
+  aliases. Existing organization configurations remain valid without a version
+  change.
 - `repositories` **(required):** an object containing `scope`, and optionally
   `settings` and `file_changes`.
+
+For a personal account, replace `organization: acme` with:
+
+```yaml
+owner: alice
+```
+
+Octosmith verifies the configured account type and requires the authenticated
+`/user` identity to match `owner` before repository operations. A token must
+also have the endpoint-specific authorization GitHub requires. Classic and
+fine-grained personal access tokens, GitHub App user tokens, and Actions tokens
+have different scopes, repository selections, and Git-push behavior; a
+successful identity check does not imply write permission. GitHub authorization,
+plan eligibility, account settings, and repository visibility determine whether
+conditional features such as rulesets are available.
+
+Personal-account configurations cannot use team or organization custom-property
+selectors, team permissions or team ruleset bypass actors, organization custom
+properties, internal visibility, or organization-specific Actions OIDC claim
+templates. Unsupported desired state is rejected during offline validation.
+Ordinary repository-level resources use the shared reconciliation engine.
 
 Unknown keys are rejected at these levels. Neither root configuration nor
 repository scope is a place to declare teams, rulesets, or individual files to
@@ -79,8 +104,8 @@ template matching or fallback selection.
 
 ## `repositories.settings`
 
-The optional `settings` object defines organization-level reconciliation
-policies. All listed keys are optional.
+The optional `settings` object defines owner-level reconciliation policies. All
+listed keys are optional.
 
 ### Template selection
 

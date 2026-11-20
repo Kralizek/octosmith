@@ -7,7 +7,8 @@ export function renderRepositoryCreationPreview(
 ): string {
   const lines = [
     "Repository creation preview (read-only)",
-    "Organization: " + preview.organization,
+    (preview.ownerType === "user" ? "Owner: " : "Organization: ") +
+    preview.organization,
     "Template: " + preview.template,
     "Status: " + (preview.ready ? "resolved" : "unresolved"),
   ];

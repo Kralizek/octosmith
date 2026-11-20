@@ -18,12 +18,13 @@ export function toRepositoryEvent(
   mode: ApplyMode,
   report: RepositoryReport,
   timestamp: Date = new Date(),
+  ownerType: "organization" | "user" = "organization",
 ): EventDocument<RepositoryEventData> {
   return {
     type: mode === "plan" ? "resource.planned" : "resource.applied",
     timestamp: timestamp.toISOString(),
     source: {
-      kind: "github.organization",
+      kind: ownerType === "user" ? "github.user" : "github.organization",
       id: organization,
     },
     subject: {
@@ -47,11 +48,15 @@ export function toPullRequestEvent(
   organization: string,
   result: PullRequestResult,
   timestamp: Date = new Date(),
+  ownerType: "organization" | "user" = "organization",
 ): EventDocument<PullRequestResult> {
   return {
     type: "pull_request." + result.action,
     timestamp: timestamp.toISOString(),
-    source: { kind: "github.organization", id: organization },
+    source: {
+      kind: ownerType === "user" ? "github.user" : "github.organization",
+      id: organization,
+    },
     subject: {
       kind: "github.pull_request",
       id: result.repository + "#" + result.number,

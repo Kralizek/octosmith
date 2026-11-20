@@ -179,7 +179,34 @@ export async function preflightRepositoryCreation(
     template,
     resolvedIdentity,
   );
-  if (!intersection.reachable || intersection.effective === undefined) {
+  const personalOwner = loaded.configuration.owner !== undefined;
+  const unsupportedInputs = personalOwner
+    ? [
+      {
+        path: "teams",
+        capability: "team permissions",
+        count: input.teams?.length,
+      },
+      {
+        path: "properties",
+        capability: "organization custom properties",
+        count: Object.keys(input.properties ?? {}).length,
+      },
+    ].filter(({ count }) => count)
+    : [];
+  for (const { path, capability } of unsupportedInputs) {
+    diagnostics.push({
+      code: "owner_capability",
+      message:
+        `Personal GitHub accounts do not support ${capability}. Remove the ${path} input or configure an organization.`,
+      template: resolvedIdentity,
+      path,
+    });
+  }
+  if (
+    unsupportedInputs.length > 0 || !intersection.reachable ||
+    intersection.effective === undefined
+  ) {
     return {
       template: resolvedIdentity,
       ready: false,
@@ -304,7 +331,9 @@ export async function preflightRepositoryCreation(
   const explicitNameIsValid = input.name !== undefined &&
     validateRepositoryName(input.name) === undefined;
   const desiredVisibility = template.repository.settings?.visibility;
-  let constructibleVisibilities = [...effective.visibility];
+  let constructibleVisibilities = effective.visibility.filter((visibility) =>
+    !personalOwner || visibility !== "internal"
+  );
   if (desiredVisibility !== undefined) {
     if (!constructibleVisibilities.includes(desiredVisibility)) {
       diagnostics.push({
@@ -343,11 +372,14 @@ export async function preflightRepositoryCreation(
   let visibility: RepositoryCreationVisibilityChoice;
   if (
     input.visibility !== undefined &&
-    !isRepositoryVisibility(input.visibility)
+    (!isRepositoryVisibility(input.visibility) ||
+      (personalOwner && input.visibility === "internal"))
   ) {
     diagnostics.push({
       code: "invalid_visibility",
-      message: "Visibility must be public, private, or internal",
+      message: personalOwner
+        ? "Visibility for a personal GitHub owner must be public or private"
+        : "Visibility must be public, private, or internal",
       template: resolvedIdentity,
       path: "visibility",
     });

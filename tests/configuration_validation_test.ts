@@ -1,12 +1,21 @@
-import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
+import {
+  assertEquals,
+  assertRejects,
+  assertStringIncludes,
+  assertThrows,
+} from "@std/assert";
 import { join } from "@std/path";
-import { BOOTSTRAP_FILE_PATH } from "../packages/octosmith/mod.ts";
+import {
+  BOOTSTRAP_FILE_PATH,
+  type LoadedConfiguration,
+} from "../packages/octosmith/mod.ts";
 import {
   effectiveRepositorySelectorIntersection,
   loadConfigurationDirectory,
   matchesEffectiveRepositorySelectorIntersection,
   templateCanMatchScope,
   validateConfigurationDirectory,
+  validateOwnerCapabilities,
 } from "../packages/octosmith/mod.ts";
 
 const configuration = {
@@ -14,6 +23,64 @@ const configuration = {
   organization: "acme",
   repositories: { scope: { include: { names: ["sample"] } } },
 };
+
+Deno.test("personal owner capability validation rejects unsupported effective settings", () => {
+  const valid: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "alice",
+      owner: "alice",
+      repositories: { scope: { include: "all" } },
+    },
+    templates: {},
+  };
+  validateOwnerCapabilities(valid);
+
+  const invalidCases: readonly [LoadedConfiguration, string][] = [
+    [{
+      ...valid,
+      configuration: {
+        ...valid.configuration,
+        repositories: {
+          scope: {
+            include: "all",
+            exclude: { teams: [] },
+          },
+        },
+      },
+    }, "repositories.scope.exclude.teams"],
+    [{
+      ...valid,
+      templates: {
+        "repository:default": {
+          version: 1,
+          kind: "repository",
+          match: { include: "all" },
+          repository: { teams: [] },
+        },
+      },
+    }, "templates.repository:default.repository.teams"],
+    [{
+      ...valid,
+      templates: {
+        "repository:default": {
+          version: 1,
+          kind: "repository",
+          match: { include: "all" },
+          repository: {
+            actions: {
+              oidc: { subjectClaimTemplate: { source: "organization" } },
+            },
+          },
+        },
+      },
+    }, "subjectClaimTemplate"],
+  ];
+  for (const [loaded, path] of invalidCases) {
+    assertThrows(() => validateOwnerCapabilities(loaded), Error, path);
+  }
+});
 const template = {
   version: 1,
   kind: "repository",

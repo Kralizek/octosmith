@@ -20,6 +20,7 @@ import type { RepositoryConfiguration } from "./types.ts";
 /** Creation authorization is distinct from ongoing repository reconciliation. */
 export interface RepositoryCreationPermissionAnalysis {
   readonly organization: string;
+  readonly ownerType?: "organization" | "user";
   readonly creation: readonly GitHubPermissionRequirement[];
   readonly selectorMetadata: readonly GitHubPermissionRequirement[];
   readonly reconciliation: readonly GitHubPermissionRequirement[];
@@ -60,6 +61,7 @@ export function requiredPermissionsForRepositoryCreation(
   }
   return {
     organization: loaded.configuration.organization,
+    ...(loaded.configuration.owner !== undefined && { ownerType: "user" }),
     creation: [{
       scope: "repository",
       permission: "administration",
@@ -87,7 +89,9 @@ export function requiredPermissionsForRepositoryCreation(
       ),
     ]),
     constraints: [
-      "Organization repository creation requires Administration: write on a supported fine-grained token/GitHub App, or the appropriate classic PAT repo/public_repo scope, and an actor allowed to create the requested visibility in this organization.",
+      loaded.configuration.owner === undefined
+        ? "Organization repository creation requires Administration: write on a supported fine-grained token/GitHub App, or the appropriate classic PAT repo/public_repo scope, and an actor allowed to create the requested visibility in this organization."
+        : "Personal repository creation uses POST /user/repos and requires a token authenticated as the configured owner. Fine-grained token repository permissions, classic PAT scopes, App user-token support, account policy, and repository visibility determine whether creation succeeds.",
       "Organization/enterprise policy, SSO authorization, internal-visibility availability and GitHub App repository installation access can prevent creation or access to the new repository.",
       "Selector team assignments require repository Administration: write and organization Members: read. Custom property definitions and editing policy must allow repository value assignment.",
       "API reconciliation uses Contents: read to inspect history. The separate Git bootstrap requires Git-over-HTTPS Contents: write (and Workflows: write for workflow files); no file pull requests or Contents API writes are used.",

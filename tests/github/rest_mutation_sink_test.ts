@@ -2,6 +2,7 @@ import sodium from "libsodium-wrappers";
 import { buildPlan } from "@octosmith/octosmith";
 import { assert, assertEquals, assertRejects } from "@std/assert";
 import {
+  FetchGitHubClient,
   type GitHubClient,
   type GitHubQueryValue,
   GitHubRepositoryMutationSink,
@@ -16,6 +17,7 @@ Deno.test("labels use POST, PATCH and DELETE with encoded existing names", async
     owner: "acme",
     secretValue: () => "unused",
   });
+
   await sink.apply("sample", {
     type: "create-label",
     label: {
@@ -1085,6 +1087,126 @@ class SecretClient implements GitHubClient {
     throw new Error("Unexpected GET " + path);
   }
 }
+
+Deno.test("personal mutation sink rejects unsupported organization operations before requests", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "alice",
+    ownerType: "User",
+    secretValue: () => "unused",
+  });
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "set-team-permission",
+        permission: {
+          team: "platform",
+          permission: { kind: "built-in", name: "pull" },
+        },
+      }),
+    Error,
+    "do not support team permissions",
+  );
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "set-custom-property",
+        name: "tier",
+        value: "service",
+      }),
+    Error,
+    "do not support organization custom properties",
+  );
+  assertEquals(client.requests, []);
+});
+
+Deno.test("personal mutation sink verifies the token before apply or implicit file reconciliation", async () => {
+  for (const method of ["apply", "finish"] as const) {
+    const calls: string[] = [];
+    const client = new FetchGitHubClient({
+      token: "test",
+      fetch: (input, init) => {
+        calls.push(`${init?.method} ${new URL(String(input)).pathname}`);
+        return Promise.resolve(Response.json({ login: "Mallory" }));
+      },
+    });
+    const sink = new GitHubRepositoryMutationSink({
+      client,
+      owner: "alice",
+      ownerType: "User",
+      secretValue: () => "unused",
+      fileChanges: { mode: "pull_request" },
+    });
+    await assertRejects(
+      () =>
+        method === "finish" ? sink.finish("sample") : sink.apply("sample", {
+          type: "update-repository-settings",
+          settings: { hasIssues: false },
+        }),
+      Error,
+      "does not match configured personal owner",
+    );
+    assertEquals(calls, ["GET /user"]);
+  }
+});
+
+Deno.test("public sink methods enforce personal capabilities, endpoint ownership, and authentication", async () => {
+  const calls: string[] = [];
+  const client = new FetchGitHubClient({
+    token: "test",
+    fetch: (input, init) => {
+      calls.push(`${init?.method} ${new URL(String(input)).pathname}`);
+      return Promise.resolve(Response.json({ login: "Mallory" }));
+    },
+  });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "alice",
+    ownerType: "User",
+    secretValue: () => "unused",
+  });
+  await assertRejects(
+    () => sink.updateRepositorySettings("sample", { visibility: "internal" }),
+    Error,
+    "do not support internal visibility",
+  );
+  await assertRejects(
+    () => sink.setSecret("/repos/bob/sample/actions/secrets", "TOKEN", "VALUE"),
+    Error,
+    "endpoint for the configured personal owner",
+  );
+  assertEquals(calls, []);
+  await assertRejects(
+    () => sink.updateRepositorySettings("sample", { hasIssues: false }),
+    Error,
+    "does not match configured personal owner",
+  );
+  assertEquals(calls, ["GET /user"]);
+});
+
+Deno.test("apply still dispatches through public sink overrides", async () => {
+  class CustomSink extends GitHubRepositoryMutationSink {
+    readonly calls: string[] = [];
+
+    override updateRepositorySettings(repository: string): Promise<void> {
+      this.calls.push(repository);
+      return Promise.resolve();
+    }
+  }
+  const client = new MappingClient();
+  const sink = new CustomSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+  await sink.apply("sample", {
+    type: "update-repository-settings",
+    settings: { hasIssues: false },
+  });
+  assertEquals(sink.calls, ["sample"]);
+  assertEquals(client.requests, []);
+});
 
 Deno.test("Actions secrets are sealed with GitHub's public key", async () => {
   await sodium.ready;

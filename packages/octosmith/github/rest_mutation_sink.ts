@@ -14,6 +14,11 @@ import type {
   Variable,
 } from "../mod.ts";
 import { type GitHubClient, GitHubRequestError } from "./client.ts";
+import {
+  assertAuthenticatedPersonalOwner,
+  assertOwnerSupportsOperation,
+  GitHubOwnerError,
+} from "./owner.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 import type { PullRequestResult } from "../report/types.ts";
 import { reconcileFilePullRequest } from "./file_pull_request.ts";
@@ -34,6 +39,7 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly bootstrap?: RepositoryBootstrap;
   readonly client: GitHubClient;
   readonly owner: string;
+  readonly ownerType?: "Organization" | "User";
   readonly secretValue: SecretValueProvider;
   readonly fileChanges?: FileChangesConfiguration;
   readonly preparedFileChanges?: PreparedFileChanges;
@@ -78,6 +84,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   onPullRequest?: (result: PullRequestResult) => void | Promise<void>;
   readonly #client: GitHubClient;
   readonly #owner: string;
+  readonly #ownerType: "Organization" | "User";
   readonly #secretValue: SecretValueProvider;
   readonly #fileChanges: EffectiveFileChanges;
   readonly #preparedFileChanges?: PreparedFileChanges;
@@ -88,12 +95,14 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #scope: ReconciliationScope;
   #bootstrapSnapshot?: ManagedFileSnapshot;
   #filesReconciled = false;
+  #ownerVerification?: Promise<void>;
 
   constructor(options: GitHubRepositoryMutationSinkOptions) {
     this.#bootstrap = options.bootstrap;
     this.#scope = options.scope ?? "all";
     this.#client = options.client;
     this.#owner = options.owner;
+    this.#ownerType = options.ownerType ?? "Organization";
     this.#secretValue = options.secretValue;
     this.#fileChanges = normalizeFileChanges(
       options.fileChanges ?? { mode: "direct" },
@@ -148,6 +157,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       bootstrap: this.#bootstrap,
       client: this.#client,
       owner: this.#owner,
+      ownerType: this.#ownerType,
       secretValue: (name) => {
         const value = values.get(name);
         if (value === undefined) {
@@ -172,6 +182,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   async finish(repository: string): Promise<void> {
     if (this.#scope === "github-only") return;
     if (this.#fileChanges.mode === "pull_request" && !this.#filesReconciled) {
+      await this.verifyOwner();
       await this.applyFileChanges(
         repository,
         this.#preparedFileChanges?.operations ?? [],
@@ -179,7 +190,41 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
+  private async verifyOwner(): Promise<void> {
+    if (this.#ownerType !== "User") return;
+    await (this.#ownerVerification ??= assertAuthenticatedPersonalOwner(
+      this.#client,
+      this.#owner,
+    ));
+  }
+
+  private async verifyRepositoryEndpoint(
+    base: string,
+    endpoint: "environment" | "secrets",
+  ): Promise<void> {
+    if (this.#ownerType !== "User") return;
+    const match = /^\/repos\/([^/]+)\/[a-z0-9_.-]+\/(.+)$/i.exec(base);
+    const suffix = match?.[2];
+    const validEndpoint = suffix !== undefined &&
+      (endpoint === "environment"
+        ? /^environments\/[^/]+$/.test(suffix)
+        : /^(?:(?:actions|dependabot)|environments\/[^/]+)\/secrets$/.test(
+          suffix,
+        ));
+    if (
+      !validEndpoint ||
+      match?.[1].toLowerCase() !== this.#owner.toLowerCase() ||
+      new URL(base, "https://api.github.com").pathname !== base
+    ) {
+      throw new GitHubOwnerError(
+        "Expected a repository endpoint for the configured personal owner; no changes were applied.",
+      );
+    }
+    await this.verifyOwner();
+  }
+
   async apply(repository: string, operation: Operation): Promise<void> {
+    assertOwnerSupportsOperation(this.#ownerType, operation);
     if (
       this.#scope === "github-only" && (
         isFileOperation(operation) || operation.type === "initialize-repository"
@@ -189,6 +234,8 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         "Content and initialization operations are excluded from GitHub-only reconciliation",
       );
     }
+
+    await this.verifyOwner();
     switch (operation.type) {
       case "initialize-repository": {
         if (!this.#bootstrap) {
@@ -202,6 +249,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         const source = new GitHubRepositoryStateSource(
           this.#client,
           this.#owner,
+          this.#ownerType,
         );
         const settings = await source.getRepositorySettings(repository);
         if (settings.defaultBranch !== operation.branch) {
@@ -425,6 +473,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     settings: DesiredRepositorySettings,
   ): Promise<void> {
+    assertOwnerSupportsOperation(this.#ownerType, {
+      type: "update-repository-settings",
+      settings,
+    });
+    await this.verifyOwner();
     const { topics, ...rest } = settings;
 
     if (Object.keys(rest).length > 0) {
@@ -446,6 +499,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     settings: DesiredActionsSettings,
   ): Promise<void> {
+    await this.verifyOwner();
     const base = this.repo(repository) + "/actions/permissions";
 
     if (
@@ -505,6 +559,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     settings: DesiredActionsOidcSettings,
   ): Promise<void> {
+    assertOwnerSupportsOperation(this.#ownerType, {
+      type: "update-actions-oidc",
+      settings,
+    });
+    await this.verifyOwner();
     const path = this.repo(repository) + "/actions/oidc/customization/sub";
     const current = await this.#client.request<
       {
@@ -539,6 +598,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     variable: Variable,
   ): Promise<void> {
+    await this.verifyOwner();
     const base = this.repo(repository) + "/actions/variables";
     const existing = await this.#client.request<unknown | undefined>(
       "GET",
@@ -566,6 +626,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     preserveSecrets: readonly string[] = [],
     preserveVariables: readonly string[] = [],
   ): Promise<void> {
+    await this.verifyOwner();
     const name = encodeURIComponent(environment.name);
     const base = this.repo(repository) + "/environments/" + name;
 
@@ -598,6 +659,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     collections: "explicit" | "strict",
     preserve: readonly string[] = [],
   ): Promise<void> {
+    await this.verifyRepositoryEndpoint(base, "environment");
     const currentVariables = await getAllWrappedPages<{
       readonly name: string;
       readonly value: string;
@@ -643,6 +705,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     collections: "explicit" | "strict",
     preserve: readonly string[] = [],
   ): Promise<void> {
+    await this.verifyRepositoryEndpoint(base, "environment");
     const currentSecrets = await getAllWrappedPages<{
       readonly name: string;
     }>(
@@ -672,6 +735,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   }
 
   async setSecret(base: string, name: string, source: string): Promise<void> {
+    await this.verifyRepositoryEndpoint(base, "secrets");
     const publicKey = await this.#client.get<{
       readonly key_id: string;
       readonly key: string;
@@ -697,6 +761,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     repository: string,
     plannedOperations: readonly PlannedFileOperation[],
   ): Promise<void> {
+    await this.verifyOwner();
     const snapshot = this.#bootstrapSnapshot ?? this.#managedFiles;
     const operations: FileOperation[] = [];
     for (const operation of plannedOperations) {
@@ -724,7 +789,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       if (operation.sha !== undefined && operation.sha !== expectedSha) {
         throw new Error("Bootstrap cleanup SHA changed since planning");
       }
-      const source = new GitHubRepositoryStateSource(this.#client, this.#owner);
+      const source = new GitHubRepositoryStateSource(
+        this.#client,
+        this.#owner,
+        this.#ownerType,
+      );
       const file = await source.getFile(
         repository,
         BOOTSTRAP_FILE_PATH,

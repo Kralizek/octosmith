@@ -307,6 +307,10 @@ function createCli(
                 loaded.configuration.organization,
                 mode,
                 repositoryReport,
+                undefined,
+                loaded.configuration.owner === undefined
+                  ? "organization"
+                  : "user",
               ),
             );
           }
@@ -315,7 +319,14 @@ function createCli(
         const onPullRequest = async (result: PullRequestResult) => {
           if (eventOutput) {
             await eventOutput.write(
-              toPullRequestEvent(loaded.configuration.organization, result),
+              toPullRequestEvent(
+                loaded.configuration.organization,
+                result,
+                undefined,
+                loaded.configuration.owner === undefined
+                  ? "organization"
+                  : "user",
+              ),
             );
           }
         };
@@ -382,6 +393,9 @@ function createCli(
         }) => repository);
         const report: Report = {
           organization: loaded.configuration.organization,
+          ...(loaded.configuration.owner !== undefined && {
+            ownerType: "user",
+          }),
           startedAt,
           completedAt: new Date(),
           repositories: reportedRepositories,
@@ -809,8 +823,14 @@ function createCli(
               }
               write(renderOutput(format, analysis, (value) =>
                 [
-                  `Creation target organization: ${value.organization}`,
-                  "Organization repository creation authorization:",
+                  `${
+                    value.ownerType === "user"
+                      ? "Creation target owner"
+                      : "Creation target organization"
+                  }: ${value.organization}`,
+                  value.ownerType === "user"
+                    ? "Personal repository creation authorization:"
+                    : "Organization repository creation authorization:",
                   renderPermissionRequirements(value.creation),
                   "Selector metadata:",
                   renderPermissionRequirements(value.selectorMetadata),

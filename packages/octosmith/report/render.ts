@@ -13,7 +13,9 @@ export function renderReport(
   options: RenderReportOptions = {},
 ): string {
   const lines = [
-    "Octosmith report for " + report.organization,
+    report.ownerType === "user"
+      ? "Octosmith report for personal account " + report.organization
+      : "Octosmith report for " + report.organization,
     "",
   ];
 

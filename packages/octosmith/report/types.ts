@@ -21,6 +21,7 @@ export type ApplyItemReportStatus =
 /** Describes report. */
 export interface Report {
   readonly organization: string;
+  readonly ownerType?: "organization" | "user";
   readonly startedAt: Date;
   readonly completedAt: Date;
   readonly repositories: readonly RepositoryReport[];

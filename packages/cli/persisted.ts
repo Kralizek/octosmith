@@ -1,8 +1,9 @@
 import {
-  assertOrganizationOwner,
+  assertOwnerSupportsOperation,
   classifyResource,
   equalContentHash,
   type ExecutableResourcePlan,
+  getGitHubOwnerDeclaration,
   GitHubOwnerError,
   hashCanonical,
   hashEffectiveConfiguration,
@@ -14,10 +15,11 @@ import {
   projectOwnedCurrentState,
   type PullRequestResult,
   resolveDesiredState,
-  resolveGitHubOwner,
+  resolveGitHubOwnerContext,
   restoreEvaluations,
   type RuntimeReferenceDiagnostic,
   secretPolicyDiagnostics,
+  validateOwnerCapabilities,
   withoutSkippedRuntimeValues,
 } from "@octosmith/octosmith";
 import type { ApplyRuntime } from "./apply.ts";
@@ -72,20 +74,35 @@ export async function applyPersistedPlan(
     );
   }
 
-  const owner = runtime.resolveOwner
+  const declaration = getGitHubOwnerDeclaration(loaded.configuration);
+  if (declaration.type === "User" && !runtime.client) {
+    throw new GitHubOwnerError(
+      "Personal saved-plan execution requires a GitHub client to verify the authenticated owner; no changes were applied.",
+    );
+  }
+  const owner = declaration.type === "Organization" && runtime.resolveOwner
     ? await runtime.resolveOwner(loaded)
     : runtime.client
-    ? await resolveGitHubOwner(
-      runtime.client,
-      loaded.configuration.organization,
-    )
+    ? await resolveGitHubOwnerContext(runtime.client, declaration)
     : undefined;
-  if (owner !== undefined) {
-    assertOrganizationOwner(owner);
-  } else {
+  if (owner === undefined) {
     throw new GitHubOwnerError(
       "Saved-plan execution requires owner validation. Provide an ApplyRuntime.resolveOwner implementation or GitHub client; no changes were applied.",
     );
+  }
+  const expectedType = declaration.type;
+  if (owner.type !== expectedType) {
+    throw new GitHubOwnerError(
+      owner.type === "User" && expectedType === "Organization"
+        ? "Configured owner resolves to a personal account (User), but organization: requires an Organization; no changes were applied."
+        : `Configured owner must resolve to a GitHub ${expectedType}; no changes were applied.`,
+    );
+  }
+  validateOwnerCapabilities(loaded);
+  for (const resource of artifact.resources) {
+    for (const operation of resource.operations) {
+      assertOwnerSupportsOperation(owner.type, operation);
+    }
   }
 
   const configuration = equalContentHash(
