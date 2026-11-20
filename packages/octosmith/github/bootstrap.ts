@@ -4,6 +4,11 @@ import {
   BOOTSTRAP_FILE_PATH,
 } from "../state/bootstrap.ts";
 import type { GitHubClient } from "./client.ts";
+import {
+  assertAuthenticatedPersonalOwner,
+  GitHubOwnerError,
+  resolveGitHubOwner,
+} from "./owner.ts";
 import { GitHubRepositoryStateSource } from "./rest_state_source.ts";
 
 /** Reusable API-only initialization boundary for an existing empty repository. */
@@ -16,7 +21,7 @@ export interface RepositoryBootstrap {
   ): Promise<void>;
 }
 
-/** Initialize through the Contents API, then verify and select the initial default branch. */
+/** Verify personal ownership, then initialize through the Contents API and select the initial default branch. */
 export class GitHubRepositoryBootstrap implements RepositoryBootstrap {
   constructor(readonly client: GitHubClient, readonly owner: string) {}
 
@@ -32,6 +37,15 @@ export class GitHubRepositoryBootstrap implements RepositoryBootstrap {
     expectedHead?: string,
   ): Promise<void> {
     this.prepare(branch);
+    const owner = await resolveGitHubOwner(this.client, this.owner);
+    if (owner.type === "User") {
+      if (owner.login.toLowerCase() !== this.owner.toLowerCase()) {
+        throw new GitHubOwnerError(
+          "Resolved GitHub login does not match the bootstrap owner; no changes were applied.",
+        );
+      }
+      await assertAuthenticatedPersonalOwner(this.client, owner.login);
+    }
     const path = "/repos/" + encodeURIComponent(this.owner) + "/" +
       encodeURIComponent(repository);
     const source = new GitHubRepositoryStateSource(this.client, this.owner);

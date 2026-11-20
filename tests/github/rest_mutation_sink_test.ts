@@ -1151,6 +1151,63 @@ Deno.test("personal mutation sink verifies the token before apply or implicit fi
   }
 });
 
+Deno.test("public sink methods enforce personal capabilities, endpoint ownership, and authentication", async () => {
+  const calls: string[] = [];
+  const client = new FetchGitHubClient({
+    token: "test",
+    fetch: (input, init) => {
+      calls.push(`${init?.method} ${new URL(String(input)).pathname}`);
+      return Promise.resolve(Response.json({ login: "Mallory" }));
+    },
+  });
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "alice",
+    ownerType: "User",
+    secretValue: () => "unused",
+  });
+  await assertRejects(
+    () => sink.updateRepositorySettings("sample", { visibility: "internal" }),
+    Error,
+    "do not support internal visibility",
+  );
+  await assertRejects(
+    () => sink.setSecret("/repos/bob/sample/actions/secrets", "TOKEN", "VALUE"),
+    Error,
+    "endpoint for the configured personal owner",
+  );
+  assertEquals(calls, []);
+  await assertRejects(
+    () => sink.updateRepositorySettings("sample", { hasIssues: false }),
+    Error,
+    "does not match configured personal owner",
+  );
+  assertEquals(calls, ["GET /user"]);
+});
+
+Deno.test("apply still dispatches through public sink overrides", async () => {
+  class CustomSink extends GitHubRepositoryMutationSink {
+    readonly calls: string[] = [];
+
+    override updateRepositorySettings(repository: string): Promise<void> {
+      this.calls.push(repository);
+      return Promise.resolve();
+    }
+  }
+  const client = new MappingClient();
+  const sink = new CustomSink({
+    client,
+    owner: "acme",
+    secretValue: () => "unused",
+  });
+  await sink.apply("sample", {
+    type: "update-repository-settings",
+    settings: { hasIssues: false },
+  });
+  assertEquals(sink.calls, ["sample"]);
+  assertEquals(client.requests, []);
+});
+
 Deno.test("Actions secrets are sealed with GitHub's public key", async () => {
   await sodium.ready;
   const keyPair = sodium.crypto_box_keypair();

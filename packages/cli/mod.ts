@@ -828,7 +828,9 @@ function createCli(
                       ? "Creation target owner"
                       : "Creation target organization"
                   }: ${value.organization}`,
-                  "Organization repository creation authorization:",
+                  value.ownerType === "user"
+                    ? "Personal repository creation authorization:"
+                    : "Organization repository creation authorization:",
                   renderPermissionRequirements(value.creation),
                   "Selector metadata:",
                   renderPermissionRequirements(value.selectorMetadata),

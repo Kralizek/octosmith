@@ -17,6 +17,7 @@ import { type GitHubClient, GitHubRequestError } from "./client.ts";
 import {
   assertAuthenticatedPersonalOwner,
   assertOwnerSupportsOperation,
+  GitHubOwnerError,
 } from "./owner.ts";
 import type { RepositoryMutationSink } from "./apply.ts";
 import type { PullRequestResult } from "../report/types.ts";
@@ -182,7 +183,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     if (this.#scope === "github-only") return;
     if (this.#fileChanges.mode === "pull_request" && !this.#filesReconciled) {
       await this.verifyOwner();
-      await this.#applyFileChanges(
+      await this.applyFileChanges(
         repository,
         this.#preparedFileChanges?.operations ?? [],
       );
@@ -195,6 +196,31 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       this.#client,
       this.#owner,
     ));
+  }
+
+  private async verifyRepositoryEndpoint(
+    base: string,
+    endpoint: "environment" | "secrets",
+  ): Promise<void> {
+    if (this.#ownerType !== "User") return;
+    const match = /^\/repos\/([^/]+)\/[a-z0-9_.-]+\/(.+)$/i.exec(base);
+    const suffix = match?.[2];
+    const validEndpoint = suffix !== undefined &&
+      (endpoint === "environment"
+        ? /^environments\/[^/]+$/.test(suffix)
+        : /^(?:(?:actions|dependabot)|environments\/[^/]+)\/secrets$/.test(
+          suffix,
+        ));
+    if (
+      !validEndpoint ||
+      match?.[1].toLowerCase() !== this.#owner.toLowerCase() ||
+      new URL(base, "https://api.github.com").pathname !== base
+    ) {
+      throw new GitHubOwnerError(
+        "Expected a repository endpoint for the configured personal owner; no changes were applied.",
+      );
+    }
+    await this.verifyOwner();
   }
 
   async apply(repository: string, operation: Operation): Promise<void> {
@@ -256,7 +282,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         return;
       }
       case "update-repository-settings":
-        await this.#updateRepositorySettings(repository, operation.settings);
+        await this.updateRepositorySettings(repository, operation.settings);
         return;
       case "set-custom-property":
         await this.#client.request(
@@ -273,10 +299,10 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "update-actions-settings":
-        await this.#updateActions(repository, operation.settings);
+        await this.updateActions(repository, operation.settings);
         return;
       case "update-actions-oidc":
-        await this.#updateOidc(repository, operation.settings);
+        await this.updateOidc(repository, operation.settings);
         return;
       case "create-label":
         await this.#client.request("POST", this.repo(repository) + "/labels", {
@@ -326,7 +352,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "set-actions-variable":
-        await this.#setActionsVariable(repository, operation.variable);
+        await this.setActionsVariable(repository, operation.variable);
         return;
       case "remove-actions-variable":
         await this.#client.request(
@@ -336,7 +362,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "set-actions-secret":
-        await this.#setSecret(
+        await this.setSecret(
           this.repo(repository) + "/actions/secrets",
           operation.secret.name,
           operation.secret.source,
@@ -350,7 +376,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "set-dependabot-secret":
-        await this.#setSecret(
+        await this.setSecret(
           this.repo(repository) + "/dependabot/secrets",
           operation.secret.name,
           operation.secret.source,
@@ -389,7 +415,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "create-environment":
-        await this.#applyEnvironment(
+        await this.applyEnvironment(
           repository,
           operation.environment,
           true,
@@ -399,7 +425,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         );
         return;
       case "update-environment":
-        await this.#applyEnvironment(
+        await this.applyEnvironment(
           repository,
           operation.environment,
           false,
@@ -426,7 +452,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 
           if (!this.#preparedFileChanges.applied) {
             try {
-              await this.#applyFileChanges(
+              await this.applyFileChanges(
                 repository,
                 this.#preparedFileChanges.operations,
               );
@@ -437,16 +463,21 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
             }
           }
         } else {
-          await this.#applyFileChanges(repository, [operation]);
+          await this.applyFileChanges(repository, [operation]);
         }
         return;
     }
   }
 
-  async #updateRepositorySettings(
+  async updateRepositorySettings(
     repository: string,
     settings: DesiredRepositorySettings,
   ): Promise<void> {
+    assertOwnerSupportsOperation(this.#ownerType, {
+      type: "update-repository-settings",
+      settings,
+    });
+    await this.verifyOwner();
     const { topics, ...rest } = settings;
 
     if (Object.keys(rest).length > 0) {
@@ -464,10 +495,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async #updateActions(
+  async updateActions(
     repository: string,
     settings: DesiredActionsSettings,
   ): Promise<void> {
+    await this.verifyOwner();
     const base = this.repo(repository) + "/actions/permissions";
 
     if (
@@ -523,10 +555,15 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async #updateOidc(
+  async updateOidc(
     repository: string,
     settings: DesiredActionsOidcSettings,
   ): Promise<void> {
+    assertOwnerSupportsOperation(this.#ownerType, {
+      type: "update-actions-oidc",
+      settings,
+    });
+    await this.verifyOwner();
     const path = this.repo(repository) + "/actions/oidc/customization/sub";
     const current = await this.#client.request<
       {
@@ -557,10 +594,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     });
   }
 
-  async #setActionsVariable(
+  async setActionsVariable(
     repository: string,
     variable: Variable,
   ): Promise<void> {
+    await this.verifyOwner();
     const base = this.repo(repository) + "/actions/variables";
     const existing = await this.#client.request<unknown | undefined>(
       "GET",
@@ -580,7 +618,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
   }
 
-  async #applyEnvironment(
+  async applyEnvironment(
     repository: string,
     environment: DesiredEnvironment,
     create: boolean,
@@ -588,6 +626,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     preserveSecrets: readonly string[] = [],
     preserveVariables: readonly string[] = [],
   ): Promise<void> {
+    await this.verifyOwner();
     const name = encodeURIComponent(environment.name);
     const base = this.repo(repository) + "/environments/" + name;
 
@@ -596,7 +635,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     if (environment.variables !== undefined) {
-      await this.#syncEnvironmentVariables(
+      await this.syncEnvironmentVariables(
         base,
         environment.variables,
         collections,
@@ -605,7 +644,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     if (environment.secrets !== undefined) {
-      await this.#syncEnvironmentSecrets(
+      await this.syncEnvironmentSecrets(
         base,
         environment.secrets,
         collections,
@@ -614,12 +653,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async #syncEnvironmentVariables(
+  async syncEnvironmentVariables(
     base: string,
     variables: readonly Variable[],
     collections: "explicit" | "strict",
     preserve: readonly string[] = [],
   ): Promise<void> {
+    await this.verifyRepositoryEndpoint(base, "environment");
     const currentVariables = await getAllWrappedPages<{
       readonly name: string;
       readonly value: string;
@@ -659,12 +699,13 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
-  async #syncEnvironmentSecrets(
+  async syncEnvironmentSecrets(
     base: string,
     secrets: readonly import("../mod.ts").DesiredSecret[],
     collections: "explicit" | "strict",
     preserve: readonly string[] = [],
   ): Promise<void> {
+    await this.verifyRepositoryEndpoint(base, "environment");
     const currentSecrets = await getAllWrappedPages<{
       readonly name: string;
     }>(
@@ -689,11 +730,12 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
 
     for (const secret of secrets) {
-      await this.#setSecret(base + "/secrets", secret.name, secret.source);
+      await this.setSecret(base + "/secrets", secret.name, secret.source);
     }
   }
 
-  async #setSecret(base: string, name: string, source: string): Promise<void> {
+  async setSecret(base: string, name: string, source: string): Promise<void> {
+    await this.verifyRepositoryEndpoint(base, "secrets");
     const publicKey = await this.#client.get<{
       readonly key_id: string;
       readonly key: string;
@@ -715,10 +757,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     );
   }
 
-  async #applyFileChanges(
+  async applyFileChanges(
     repository: string,
     plannedOperations: readonly PlannedFileOperation[],
   ): Promise<void> {
+    await this.verifyOwner();
     const snapshot = this.#bootstrapSnapshot ?? this.#managedFiles;
     const operations: FileOperation[] = [];
     for (const operation of plannedOperations) {
