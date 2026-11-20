@@ -34,6 +34,7 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly bootstrap?: RepositoryBootstrap;
   readonly client: GitHubClient;
   readonly owner: string;
+  readonly ownerType?: "Organization" | "User";
   readonly secretValue: SecretValueProvider;
   readonly fileChanges?: FileChangesConfiguration;
   readonly preparedFileChanges?: PreparedFileChanges;
@@ -78,6 +79,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   onPullRequest?: (result: PullRequestResult) => void | Promise<void>;
   readonly #client: GitHubClient;
   readonly #owner: string;
+  readonly #ownerType: "Organization" | "User";
   readonly #secretValue: SecretValueProvider;
   readonly #fileChanges: EffectiveFileChanges;
   readonly #preparedFileChanges?: PreparedFileChanges;
@@ -94,6 +96,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     this.#scope = options.scope ?? "all";
     this.#client = options.client;
     this.#owner = options.owner;
+    this.#ownerType = options.ownerType ?? "Organization";
     this.#secretValue = options.secretValue;
     this.#fileChanges = normalizeFileChanges(
       options.fileChanges ?? { mode: "direct" },
@@ -148,6 +151,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       bootstrap: this.#bootstrap,
       client: this.#client,
       owner: this.#owner,
+      ownerType: this.#ownerType,
       secretValue: (name) => {
         const value = values.get(name);
         if (value === undefined) {
@@ -179,7 +183,57 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     }
   }
 
+  private assertOwnerSupports(operation: Operation): void {
+    if (this.#ownerType !== "User") return;
+    let unsupported: string | undefined;
+    switch (operation.type) {
+      case "set-team-permission":
+      case "remove-team-permission":
+        unsupported = "team permissions";
+        break;
+      case "set-custom-property":
+        unsupported = "organization custom properties";
+        break;
+      case "update-repository-settings":
+        if (operation.settings.visibility === "internal") {
+          unsupported = "internal visibility";
+        }
+        break;
+      case "update-actions-oidc":
+        if (
+          operation.settings.subjectClaimTemplate?.source === "organization"
+        ) {
+          unsupported = "organization-specific OIDC claims";
+        }
+        break;
+      case "create-ruleset":
+        if (
+          operation.ruleset.bypassActors.some((actor) =>
+            actor.actorType === "team"
+          )
+        ) {
+          unsupported = "team-based ruleset bypass actors";
+        }
+        break;
+      case "update-ruleset":
+        if (
+          operation.changes.bypassActors?.some((actor) =>
+            actor.actorType === "team"
+          )
+        ) {
+          unsupported = "team-based ruleset bypass actors";
+        }
+        break;
+    }
+    if (unsupported !== undefined) {
+      throw new Error(
+        `Personal GitHub accounts do not support ${unsupported}; no changes were applied.`,
+      );
+    }
+  }
+
   async apply(repository: string, operation: Operation): Promise<void> {
+    this.assertOwnerSupports(operation);
     if (
       this.#scope === "github-only" && (
         isFileOperation(operation) || operation.type === "initialize-repository"
@@ -189,6 +243,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         "Content and initialization operations are excluded from GitHub-only reconciliation",
       );
     }
+
     switch (operation.type) {
       case "initialize-repository": {
         if (!this.#bootstrap) {
@@ -202,6 +257,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
         const source = new GitHubRepositoryStateSource(
           this.#client,
           this.#owner,
+          this.#ownerType,
         );
         const settings = await source.getRepositorySettings(repository);
         if (settings.defaultBranch !== operation.branch) {
@@ -724,7 +780,11 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       if (operation.sha !== undefined && operation.sha !== expectedSha) {
         throw new Error("Bootstrap cleanup SHA changed since planning");
       }
-      const source = new GitHubRepositoryStateSource(this.#client, this.#owner);
+      const source = new GitHubRepositoryStateSource(
+        this.#client,
+        this.#owner,
+        this.#ownerType,
+      );
       const file = await source.getFile(
         repository,
         BOOTSTRAP_FILE_PATH,

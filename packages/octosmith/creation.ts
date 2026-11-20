@@ -31,13 +31,13 @@ import {
 import { applyPlan } from "./github/apply.ts";
 import { type GitHubClient, GitHubRequestError } from "./github/client.ts";
 import {
-  assertOrganizationOwner,
+  getGitHubOwnerDeclaration,
   GitHubOwnerError,
-  resolveGitHubOwner,
+  resolveGitHubOwnerContext,
 } from "./github/owner.ts";
 import {
   type CreatedRepository,
-  createOrganizationRepository,
+  createRepositoryForOwner,
 } from "./github/create_repository.ts";
 import { discoverRepositories } from "./github/discovery.ts";
 import { readCurrentState } from "./github/read_state.ts";
@@ -110,6 +110,7 @@ export interface RepositoryCreationResult {
   readonly kind: "repository_creation";
   readonly version: 1;
   readonly organization?: string;
+  readonly ownerType?: "organization" | "user";
   readonly template?: string;
   readonly requestedName?: string;
   readonly repository?: CreatedRepository;
@@ -139,6 +140,7 @@ export async function createRepository(
   const completedStages: RepositoryCreationStage[] = [];
   let stage: RepositoryCreationStage = "configuration";
   let organization: string | undefined;
+  let ownerType: "organization" | "user" | undefined;
   let specification: RepositoryCreationSpecification | undefined;
   let repository: CreatedRepository | undefined;
   let report: Report | undefined;
@@ -159,6 +161,7 @@ export async function createRepository(
     kind: "repository_creation",
     version: 1,
     organization,
+    ...(ownerType === "user" && { ownerType }),
     template: specification?.template,
     requestedName: specification?.repository?.name ?? request.name,
     repository,
@@ -190,6 +193,9 @@ export async function createRepository(
       ? await loadConfigurationDirectory(request.configuration)
       : request.configuration;
     organization = loaded.configuration.organization;
+    ownerType = loaded.configuration.owner === undefined
+      ? "organization"
+      : "user";
     completedStages.push(stage);
     stage = "preflight";
     specification = await preflightRepositoryCreation(loaded, request, options);
@@ -212,12 +218,19 @@ export async function createRepository(
     const client = typeof options.client === "function"
       ? await options.client()
       : options.client;
-    const resolvedOwner = await resolveGitHubOwner(client, organization);
-    assertOrganizationOwner(resolvedOwner);
+    const resolvedOwner = await resolveGitHubOwnerContext(
+      client,
+      getGitHubOwnerDeclaration(loaded.configuration),
+    );
     organization = resolvedOwner.login;
     loaded = {
       ...loaded,
-      configuration: { ...loaded.configuration, organization },
+      configuration: {
+        ...loaded.configuration,
+        organization,
+        ...(loaded.configuration.owner !== undefined &&
+          { owner: organization }),
+      },
     };
     completedStages.push(stage);
     stage = "availability";
@@ -238,10 +251,12 @@ export async function createRepository(
     completedStages.push(stage);
     stage = "creation";
     try {
-      repository = await createOrganizationRepository(client, organization, {
-        name: metadata.name,
-        visibility,
-      });
+      repository = await createRepositoryForOwner(
+        client,
+        organization,
+        resolvedOwner.type,
+        { name: metadata.name, visibility },
+      );
     } catch (error) {
       if (
         error instanceof GitHubRequestError && error.status === 422 &&
@@ -270,6 +285,7 @@ export async function createRepository(
     const sink = new GitHubRepositoryMutationSink({
       client,
       owner: organization,
+      ownerType: resolvedOwner.type,
       secretValue: secretValues,
       scope: "github-only",
       fileChanges: loaded.configuration.repositories.fileChanges,
@@ -325,8 +341,10 @@ export async function createRepository(
         discovery.failures.length > 0 || discovery.repositories.length !== 1 ||
         !actual
       ) {
+        const detail = discovery.failures[0]?.error;
         throw new CreationStageError(
-          "Actual repository metadata is outside the configured scope or could not be re-read; normal reconciliation was not attempted.",
+          "Actual repository metadata is outside the configured scope or could not be re-read; normal reconciliation was not attempted." +
+            (detail instanceof Error ? " " + detail.message : ""),
         );
       }
       const classification = classifyResource(loaded, actual);
@@ -392,7 +410,11 @@ export async function createRepository(
             settings: { ...desired.settings, defaultBranch: bootstrap!.branch },
           };
         }
-        const source = new GitHubRepositoryStateSource(client, owner);
+        const source = new GitHubRepositoryStateSource(
+          client,
+          owner,
+          resolvedOwner.type,
+        );
         let current = await readCurrentState(source, desired, undefined, {
           scope: "github-only",
         });
@@ -573,6 +595,7 @@ export async function createRepository(
       }
       return {
         organization: owner,
+        ...(ownerType === "user" && { ownerType }),
         startedAt,
         completedAt: new Date(),
         mode: "apply",
@@ -633,7 +656,11 @@ export async function createRepository(
             "Unexpected existing branches; bootstrap stopped.",
           );
         }
-        const source = new GitHubRepositoryStateSource(client, owner);
+        const source = new GitHubRepositoryStateSource(
+          client,
+          owner,
+          resolvedOwner.type,
+        );
         const history = await source.getRepositoryHistory(
           created.name,
           branch,
@@ -692,7 +719,11 @@ export async function createRepository(
         "Unexpected remote branches after the initial push; inspect remote history before deferred reconciliation.",
       );
     }
-    const source = new GitHubRepositoryStateSource(client, organization);
+    const source = new GitHubRepositoryStateSource(
+      client,
+      organization,
+      resolvedOwner.type,
+    );
     if (
       await source.getBranchHead(repository.name, branch) !==
         bootstrap.commitSha

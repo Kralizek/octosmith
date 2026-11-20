@@ -249,7 +249,7 @@ Deno.test("targeted discovery reports repositories outside configured scope", as
     result.failures[0].error instanceof Error
       ? result.failures[0].error.message
       : String(result.failures[0].error),
-    "Repository api is outside the configured scope",
+    'Repository api is outside the configured scope (actual name: "api", visibility: "private")',
   );
   assertEquals(client.requests.map((request) => request.path), [
     "/repos/acme/api",
@@ -718,3 +718,60 @@ function requestKey(
       ? "?" + entries.map(([name, value]) => name + "=" + value).join("&")
       : "");
 }
+
+Deno.test("personal discovery lists only owned repositories and paginates", async () => {
+  const own = {
+    name: "owned",
+    visibility: "private",
+    owner: { login: "Acme" },
+  };
+  const shared = {
+    name: "shared",
+    visibility: "private",
+    owner: { login: "someone-else" },
+  };
+  const organizationConfiguration = configuration({ scope: {} }, {}, "all");
+  const client = new FakeGitHubClient({
+    "/user/repos?affiliation=owner&page=1&per_page=100": [[own, shared]],
+  });
+  const loaded = {
+    ...organizationConfiguration,
+    configuration: {
+      ...organizationConfiguration.configuration,
+      owner: "acme",
+    },
+  };
+  const result = await discoverRepositories(client, loaded);
+  assertEquals(result.repositories.map((repo) => repo.name), ["owned"]);
+  assertEquals(client.requests.map((request) => request.path), ["/user/repos"]);
+  assertEquals(client.requests[0].query, {
+    affiliation: "owner",
+    page: 1,
+    per_page: 100,
+  });
+});
+
+Deno.test("personal explicit target rejects repositories owned by another user", async () => {
+  const client = new FakeGitHubClient({
+    "/repos/acme/shared": [{
+      name: "shared",
+      visibility: "private",
+      owner: { login: "other-user" },
+    }],
+  });
+  const organizationConfiguration = configuration({ scope: {} }, {}, "all");
+  const loaded = {
+    ...organizationConfiguration,
+    configuration: {
+      ...organizationConfiguration.configuration,
+      owner: "acme",
+    },
+  };
+  const result = await discoverRepositories(client, loaded, "shared");
+  assertEquals(result.repositories, []);
+  assertEquals(result.failures.length, 1);
+  assertEquals(
+    String(result.failures[0].error),
+    'Error: Repository "shared" is not owned by configured personal account "acme"; no changes were applied.',
+  );
+});

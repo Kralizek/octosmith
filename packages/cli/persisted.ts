@@ -1,8 +1,8 @@
 import {
-  assertOrganizationOwner,
   classifyResource,
   equalContentHash,
   type ExecutableResourcePlan,
+  getGitHubOwnerDeclaration,
   GitHubOwnerError,
   hashCanonical,
   hashEffectiveConfiguration,
@@ -14,10 +14,11 @@ import {
   projectOwnedCurrentState,
   type PullRequestResult,
   resolveDesiredState,
-  resolveGitHubOwner,
+  resolveGitHubOwnerContext,
   restoreEvaluations,
   type RuntimeReferenceDiagnostic,
   secretPolicyDiagnostics,
+  validateOwnerCapabilities,
   withoutSkippedRuntimeValues,
 } from "@octosmith/octosmith";
 import type { ApplyRuntime } from "./apply.ts";
@@ -75,16 +76,39 @@ export async function applyPersistedPlan(
   const owner = runtime.resolveOwner
     ? await runtime.resolveOwner(loaded)
     : runtime.client
-    ? await resolveGitHubOwner(
+    ? await resolveGitHubOwnerContext(
       runtime.client,
-      loaded.configuration.organization,
+      getGitHubOwnerDeclaration(loaded.configuration),
     )
     : undefined;
-  if (owner !== undefined) {
-    assertOrganizationOwner(owner);
-  } else {
+  if (owner === undefined) {
     throw new GitHubOwnerError(
       "Saved-plan execution requires owner validation. Provide an ApplyRuntime.resolveOwner implementation or GitHub client; no changes were applied.",
+    );
+  }
+  const expectedType = loaded.configuration.owner === undefined
+    ? "Organization"
+    : "User";
+  if (owner.type !== expectedType) {
+    throw new GitHubOwnerError(
+      owner.type === "User" && expectedType === "Organization"
+        ? "Configured owner resolves to a personal account (User), but organization: requires an Organization; no changes were applied."
+        : `Configured owner must resolve to a GitHub ${expectedType}; no changes were applied.`,
+    );
+  }
+  validateOwnerCapabilities(loaded);
+  if (
+    loaded.configuration.owner !== undefined &&
+    artifact.resources.some((resource) =>
+      resource.operations.some((operation) =>
+        operation.type === "set-team-permission" ||
+        operation.type === "remove-team-permission" ||
+        operation.type === "set-custom-property"
+      )
+    )
+  ) {
+    throw new GitHubOwnerError(
+      "Saved plan includes organization-only team or custom-property operations for a personal account; no changes were applied.",
     );
   }
 

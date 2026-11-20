@@ -22,6 +22,7 @@ export {
   validateConfigurationDirectoryDetailed,
   validateLoadedConfiguration,
   validateLoadedConfigurationDetailed,
+  validateOwnerCapabilities,
   validateTemplateDirectoryDetailed,
 } from "./validate.ts";
 export * from "./runtime_references.ts";

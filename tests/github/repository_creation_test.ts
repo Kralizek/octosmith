@@ -10,6 +10,7 @@ import {
   buildPlan,
   classifyResource,
   createRepository,
+  createRepositoryForOwner,
   discoverRepositories,
   equalCustomPropertyValues,
   FetchGitHubClient,
@@ -32,6 +33,128 @@ import {
 import { main } from "../../packages/cli/mod.ts";
 import { resolveAssistedRepositoryCreation } from "../../packages/cli/assisted.ts";
 import { currentState } from "../plan/fixtures.ts";
+
+Deno.test("personal repository creation uses the authenticated-user endpoint and verifies owner", async () => {
+  const calls: { method: string; path: string; body?: unknown }[] = [];
+  const client = new FetchGitHubClient({
+    token: "test",
+    fetch: (input, init) => {
+      const path = new URL(String(input)).pathname;
+      calls.push({
+        method: init?.method ?? "GET",
+        path,
+        ...(init?.body && { body: JSON.parse(String(init.body)) }),
+      });
+      const request = init?.body
+        ? JSON.parse(String(init.body)) as { name: string }
+        : { name: "" };
+
+      return Promise.resolve(
+        Response.json({
+          name: request.name,
+          full_name: "Alice/" + request.name,
+          html_url: "https://github.com/Alice/" + request.name,
+          owner: { login: "Alice" },
+        }, { status: 201 }),
+      );
+    },
+  });
+  const repository = await createRepositoryForOwner(
+    client,
+    "Alice",
+    "User",
+    { name: "sample", visibility: "private" },
+  );
+  assertEquals(repository.fullName, "Alice/sample");
+  await createRepositoryForOwner(
+    client,
+    "Alice",
+    "User",
+    { name: "public-sample", visibility: "public" },
+  );
+  assertEquals(calls, [{
+    method: "POST",
+    path: "/user/repos",
+    body: { name: "sample", private: true, auto_init: false },
+  }, {
+    method: "POST",
+    path: "/user/repos",
+    body: { name: "public-sample", private: false, auto_init: false },
+  }]);
+
+  const mismatched = new FetchGitHubClient({
+    token: "test",
+    fetch: () =>
+      Promise.resolve(
+        Response.json({
+          name: "sample",
+          full_name: "Alice/sample",
+          html_url: "https://github.com/Alice/sample",
+          owner: { login: "Mallory" },
+        }, { status: 201 }),
+      ),
+  });
+  await assertRejects(
+    () =>
+      createRepositoryForOwner(mismatched, "Alice", "User", {
+        name: "sample",
+        visibility: "private",
+      }),
+    Error,
+    "unexpected repository identity",
+  );
+});
+
+Deno.test("personal repository creation rejects an authenticated-user mismatch before mutation", async () => {
+  const calls: { method: string; path: string }[] = [];
+  const client = new FetchGitHubClient({
+    token: "test",
+    fetch: (input, init) => {
+      const path = new URL(String(input)).pathname;
+      const method = init?.method ?? "GET";
+      calls.push({ method, path });
+      return Promise.resolve(
+        Response.json(
+          path === "/users/Alice"
+            ? { login: "Alice", type: "User" }
+            : { login: "mallory" },
+        ),
+      );
+    },
+  });
+  const loaded = configuration();
+  const personal: LoadedConfiguration = {
+    ...loaded,
+    configuration: {
+      ...loaded.configuration,
+      owner: "Alice",
+      organization: "Alice",
+      repositories: {
+        scope: {
+          include: { names: ["api-*"], visibility: "private" },
+        },
+      },
+    },
+  };
+  const result = await createRepository({
+    configuration: personal,
+    template: "services",
+    name: "api-personal",
+    visibility: "private",
+  }, {
+    client,
+    bootstrap: {
+      bootstrap: () => {
+        throw new Error("Bootstrap must not run");
+      },
+    },
+  });
+  assertEquals(result.status, "preflight_rejected");
+  assertEquals(calls, [
+    { method: "GET", path: "/users/Alice" },
+    { method: "GET", path: "/user" },
+  ]);
+});
 
 interface Call {
   method: string;

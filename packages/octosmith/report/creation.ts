@@ -13,7 +13,13 @@ export function renderRepositoryCreationResult(
         `URL: ${result.repository.url}`,
       ]
       : result.requestedName
-      ? [`Requested repository: ${result.organization}/${result.requestedName}`]
+      ? result.ownerType === "user"
+        ? [
+          `Requested repository for personal account: ${result.organization}/${result.requestedName}`,
+        ]
+        : [
+          `Requested repository: ${result.organization}/${result.requestedName}`,
+        ]
       : []),
     `Completed stages: ${result.completedStages.join(", ") || "none"}`,
     ...(result.bootstrap

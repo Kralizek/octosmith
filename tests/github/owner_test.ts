@@ -4,6 +4,7 @@ import {
   FetchGitHubClient,
   GitHubOwnerError,
   resolveGitHubOwner,
+  resolveGitHubOwnerContext,
 } from "@octosmith/octosmith";
 
 Deno.test("owner resolution uses the API's canonical identity and account type", async () => {
@@ -16,6 +17,7 @@ Deno.test("owner resolution uses the API's canonical identity and account type",
         return Promise.resolve(Response.json({ login: "Acme", type }));
       },
     });
+
     const owner = await resolveGitHubOwner(client, "acme");
     assertEquals(owner, { login: "Acme", type });
     assertEquals(paths, ["/users/acme"]);
@@ -29,6 +31,52 @@ Deno.test("owner resolution uses the API's canonical identity and account type",
       );
     }
   }
+});
+
+Deno.test("personal owner context requires matching authenticated user", async () => {
+  const paths: string[] = [];
+  const client = new FetchGitHubClient({
+    token: "test",
+    fetch: (input) => {
+      const path = new URL(String(input)).pathname;
+      paths.push(path);
+      return Promise.resolve(
+        Response.json(
+          path === "/users/alice"
+            ? { login: "Alice", type: "User" }
+            : { login: "alice" },
+        ),
+      );
+    },
+  });
+  const owner = await resolveGitHubOwnerContext(client, {
+    login: "alice",
+    type: "User",
+  });
+  assertEquals(owner.login, "Alice");
+  assertEquals(owner.capabilities.teams, false);
+  assertEquals(paths, ["/users/alice", "/user"]);
+
+  const mismatched = new FetchGitHubClient({
+    token: "test",
+    fetch: (input) =>
+      Promise.resolve(
+        Response.json(
+          new URL(String(input)).pathname === "/users/alice"
+            ? { login: "Alice", type: "User" }
+            : { login: "Mallory" },
+        ),
+      ),
+  });
+  await assertRejects(
+    () =>
+      resolveGitHubOwnerContext(mismatched, {
+        login: "alice",
+        type: "User",
+      }),
+    GitHubOwnerError,
+    "Personal repositories can only be provisioned for the authenticated user",
+  );
 });
 
 Deno.test("owner resolution rejects unexpected types and malformed identities", async () => {

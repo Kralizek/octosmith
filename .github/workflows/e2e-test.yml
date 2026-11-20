@@ -2,6 +2,17 @@ name: Octosmith E2E
 
 on:
   workflow_dispatch:
+    inputs:
+      account_type:
+        description: >
+          Live writes target octosmith-tests (organization), or the account
+          configured by E2E_PERSONAL_OWNER and E2E_PERSONAL_TOKEN (personal).
+        type: choice
+        options:
+          - organization
+          - personal
+        default: organization
+        required: true
 
 permissions:
   contents: read
@@ -12,6 +23,7 @@ concurrency:
 
 jobs:
   creation:
+    if: inputs.account_type != 'personal'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
@@ -34,6 +46,7 @@ jobs:
 
       - name: Generate installation token
         id: app
+        if: inputs.account_type != 'personal'
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.E2E_APP_CLIENT_ID }}
@@ -52,17 +65,20 @@ jobs:
       - name: Verify isolated organization and fixture revision
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          E2E_OWNER_TYPE: Organization
         run: deno run -A tests/e2e/preflight.ts
 
       - name: Run full creation suite
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          E2E_OWNER_TYPE: Organization
         run: deno task test:e2e
 
       - name: Recover any run-created repositories
         if: always() && steps.app.outcome == 'success'
         env:
           GITHUB_TOKEN: ${{ steps.app.outputs.token }}
+          E2E_OWNER_TYPE: Organization
         run: deno run -A tests/e2e/cleanup.ts
 
       - name: Publish E2E evidence
@@ -70,6 +86,79 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: octosmith-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+          path: e2e-results/
+          if-no-files-found: ignore
+          retention-days: 30
+
+  personal:
+    if: inputs.account_type == 'personal'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      E2E_OWNER: ${{ vars.E2E_PERSONAL_OWNER }}
+      E2E_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+      E2E_RESULTS: ${{ github.workspace }}/e2e-results
+      E2E_FIXTURES: ${{ github.workspace }}/e2e-fixtures
+      E2E_FIXTURE_REVISION: 02bbf1738014862723a699e24688d7033599e3aa
+    steps:
+      - name: Checkout Octosmith
+        uses: actions/checkout@v7
+
+      - name: Set up Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Validate source without creating repositories
+        run: deno task check
+
+      - name: Validate personal E2E configuration
+        id: personal_config
+        env:
+          E2E_PERSONAL_OWNER: ${{ vars.E2E_PERSONAL_OWNER }}
+          E2E_PERSONAL_TOKEN: ${{ secrets.E2E_PERSONAL_TOKEN }}
+        run: |
+          if [ -z "$E2E_PERSONAL_OWNER" ] || [ -z "$E2E_PERSONAL_TOKEN" ]; then
+            echo "Configure E2E_PERSONAL_OWNER and E2E_PERSONAL_TOKEN before running personal E2E."
+            exit 1
+          fi
+
+      - name: Checkout pinned fixtures
+        uses: actions/checkout@v7
+        with:
+          repository: octosmith-tests/fixtures
+          token: ${{ secrets.E2E_PERSONAL_TOKEN }}
+          path: e2e-fixtures
+          ref: 02bbf1738014862723a699e24688d7033599e3aa
+          persist-credentials: false
+
+      - name: Verify configured personal account and fixture access
+        env:
+          GITHUB_TOKEN: ${{ secrets.E2E_PERSONAL_TOKEN }}
+          E2E_OWNER_TYPE: User
+          E2E_PERSONAL_OWNER: ${{ vars.E2E_PERSONAL_OWNER }}
+        run: deno run -A tests/e2e/preflight.ts
+
+      - name: Run full creation suite
+        env:
+          GITHUB_TOKEN: ${{ secrets.E2E_PERSONAL_TOKEN }}
+          E2E_OWNER_TYPE: User
+          E2E_PERSONAL_OWNER: ${{ vars.E2E_PERSONAL_OWNER }}
+        run: deno task test:e2e
+
+      - name: Recover run-created repositories by recorded ID
+        if: always() && steps.personal_config.outcome == 'success'
+        env:
+          GITHUB_TOKEN: ${{ secrets.E2E_PERSONAL_TOKEN }}
+          E2E_OWNER_TYPE: User
+          E2E_PERSONAL_OWNER: ${{ vars.E2E_PERSONAL_OWNER }}
+        run: deno run -A tests/e2e/cleanup.ts
+
+      - name: Publish personal-account E2E evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: octosmith-e2e-personal-${{ github.run_id }}-${{ github.run_attempt }}
           path: e2e-results/
           if-no-files-found: ignore
           retention-days: 30

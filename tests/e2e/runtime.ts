@@ -6,7 +6,11 @@ import {
   type GitHubClient,
 } from "../../packages/octosmith/github/client.ts";
 
-export const E2E_OWNER = "octosmith-tests";
+export const E2E_OWNER_TYPE = Deno.env.get("E2E_OWNER_TYPE") ?? "Organization";
+export const E2E_PERSONAL_OWNER = Deno.env.get("E2E_PERSONAL_OWNER") ?? "";
+export const E2E_OWNER = E2E_OWNER_TYPE === "User"
+  ? E2E_PERSONAL_OWNER
+  : "octosmith-tests";
 
 // SHA-1 of the canonical empty Git tree (git hash-object -t tree --stdin).
 // GitHub's Trees API may return 404 for this object even when a root commit
@@ -51,7 +55,11 @@ interface Repository {
 }
 
 export function runPrefix(owner: string, runId: string): string {
-  if (owner !== E2E_OWNER || !/^[0-9]+-[0-9]+$/.test(runId)) {
+  if (
+    !owner || owner !== E2E_OWNER ||
+    (E2E_OWNER_TYPE === "User" && !E2E_PERSONAL_OWNER) ||
+    !/^[0-9]+-[0-9]+$/.test(runId)
+  ) {
     throw new Error(
       "Refusing E2E operations outside a dedicated GitHub Actions run",
     );
@@ -61,11 +69,23 @@ export function runPrefix(owner: string, runId: string): string {
 
 export function safeRepository(
   prefix: string,
-  repository: Repository,
+  repository: Pick<Repository, "name" | "full_name">,
+  owner = E2E_OWNER,
 ): boolean {
   return repository.name.startsWith(prefix) &&
     repository.name !== "fixtures" &&
-    repository.full_name === E2E_OWNER + "/" + repository.name;
+    repository.full_name.toLowerCase() ===
+      owner.toLowerCase() + "/" + repository.name.toLowerCase();
+}
+
+export function canDeleteRepository(
+  prefix: string,
+  repository: Pick<Repository, "id" | "name" | "full_name">,
+  recordedId: number | undefined,
+  owner = E2E_OWNER,
+): boolean {
+  return recordedId !== undefined && recordedId === repository.id &&
+    safeRepository(prefix, repository, owner);
 }
 
 export class E2ERuntime {
@@ -95,8 +115,14 @@ export class E2ERuntime {
     const fixtures = Deno.env.get("E2E_FIXTURES") ?? "";
     const token = Deno.env.get("GITHUB_TOKEN") || Deno.env.get("GH_TOKEN");
     const prefix = runPrefix(owner, runId);
-    if (!results || !fixtures || !token) {
-      throw new Error("Missing E2E_RESULTS, E2E_FIXTURES, or GitHub App token");
+    if (
+      !results || !fixtures || !token ||
+      (E2E_OWNER_TYPE !== "Organization" && E2E_OWNER_TYPE !== "User") ||
+      (E2E_OWNER_TYPE === "User" && E2E_OWNER !== E2E_PERSONAL_OWNER)
+    ) {
+      throw new Error(
+        "Missing E2E_RESULTS, E2E_FIXTURES, or authorized GitHub token/account configuration",
+      );
     }
     return new E2ERuntime(
       new FetchGitHubClient({ token }),
@@ -107,19 +133,27 @@ export class E2ERuntime {
   }
 
   async verifyInstallation(): Promise<void> {
-    const owner = await this.#client.get<{ type: string }>(
+    const owner = await this.#client.get<{ type: string; login: string }>(
       "/users/" + E2E_OWNER,
     );
-    assertEquals(owner.type, "Organization");
-    const installation = await this.#client.get<{
-      repositories: { full_name: string }[];
-    }>("/installation/repositories");
-    assert(
-      installation.repositories.some((r) =>
-        r.full_name === E2E_OWNER + "/fixtures"
-      ),
-      "GitHub App installation must include fixtures",
-    );
+    assertEquals(owner.type, E2E_OWNER_TYPE);
+    assertEquals(owner.login.toLowerCase(), E2E_OWNER.toLowerCase());
+    if (E2E_OWNER_TYPE === "User") {
+      const authenticated = await this.#client.get<{ login: string }>("/user");
+      assertEquals(authenticated.login.toLowerCase(), E2E_OWNER.toLowerCase());
+      await this.#client.get("/repos/octosmith-tests/fixtures");
+    } else {
+      const installation = await this.#client.get<{
+        repositories: { full_name: string }[];
+      }>("/installation/repositories");
+      assert(
+        installation.repositories.some((r) =>
+          r.full_name.toLowerCase() ===
+            (E2E_OWNER + "/fixtures").toLowerCase()
+        ),
+        "GitHub App installation must include fixtures",
+      );
+    }
   }
 
   async #repository(name: string): Promise<Repository | undefined> {
@@ -272,7 +306,7 @@ export class E2ERuntime {
       join(root, "octosmith.yml"),
       stringify({
         version: 1,
-        organization: E2E_OWNER,
+        [E2E_OWNER_TYPE === "User" ? "owner" : "organization"]: E2E_OWNER,
         repositories: {
           scope: { include: { names: [name], visibility: "private" } },
           file_changes: { mode: "direct" },
@@ -293,20 +327,22 @@ export class E2ERuntime {
     const repo = await this.#repository(name);
     assert(repo, "Repository not found after successful creation");
     assert(
-      safeRepository(this.#prefix, repo),
+      safeRepository(this.#prefix, repo, E2E_OWNER),
       "Unexpected repository identity",
     );
     assertEquals(repo.private, true);
     await this.#recordId(name, repo.id);
     assert(repo.default_branch, "Repository has no default branch");
     const branch = await this.#client.get<{ commit: { sha: string } }>(
-      "/repos/" + E2E_OWNER + "/" + name + "/branches/" + repo.default_branch,
+      "/repos/" + E2E_OWNER + "/" + name + "/branches/" +
+        repo.default_branch,
     );
     const commit = await this.#client.get<{
       parents: unknown[];
       tree: { sha: string };
     }>(
-      "/repos/" + E2E_OWNER + "/" + name + "/git/commits/" + branch.commit.sha,
+      "/repos/" + E2E_OWNER + "/" + name + "/git/commits/" +
+        branch.commit.sha,
     );
     assertEquals(
       commit.parents.length,
@@ -386,7 +422,7 @@ export class E2ERuntime {
           );
         } else {
           assert(remote, "Expected partial repository after bootstrap failure");
-          assert(safeRepository(this.#prefix, remote));
+          assert(safeRepository(this.#prefix, remote, E2E_OWNER));
           await this.#recordId(name, remote.id);
         }
         return;
@@ -455,6 +491,14 @@ export class E2ERuntime {
         "Repository still has outstanding operations",
       );
     } finally {
+      const repository = await this.#repository(name);
+      if (repository) {
+        assert(
+          safeRepository(this.#prefix, repository, E2E_OWNER),
+          "Unexpected repository identity during scenario cleanup",
+        );
+        await this.#recordId(name, repository.id);
+      }
       await this.cleanup();
     }
   }
@@ -465,11 +509,19 @@ export class E2ERuntime {
     const names = new Set(entries.map((entry) => entry.name));
     for (let page = 1;; page++) {
       const repositories = await this.#client.get<Repository[]>(
-        "/orgs/" + E2E_OWNER + "/repos",
-        { per_page: 100, page, type: "all" },
+        E2E_OWNER_TYPE === "User"
+          ? "/user/repos"
+          : "/orgs/" + E2E_OWNER + "/repos",
+        {
+          per_page: 100,
+          page,
+          ...(E2E_OWNER_TYPE === "User"
+            ? { affiliation: "owner" }
+            : { type: "all" }),
+        },
       );
       for (const repo of repositories) {
-        if (safeRepository(this.#prefix, repo)) names.add(repo.name);
+        if (safeRepository(this.#prefix, repo, E2E_OWNER)) names.add(repo.name);
       }
       if (repositories.length < 100) break;
     }
@@ -484,10 +536,9 @@ export class E2ERuntime {
         const repo = await this.#repository(name);
         if (!repo) continue;
         if (
-          !safeRepository(this.#prefix, repo) ||
-          (ids.get(name) !== undefined && ids.get(name) !== repo.id)
+          !canDeleteRepository(this.#prefix, repo, ids.get(name), E2E_OWNER)
         ) {
-          throw new Error("Owner/name/ID mismatch");
+          throw new Error("Owner/name/recorded-ID mismatch; refusing deletion");
         }
         await this.#client.request<void>("DELETE", "/repos/" + repo.full_name);
         deleted.push(repo.full_name);

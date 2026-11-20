@@ -59,6 +59,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   constructor(
     readonly client: GitHubClient,
     readonly owner: string,
+    readonly ownerType: "Organization" | "User" = "Organization",
   ) {}
 
   async getRepositorySettings(
@@ -111,6 +112,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   async getCustomProperties(
     repository: string,
   ): Promise<Readonly<Record<string, CustomPropertyValue>>> {
+    this.assertOrganizationFeature("custom properties");
     const values = await getAllPages<
       {
         readonly property_name: string;
@@ -203,6 +205,7 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   }
 
   async getTeams(repository: string): Promise<readonly TeamPermission[]> {
+    this.assertOrganizationFeature("team permissions");
     const teams = await getAllPages<
       {
         readonly slug: string;
@@ -419,6 +422,14 @@ export class GitHubRepositoryStateSource implements RepositoryStateSource {
   private repo(repository: string): string {
     return "/repos/" + encodeURIComponent(this.owner) + "/" +
       encodeURIComponent(repository);
+  }
+
+  private assertOrganizationFeature(feature: string): void {
+    if (this.ownerType === "User") {
+      throw new Error(
+        `Personal GitHub accounts do not support organization ${feature}`,
+      );
+    }
   }
 }
 

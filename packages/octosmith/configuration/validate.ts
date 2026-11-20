@@ -42,7 +42,8 @@ export type ConfigurationValidationIssueCode =
   | "template_overlap"
   | "scope_repository_unmatched"
   | "scope_without_reachable_templates"
-  | "planner_invariant";
+  | "planner_invariant"
+  | "owner_capability";
 
 /** Describes one independently detected semantic validation problem. */
 export interface ConfigurationValidationIssue {
@@ -113,6 +114,7 @@ async function validateDirectoryDetailed(
     : selectedTemplate.startsWith("repository:")
     ? selectedTemplate
     : "repository:" + selectedTemplate;
+  const issues = ownerCapabilityIssues(loading.loaded);
   const loadIssues = loading.issues
     .filter((issue) =>
       selectedIdentity === undefined || issue.template === selectedIdentity
@@ -123,17 +125,118 @@ async function validateDirectoryDetailed(
       template: issue.template,
       path: issue.path,
     }));
-  const issues = validation.issues.filter((issue) =>
-    !loadIssues.some((loadIssue) =>
-      loadIssue.template === issue.template &&
-      (loadIssue.code === issue.code || issue.code === "unknown_template")
-    )
+  issues.push(
+    ...validation.issues.filter((issue) =>
+      !loadIssues.some((loadIssue) =>
+        loadIssue.template === issue.template &&
+        (loadIssue.code === issue.code || issue.code === "unknown_template")
+      )
+    ),
   );
   return {
     diagnostics: validation.diagnostics,
     issues: [...loadIssues, ...issues],
     intersections: validation.intersections,
   };
+}
+
+function ownerCapabilityIssues(
+  loaded: LoadedConfiguration,
+): ConfigurationValidationIssue[] {
+  if (loaded.configuration.owner === undefined) return [];
+  const issues: ConfigurationValidationIssue[] = [];
+  if (
+    loaded.configuration.owner.toLowerCase() !==
+      loaded.configuration.organization.toLowerCase()
+  ) {
+    issues.push({
+      code: "owner_capability",
+      message: "Normalized personal owner does not match the declared owner.",
+      path: "owner",
+    });
+  }
+  const report = (path: string, capability: string): void => {
+    issues.push({
+      code: "owner_capability",
+      message:
+        `Personal GitHub accounts do not support ${capability} at ${path}. Remove this setting or configure an organization.`,
+      path,
+    });
+  };
+  const checkSelector = (selector: RepositorySelector, path: string): void => {
+    if (selector.teams !== undefined) {
+      report(path + ".teams", "team-based selectors");
+    }
+    if (selector.properties !== undefined) {
+      report(path + ".properties", "organization custom-property selectors");
+    }
+    const visibility = selector.visibility;
+    if (
+      visibility === "internal" ||
+      (Array.isArray(visibility) && visibility.includes("internal"))
+    ) {
+      report(path + ".visibility", "internal visibility");
+    }
+  };
+  const checkScope = (
+    scope: Scope<RepositorySelector>,
+    path: string,
+  ): void => {
+    if (scope.include !== "all") {
+      checkSelector(scope.include, path + ".include");
+    }
+    if (scope.exclude !== undefined) {
+      checkSelector(scope.exclude, path + ".exclude");
+    }
+  };
+  checkScope(loaded.configuration.repositories.scope, "repositories.scope");
+  for (const [name, template] of Object.entries(loaded.templates)) {
+    if (template.match !== undefined) {
+      checkScope(template.match, "templates." + name + ".match");
+    }
+    const path = "templates." + name + ".repository";
+    if (template.repository.teams !== undefined) {
+      report(path + ".teams", "team permissions");
+    }
+    if (template.repository.customProperties !== undefined) {
+      report(path + ".customProperties", "organization custom properties");
+    }
+    if (template.repository.settings?.visibility === "internal") {
+      report(path + ".settings.visibility", "internal visibility");
+    }
+    if (
+      template.repository.actions?.oidc?.subjectClaimTemplate?.source ===
+        "organization"
+    ) {
+      report(
+        path + ".actions.oidc.subjectClaimTemplate",
+        "organization-specific OIDC claims",
+      );
+    }
+    for (
+      const [index, ruleset] of (
+        template.repository.rulesets ?? []
+      ).entries()
+    ) {
+      if (ruleset.bypassActors?.some((actor) => actor.actorType === "team")) {
+        report(
+          path + `.rulesets[${index}].bypassActors`,
+          "team-based ruleset bypass actors",
+        );
+      }
+    }
+  }
+  return issues;
+}
+
+/** Reject structural owner/capability mismatches without broader semantic validation. */
+export function validateOwnerCapabilities(
+  loaded: LoadedConfiguration,
+): void {
+  const issues = ownerCapabilityIssues(loaded);
+  if (issues.length > 0) {
+    throw new Error(issues[0].message);
+  }
 }
 
 /** Identifies one effective selector constraint and its configuration path. */
@@ -313,7 +416,7 @@ export async function validateLoadedConfigurationDetailed(
   loaded: LoadedConfiguration,
   selectedTemplate?: string,
 ): Promise<ConfigurationValidationResult> {
-  return await collectLoadedConfigurationValidation(
+  const validation = await collectLoadedConfigurationValidation(
     loaded,
     selectedTemplate,
     true,
@@ -322,6 +425,13 @@ export async function validateLoadedConfigurationDetailed(
     true,
     true,
   );
+  return {
+    ...validation,
+    issues: [
+      ...ownerCapabilityIssues(loaded),
+      ...validation.issues,
+    ],
+  };
 }
 
 /** Validate a loaded configuration using the same semantic checks as directory validation. */
@@ -333,8 +443,10 @@ export async function validateLoadedConfiguration(
     loaded,
     selectedTemplate,
   );
-  if (result.issues.length > 0) {
-    throw new Error(result.issues[0].message);
+  const ownerIssues = ownerCapabilityIssues(loaded);
+  const issues = [...ownerIssues, ...result.issues];
+  if (issues.length > 0) {
+    throw new Error(issues[0].message);
   }
   return result.diagnostics;
 }

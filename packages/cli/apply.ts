@@ -30,9 +30,9 @@ import { executeExecutableResources } from "./execution.ts";
 import {
   applyPlan,
   type ApplyPlanResult,
-  assertOrganizationOwner,
   discoverRepositories,
   FetchGitHubClient,
+  getGitHubOwnerDeclaration,
   type GitHubClient,
   type GitHubOwner,
   GitHubRepositoryBootstrap,
@@ -41,7 +41,7 @@ import {
   type GitHubResponseTrace,
   readCurrentState,
   type RepositoryDiscoveryResult,
-  resolveGitHubOwner,
+  resolveGitHubOwnerContext,
 } from "@octosmith/octosmith";
 import { resolveTemplateIdentity } from "./template.ts";
 
@@ -110,15 +110,14 @@ export function createGitHubRuntime(
   >();
   const owners = new Map<string, Promise<GitHubOwner>>();
   const resolveOwner = async (loaded: LoadedConfiguration) => {
-    const configuredOwner = loaded.configuration.organization;
-    let resolution = owners.get(configuredOwner);
+    const declaration = getGitHubOwnerDeclaration(loaded.configuration);
+    const key = declaration.type + ":" + declaration.login.toLowerCase();
+    let resolution = owners.get(key);
     if (!resolution) {
-      resolution = resolveGitHubOwner(client, configuredOwner);
-      owners.set(configuredOwner, resolution);
+      resolution = resolveGitHubOwnerContext(client, declaration);
+      owners.set(key, resolution);
     }
-    const owner = await resolution;
-    assertOrganizationOwner(owner);
-    return owner;
+    return await resolution;
   };
 
   return {
@@ -131,16 +130,27 @@ export function createGitHubRuntime(
     }),
 
     async discover(loaded, repository) {
-      options.traceGroup?.("organization");
+      options.traceGroup?.(
+        loaded.configuration.owner !== undefined
+          ? "personal account"
+          : "organization",
+      );
       const owner = await resolveOwner(loaded);
       const resolvedConfiguration: LoadedConfiguration = {
         ...loaded,
-        configuration: { ...loaded.configuration, organization: owner.login },
+        configuration: {
+          ...loaded.configuration,
+          organization: owner.login,
+          ...(loaded.configuration.owner !== undefined && {
+            owner: owner.login,
+          }),
+        },
       };
       loadedConfiguration = resolvedConfiguration;
       source = new GitHubRepositoryStateSource(
         client,
         owner.login,
+        owner.type,
       );
       fileChanges = loaded.configuration.repositories.fileChanges ?? {
         mode: "pull_request",
@@ -152,6 +162,7 @@ export function createGitHubRuntime(
         ),
         client,
         owner: owner.login,
+        ownerType: owner.type,
         secretValue,
         fileChanges,
       });

@@ -9,7 +9,7 @@ import {
 import { parse } from "@std/yaml";
 import { Ajv2020, type ValidateFunction } from "ajv/2020";
 import type {
-  Configuration,
+  NormalizedConfiguration,
   RepositoryConfiguration,
   RepositoryFragment,
   RepositoryTemplate,
@@ -52,7 +52,7 @@ const validateRepository = validator.compile(repositorySchema);
 /** Describes loaded configuration. */
 export interface LoadedConfiguration {
   readonly root: string;
-  readonly configuration: Configuration;
+  readonly configuration: NormalizedConfiguration;
   readonly templates: Readonly<Record<string, RepositoryTemplate>>;
   readonly templatePaths?: Readonly<Record<string, string>>;
 }
@@ -117,7 +117,7 @@ async function loadConfigurationDirectoryInternal(
   selectedTemplate: string | undefined,
   collectTemplateIssues: boolean,
 ): Promise<ConfigurationDirectoryLoadResult> {
-  const configuration = await loadYaml<Configuration>(
+  const configuration = await loadYaml<NormalizedConfiguration>(
     join(root, "octosmith.yml"),
     validateConfiguration,
   );
@@ -313,6 +313,12 @@ function normalizeYaml(
       ];
     }),
   );
+  if (
+    path.length === 0 && typeof normalized.owner === "string" &&
+    normalized.organization === undefined
+  ) {
+    normalized.organization = normalized.owner;
+  }
   if (
     path.length === 2 && path[0] === "repository" &&
     path[1] === "postCreateCommands" && normalized.args === undefined

@@ -49,6 +49,7 @@ export interface RepositoryCreationPreview {
   readonly kind: "repository_creation_preview";
   readonly version: 1;
   readonly organization: string;
+  readonly ownerType?: "organization" | "user";
   readonly template: string;
   readonly ready: boolean;
   readonly choices: RepositoryCreationSpecification["choices"];
@@ -95,6 +96,9 @@ export function buildRepositoryCreationPreview(
     kind: "repository_creation_preview" as const,
     version: 1 as const,
     organization: loaded.configuration.organization,
+    ...(loaded.configuration.owner !== undefined && {
+      ownerType: "user" as const,
+    }),
     template: specification.template,
     ready: specification.ready,
     choices: specification.choices,

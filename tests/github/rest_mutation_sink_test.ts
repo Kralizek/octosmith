@@ -16,6 +16,7 @@ Deno.test("labels use POST, PATCH and DELETE with encoded existing names", async
     owner: "acme",
     secretValue: () => "unused",
   });
+
   await sink.apply("sample", {
     type: "create-label",
     label: {
@@ -1085,6 +1086,39 @@ class SecretClient implements GitHubClient {
     throw new Error("Unexpected GET " + path);
   }
 }
+
+Deno.test("personal mutation sink rejects unsupported organization operations before requests", async () => {
+  const client = new MappingClient();
+  const sink = new GitHubRepositoryMutationSink({
+    client,
+    owner: "alice",
+    ownerType: "User",
+    secretValue: () => "unused",
+  });
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "set-team-permission",
+        permission: {
+          team: "platform",
+          permission: { kind: "built-in", name: "pull" },
+        },
+      }),
+    Error,
+    "do not support team permissions",
+  );
+  await assertRejects(
+    () =>
+      sink.apply("sample", {
+        type: "set-custom-property",
+        name: "tier",
+        value: "service",
+      }),
+    Error,
+    "do not support organization custom properties",
+  );
+  assertEquals(client.requests, []);
+});
 
 Deno.test("Actions secrets are sealed with GitHub's public key", async () => {
   await sodium.ready;

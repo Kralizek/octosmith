@@ -4,9 +4,9 @@ This repository declares the desired GitHub state for **@@ORGANIZATION@@**.
 
 ## Bootstrap
 
-After scaffolding, initialize and push this directory as the organization's
-Octosmith control repository. Keep it private if its plans may reveal private
-repository configuration.
+After scaffolding, initialize and push this directory as the owner's Octosmith
+control repository. Keep it private if its plans may reveal private repository
+configuration.
 
 Create an `OCTOSMITH_TOKEN` Actions secret containing a fine-grained personal
 access token with the permissions required by apply. The pull-request validation

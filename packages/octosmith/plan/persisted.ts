@@ -160,6 +160,21 @@ export async function createPersistedPlanArtifact(
 export async function hashEffectiveConfiguration(
   configuration: LoadedConfiguration["configuration"],
 ): Promise<ContentHash> {
+  if (configuration.owner !== undefined) {
+    const personalConfiguration = {
+      ...configuration,
+      organization: configuration.owner.toLowerCase(),
+    };
+    const { owner: _owner, ...identityBoundConfiguration } =
+      personalConfiguration;
+    return await hashCanonical({
+      ownerType: "User",
+      owner: configuration.owner.toLowerCase(),
+      configuration: normalizeConfigurationForHash(
+        identityBoundConfiguration,
+      ),
+    });
+  }
   return await hashCanonical(normalizeConfigurationForHash(configuration));
 }
 

@@ -71,6 +71,27 @@ Deno.test("create scaffolder prompts for missing organization", () => {
   assertEquals(options.organization, "acme");
 });
 
+Deno.test("create scaffolder writes explicit personal owner configuration", () => {
+  const options = parseScaffoldArguments(["control", "--owner", "alice"]);
+  assertEquals(options.owner, "alice");
+  const configuration = buildScaffold(options).find((file) =>
+    file.path === "octosmith.yml"
+  );
+  assertStringIncludes(configuration?.content ?? "", 'owner: "alice"');
+  assertEquals(configuration?.content.includes("organization:"), false);
+  assertThrows(
+    () =>
+      parseScaffoldArguments([
+        "--organization",
+        "acme",
+        "--owner",
+        "alice",
+      ]),
+    Error,
+    "exactly one",
+  );
+});
+
 Deno.test("create scaffolder trims organization input", () => {
   const options = parseScaffoldArguments([
     "control",

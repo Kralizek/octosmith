@@ -51,6 +51,7 @@ Deno.test("canonical classification distinguishes single, missing, and multiple 
     status: "matched",
     template: "repository:primary",
   });
+
   assertEquals(
     classifyResource(loaded, { ...metadata, name: "service-legacy" }),
     { status: "matched", template: "repository:fallback" },
@@ -218,6 +219,44 @@ for (
     },
   );
 }
+
+Deno.test("root owner configuration requires exactly one explicit account kind", async () => {
+  const root = await Deno.makeTempDir();
+  await Deno.mkdir(join(root, "templates"));
+  const configPath = join(root, "octosmith.yml");
+  try {
+    await Deno.writeTextFile(
+      configPath,
+      "version: 1\nowner: Alice\nrepositories:\n  scope:\n    include: all\n",
+    );
+    const personal = await loadConfigurationDirectory(root);
+    assertEquals(personal.configuration.organization, "Alice");
+    assertEquals(personal.configuration.owner, "Alice");
+
+    await Deno.writeTextFile(
+      configPath,
+      "version: 1\norganization: acme\nrepositories:\n  scope:\n    include: all\n",
+    );
+    const organization = await loadConfigurationDirectory(root);
+    assertEquals(organization.configuration.organization, "acme");
+    assertEquals(organization.configuration.owner, undefined);
+
+    for (const ownerProperties of ["", "organization: acme\nowner: alice\n"]) {
+      await Deno.writeTextFile(
+        configPath,
+        "version: 1\n" + ownerProperties +
+          "repositories:\n  scope:\n    include: all\n",
+      );
+      await assertRejects(
+        () => loadConfigurationDirectory(root),
+        Error,
+        "Invalid configuration",
+      );
+    }
+  } finally {
+    await Deno.remove(root, { recursive: true });
+  }
+});
 
 Deno.test("loads nested templates with kind-scoped path identities", async () => {
   const root = await Deno.makeTempDir();

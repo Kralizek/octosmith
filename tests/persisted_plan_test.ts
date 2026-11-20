@@ -2637,6 +2637,65 @@ Deno.test("configuration precondition normalizes scalar visibility like singleto
   );
 });
 
+Deno.test("personal saved-plan hashes bind account type and canonical login", async () => {
+  const base: LoadedConfiguration = {
+    root: ".",
+    configuration: {
+      version: 1,
+      organization: "Alice",
+      repositories: { scope: { include: "all" } },
+    },
+    templates: {},
+  };
+  const personal: LoadedConfiguration = {
+    ...base,
+    configuration: {
+      ...base.configuration,
+      organization: "Alice",
+      owner: "Alice",
+    },
+  };
+  const personalCaseVariant: LoadedConfiguration = {
+    ...personal,
+    configuration: {
+      ...personal.configuration,
+      organization: "alice",
+      owner: "alice",
+    },
+  };
+  const otherPersonal: LoadedConfiguration = {
+    ...personal,
+    configuration: {
+      ...personal.configuration,
+      organization: "bob",
+      owner: "bob",
+    },
+  };
+  const organization: LoadedConfiguration = {
+    ...personal,
+    configuration: {
+      ...personal.configuration,
+      owner: undefined,
+    },
+  };
+  const personalHash =
+    (await createPersistedPlanArtifact(personal, [])).configuration;
+  assertEquals(
+    personalHash,
+    (await createPersistedPlanArtifact(personalCaseVariant, [])).configuration,
+  );
+  assertEquals(
+    personalHash ===
+      (await createPersistedPlanArtifact(otherPersonal, [])).configuration,
+    false,
+  );
+  assertEquals(
+    personalHash ===
+      (await createPersistedPlanArtifact(organization, [])).configuration,
+    false,
+  );
+});
+
 Deno.test("effective template hash normalizes planner-unordered arrays", async () => {
   const desired: DesiredState = {
     repository: "sample",

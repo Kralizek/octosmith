@@ -9,6 +9,32 @@ import {
 } from "@octosmith/octosmith";
 import { currentState } from "../plan/fixtures.ts";
 
+Deno.test("personal state source blocks organization-only collection reads", async () => {
+  const paths: string[] = [];
+  const source = new GitHubRepositoryStateSource(
+    new FetchGitHubClient({
+      token: "test",
+      fetch: (input) => {
+        paths.push(new URL(String(input)).pathname);
+        return Promise.resolve(Response.json([]));
+      },
+    }),
+    "alice",
+    "User",
+  );
+  await assertRejects(
+    () => source.getTeams("sample"),
+    Error,
+    "do not support organization team permissions",
+  );
+  await assertRejects(
+    () => source.getCustomProperties("sample"),
+    Error,
+    "do not support organization custom properties",
+  );
+  assertEquals(paths, []);
+});
+
 Deno.test("labels paginate and normalize null descriptions and color case", async () => {
   const pages: number[] = [];
   const source = new GitHubRepositoryStateSource(
