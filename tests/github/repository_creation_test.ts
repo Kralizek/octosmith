@@ -6,8 +6,10 @@ import {
 } from "@std/assert";
 import sodium from "libsodium-wrappers";
 import {
+  applyPlan,
   buildApplyEvaluations,
   buildPlan,
+  buildRepositoryCreationPreview,
   classifyResource,
   createRepository,
   createRepositoryForOwner,
@@ -22,6 +24,8 @@ import {
   type LoadedConfiguration,
   LocalGitBootstrap,
   matchesSelector,
+  MissingRuntimeValueError,
+  preflightRepositoryCreation,
   readCurrentState,
   renderRepositoryCreationResult,
   type RepositoryConfiguration,
@@ -1393,9 +1397,11 @@ Deno.test("creation honors missing runtime values, skip policy and manual secret
       secrets: [{ from: "SECRET_SOURCE", to: "SECRET" }],
     },
   });
-  const failed = await run(new GitHub(), loaded);
-  assertEquals(failed.status, "reconciliation_failed");
-  assert(failed.report?.repositories[0].diagnostics?.length);
+  const failedGithub = new GitHub();
+  const failed = await run(failedGithub, loaded);
+  assertEquals(failed.status, "preflight_rejected");
+  assert(failed.runtimeDiagnostics?.length);
+  assertEquals(failedGithub.calls, []);
   const manual = {
     ...loaded,
     configuration: {
@@ -1419,7 +1425,243 @@ Deno.test("creation honors missing runtime values, skip policy and manual secret
     ),
   );
   const optedIn = await run(new GitHub(), manual, { includeSecrets: true });
-  assertEquals(optedIn.status, "reconciliation_failed");
+  assertEquals(optedIn.status, "preflight_rejected");
+});
+
+Deno.test("creation skips unavailable values in every scope without deleting existing values, then a fresh plan reconciles them", async () => {
+  const base = configuration({
+    settings: { description: "other work proceeds" },
+    actions: {
+      variables: [
+        { from: "AVAILABLE", to: "READY" },
+        { from: "MISSING_ACTION_VAR", to: "ACTION_VAR" },
+      ],
+      secrets: [{ from: "MISSING_ACTION_SECRET", to: "ACTION_SECRET" }],
+    },
+    dependabot: {
+      secrets: [{ from: "MISSING_DEPENDABOT_SECRET", to: "DEPENDABOT_SECRET" }],
+    },
+    environments: [{
+      name: "production",
+      variables: [
+        { from: "MISSING_ENV_VAR", to: "ENV_VAR" },
+        { from: "AVAILABLE", to: "READY_ENV" },
+      ],
+      secrets: [{ from: "MISSING_ENV_SECRET", to: "ENV_SECRET" }],
+    }],
+  });
+  const loaded = {
+    ...base,
+    configuration: {
+      ...base.configuration,
+      repositories: {
+        ...base.configuration.repositories,
+        settings: { collectionManagement: "strict" as const },
+      },
+    },
+  };
+  const github = new GitHub();
+  const root = "/repos/acme/api-orders";
+  github.variables.set(root + "/actions/variables", [
+    { name: "ACTION_VAR", value: "old-action-value" },
+  ]);
+  github.secretNames.set(root + "/actions/secrets", new Set(["ACTION_SECRET"]));
+  github.secretNames.set(
+    root + "/dependabot/secrets",
+    new Set(["DEPENDABOT_SECRET"]),
+  );
+  github.environments.add("production");
+  github.variables.set(root + "/environments/production/variables", [
+    { name: "ENV_VAR", value: "old-env-value" },
+  ]);
+  github.secretNames.set(
+    root + "/environments/production/secrets",
+    new Set(["ENV_SECRET"]),
+  );
+  const values = (name: string) => {
+    if (name === "AVAILABLE") return "PRIVATE-AVAILABLE-VALUE";
+    throw new MissingRuntimeValueError(name);
+  };
+  const specification = await preflightRepositoryCreation(loaded, {
+    template: "services",
+    name: "api-orders",
+  });
+  const preview = buildRepositoryCreationPreview(loaded, specification, {
+    values,
+    skipMissingValues: true,
+  });
+  const result = await createRepository({
+    configuration: loaded,
+    template: "services",
+    name: "api-orders",
+    skipMissingValues: true,
+  }, { client: github.client(), bootstrap: github.bootstrap, values });
+  assertEquals(result.status, "completed", JSON.stringify(result));
+  assertEquals(result.runtimeDiagnostics, preview.runtimeDiagnostics);
+  assertEquals(result.runtimeDiagnostics?.map(({ code }) => code), [
+    "skipped_variable",
+    "skipped_secret",
+    "skipped_secret",
+    "skipped_variable",
+    "skipped_secret",
+  ]);
+  assertEquals(github.bootstraps.length, 1);
+  assertEquals(github.settings.description, "other work proceeds");
+  assertEquals(
+    github.variables.get(root + "/actions/variables"),
+    [
+      { name: "ACTION_VAR", value: "old-action-value" },
+      { name: "READY", value: "PRIVATE-AVAILABLE-VALUE" },
+    ],
+  );
+  assertEquals(
+    github.variables.get(root + "/environments/production/variables"),
+    [
+      { name: "ENV_VAR", value: "old-env-value" },
+      { name: "READY_ENV", value: "PRIVATE-AVAILABLE-VALUE" },
+    ],
+  );
+  assertEquals(
+    github.mutations().filter(({ method }) => method === "DELETE"),
+    [],
+  );
+  assertEquals(
+    github.mutations().some(({ path }) => path.includes("/secrets/")),
+    false,
+  );
+  for (
+    const text of [
+      JSON.stringify(result),
+      renderRepositoryCreationResult(result),
+      JSON.stringify(preview),
+    ]
+  ) {
+    assertEquals(text.includes("PRIVATE-AVAILABLE-VALUE"), false);
+    assertStringIncludes(text, "MISSING_ENV_SECRET");
+  }
+
+  const desired = await resolveDesiredState(
+    loaded,
+    specification.repository!,
+    (name) => "new-" + name,
+  );
+  const current = await readCurrentState(
+    new GitHubRepositoryStateSource(github.client(), "acme"),
+    desired,
+    undefined,
+    { scope: "github-only" },
+  );
+  const plan = buildPlan(current, desired, { scope: "github-only" });
+  assertEquals(
+    plan.operations.some(({ type }) => type === "set-actions-variable"),
+    true,
+  );
+  assertEquals(
+    plan.operations.some(({ type }) => type === "set-actions-secret"),
+    true,
+  );
+  assertEquals(
+    plan.operations.some(({ type }) => type === "set-dependabot-secret"),
+    true,
+  );
+  const environment = plan.operations.find(({ type }) =>
+    type === "update-environment"
+  );
+  assert(environment?.type === "update-environment");
+  assertEquals(
+    environment.environment.variables?.some(({ name }) => name === "ENV_VAR"),
+    true,
+  );
+  assertEquals(
+    environment.environment.secrets?.some(({ name }) => name === "ENV_SECRET"),
+    true,
+  );
+  await sodium.ready;
+  const keys = sodium.crypto_box_keypair();
+  github.override = ({ method, path, body }) => {
+    if (method === "GET" && path.endsWith("/public-key")) {
+      return Response.json({
+        key_id: "key",
+        key: sodium.to_base64(keys.publicKey, sodium.base64_variants.ORIGINAL),
+      });
+    }
+    const marker = "/variables/";
+    if (path.includes(marker)) {
+      const base = path.slice(0, path.lastIndexOf(marker)) + "/variables";
+      const name = decodeURIComponent(
+        path.slice(path.lastIndexOf(marker) + marker.length),
+      );
+      const variables = github.variables.get(base) ?? [];
+      const existing = variables.find((variable) => variable.name === name);
+      if (method === "GET" && existing) return Response.json(existing);
+      if (method === "PATCH" && existing) {
+        existing.value = String(body?.value);
+        return new Response(null, { status: 204 });
+      }
+    }
+  };
+  const applied = await applyPlan(
+    new GitHubRepositoryMutationSink({
+      client: github.client(),
+      owner: "acme",
+      secretValue: (name) => "new-" + name,
+      scope: "github-only",
+    }),
+    plan,
+  );
+  assertEquals(
+    applied.operations.every(({ status }) => status === "applied"),
+    true,
+    JSON.stringify(applied),
+  );
+  assertEquals(
+    github.variables.get(root + "/actions/variables")?.find(({ name }) =>
+      name === "ACTION_VAR"
+    )?.value,
+    "new-MISSING_ACTION_VAR",
+  );
+  assertEquals(
+    github.variables.get(root + "/environments/production/variables")?.[0]
+      .value,
+    "new-MISSING_ENV_VAR",
+  );
+  const secretWrites = github.mutations().filter(({ body }) =>
+    typeof body?.encrypted_value === "string"
+  );
+  assertEquals(secretWrites.length, 3);
+});
+
+Deno.test("creation runtime provider failures remain fatal and redact provider details", async () => {
+  const loaded = configuration({
+    actions: { variables: [{ from: "SOURCE", to: "TARGET" }] },
+  });
+  const github = new GitHub();
+  const values = () => {
+    throw new Error("PRIVATE-PROVIDER-DETAIL");
+  };
+  const specification = await preflightRepositoryCreation(loaded, {
+    template: "services",
+    name: "api-orders",
+  });
+  const preview = buildRepositoryCreationPreview(loaded, specification, {
+    values,
+    skipMissingValues: true,
+  });
+  const result = await createRepository({
+    configuration: loaded,
+    template: "services",
+    name: "api-orders",
+    skipMissingValues: true,
+  }, { client: github.client(), bootstrap: github.bootstrap, values });
+  assertEquals(preview.ready, false);
+  assertEquals(result.status, "preflight_rejected");
+  assertEquals(github.calls, []);
+  assertStringIncludes(preview.runtimeError!, "provider failed");
+  assertStringIncludes(result.error!.message, "provider failed");
+  assertEquals(
+    JSON.stringify([preview, result]).includes("PRIVATE-PROVIDER-DETAIL"),
+    false,
+  );
 });
 
 Deno.test("strict reconciliation cannot discard required selector metadata", async () => {
@@ -2053,6 +2295,65 @@ Deno.test("creation uses normal encryption for Actions, Dependabot and environme
   );
 });
 
+Deno.test("creation resolves runtime values once and reuses the snapshot", async () => {
+  await sodium.ready;
+  const keys = sodium.crypto_box_keypair();
+  const github = new GitHub();
+  github.override = ({ method, path }) => {
+    if (method === "GET" && path.endsWith("/public-key")) {
+      return Response.json({
+        key_id: "key",
+        key: sodium.to_base64(keys.publicKey, sodium.base64_variants.ORIGINAL),
+      });
+    }
+  };
+  const calls = new Map<string, number>();
+  const provider = (name: string) => {
+    const count = (calls.get(name) ?? 0) + 1;
+    calls.set(name, count);
+    if (count > 1) throw new MissingRuntimeValueError(name);
+    return `${name}-snapshot`;
+  };
+  const result = await createRepository({
+    configuration: configuration({
+      actions: {
+        variables: [{ from: "VARIABLE_SOURCE", to: "VARIABLE" }],
+        secrets: [{ from: "SECRET_SOURCE", to: "SECRET" }],
+      },
+    }),
+    template: "services",
+    name: "api-orders",
+  }, {
+    client: github.client(),
+    values: provider,
+    bootstrap: github.bootstrap,
+  });
+  assertEquals(result.status, "completed");
+  assertEquals(Object.fromEntries(calls), {
+    VARIABLE_SOURCE: 1,
+    SECRET_SOURCE: 1,
+  });
+  assertEquals(
+    github.mutations().filter(({ body }) => body?.name === "VARIABLE")
+      .map(({ body }) => body?.value),
+    ["VARIABLE_SOURCE-snapshot"],
+  );
+  const [secret] = github.mutations().filter(({ body }) =>
+    typeof body?.encrypted_value === "string"
+  );
+  assertEquals(
+    sodium.to_string(sodium.crypto_box_seal_open(
+      sodium.from_base64(
+        String(secret.body!.encrypted_value),
+        sodium.base64_variants.ORIGINAL,
+      ),
+      keys.publicKey,
+      keys.privateKey,
+    )),
+    "SECRET_SOURCE-snapshot",
+  );
+});
+
 Deno.test("creation deferral result is explicit and fresh plans resume only remaining deltas", async () => {
   const github = new GitHub();
   github.override = ({ path }) => {
@@ -2136,7 +2437,7 @@ Deno.test("creation deferral result is explicit and fresh plans resume only rema
   assertEquals(resumed.operations.map(({ type }) => type), ["create-ruleset"]);
 });
 
-for (const failure of ["runtime", "state_read", "metadata"] as const) {
+for (const failure of ["state_read", "metadata"] as const) {
   Deno.test(`creation retains configured deferred recovery work after ${failure} failure`, async () => {
     const github = new GitHub();
     github.override = ({ method, path }) => {
@@ -2149,9 +2450,10 @@ for (const failure of ["runtime", "state_read", "metadata"] as const) {
         return Response.json({ message: "Forbidden" }, { status: 403 });
       }
     };
-    const result = await run(
-      github,
-      configuration({
+    const result = await createRepository({
+      template: "services",
+      name: "api-orders",
+      configuration: configuration({
         settings: { defaultBranch: "trunk", archived: true },
         files: { "obsolete.txt": { ensure: "absent" } },
         rulesets: [{
@@ -2163,11 +2465,11 @@ for (const failure of ["runtime", "state_read", "metadata"] as const) {
           },
           rules: [],
         }],
-        ...(failure === "runtime" && {
-          actions: { variables: [{ from: "MISSING", to: "RUNTIME" }] },
-        }),
       }),
-    );
+    }, {
+      client: github.client(),
+      bootstrap: github.bootstrap,
+    });
     assertEquals(
       result.status,
       failure === "metadata" ? "metadata_failed" : "reconciliation_failed",
@@ -2449,6 +2751,7 @@ Deno.test("CLI creation text and JSON preserve partial failure exit codes", asyn
         "internal",
         "--path",
         "tests/fixtures/creation-preview",
+        "--skip-missing-values",
         "--format",
         format,
       ], {

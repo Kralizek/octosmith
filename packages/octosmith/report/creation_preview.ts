@@ -86,7 +86,10 @@ export function renderRepositoryCreationPreview(
       ...preview.deferred.map((item) => "  " + item.code + ": " + item.reason),
     );
   }
-  if (preview.diagnostics.length || preview.validation.diagnostics.length) {
+  if (
+    preview.diagnostics.length || preview.validation.diagnostics.length ||
+    preview.runtimeDiagnostics?.length || preview.runtimeError
+  ) {
     lines.push(
       "",
       "Diagnostics:",
@@ -96,6 +99,10 @@ export function renderRepositoryCreationPreview(
       ...preview.validation.diagnostics.map((diagnostic) =>
         "  " + renderRuntimeReferenceDiagnostic(diagnostic)
       ),
+      ...(preview.runtimeDiagnostics ?? []).map((diagnostic) =>
+        "  " + renderRuntimeReferenceDiagnostic(diagnostic)
+      ),
+      ...(preview.runtimeError ? ["  Error: " + preview.runtimeError] : []),
     );
   }
   lines.push(

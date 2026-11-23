@@ -533,7 +533,7 @@ function createCli(
           )
           .option(
             "--skip-missing-values",
-            "Skip unavailable runtime values during reconciliation.",
+            "Skip unavailable runtime values during preflight and reconciliation.",
           )
           .option("-p, --path <path:string>", "Configuration directory.", {
             default: ".",
@@ -688,17 +688,26 @@ function createCli(
               loaded,
               input,
             );
+            const preview = buildRepositoryCreationPreview(
+              loaded,
+              specification,
+              {
+                values: options.runtime?.value ?? environmentValue,
+                includeSecrets: commandOptions.includeSecrets,
+                skipMissingValues: commandOptions.skipMissingValues,
+              },
+            );
             const rendered = renderOutput(
               format,
-              buildRepositoryCreationPreview(loaded, specification),
+              preview,
               renderRepositoryCreationPreview,
             );
-            if (format === "json" || specification.ready) {
+            if (format === "json" || preview.ready) {
               write(rendered);
             } else {
               writeError(rendered);
             }
-            if (!specification.ready) {
+            if (!preview.ready) {
               throw new ApplyFailedError();
             }
           }),

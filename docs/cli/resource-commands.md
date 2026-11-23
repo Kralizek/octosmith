@@ -106,6 +106,8 @@ octosmith resource create services --format json --path ./configuration
 octosmith resource create services --dry-run --path ./configuration
 octosmith resource create services --name team-orders-svcs --visibility internal --dry-run
 octosmith resource create services --dry-run --format json
+octosmith resource create services --name api-service --visibility private --skip-missing-values
+octosmith resource create services --name api-service --visibility private --skip-missing-values --dry-run --format json
 ```
 
 Without `--dry-run`, creation **mutates GitHub** using the same authentication
@@ -164,13 +166,27 @@ or retries an existing repository.
 Immediate reconciliation includes repository settings (except deferred fields),
 team permissions, custom properties, Actions settings/OIDC/variables/secrets,
 Dependabot secrets, and environments and their variables/secrets. Secret,
-collection-management and runtime-value policies are unchanged; use
-`--include-secrets` or `--skip-missing-values` for the same explicit overrides.
-As with plan/apply, `--include-secrets=true` opts in and
-`--include-secrets=false` honors the configured mode. Required teams initially
-receive read access, followed by declared permissions through normal
-reconciliation. Strict collections cannot remove metadata needed for
-scope/classification; declare required entries explicitly.
+collection-management and runtime-value policies are unchanged. Both execution
+and dry-run check participating runtime-backed values in the current
+environment. Missing values fail preflight before GitHub access by default.
+Execution reads each runtime value once, before repository creation, and every
+reconciliation pass and secret write in that invocation uses this snapshot; the
+provider is not queried again. With `--skip-missing-values`, only bindings with
+unavailable runtime values are skipped; other resources and bootstrap continue.
+Existing remote values are preserved, including under strict collection
+management. The text and JSON diagnostics identify skipped bindings and reasons
+without exposing values. This is an invocation-only exclusion, not persistent
+pending work: a later normal plan/apply with the values available reconciles
+them.
+
+The secret policy is independent: `--include-secrets=true` opts into secrets
+under manual policy and `--include-secrets=false` honors the configured mode.
+Policy-excluded secrets are reported separately and are not checked or marked as
+missing. Invalid configuration and other provider failures remain errors even
+with `--skip-missing-values`. Required teams initially receive read access,
+followed by declared permissions through normal reconciliation. Strict
+collections cannot remove metadata needed for scope/classification; declare
+required entries explicitly.
 
 Git bootstrap uses a private temporary workspace and Git installed on `PATH`. It
 creates exactly one commit, authored and committed by
@@ -287,9 +303,9 @@ against an imaginary repository. Text and JSON report:
   separately reported creation requirements. Collection and secret policies are
   included; manual-policy secrets remain excluded unless execution opts in.
 - Deferred execution-time work: name availability, remote classification
-  verification, exact GitHub reconciliation, and runtime-backed values. Secret
-  and variable values, runtime credentials, and managed-file contents are
-  omitted.
+  verification, and exact GitHub reconciliation. Runtime availability is checked
+  locally, but can change before execution. Secret and variable values, runtime
+  credentials, and managed-file contents are omitted.
 
 Default-branch precedence is template `repository.settings.default_branch`, then
 the organization's default repository branch, then GitHub's documented fallback.
@@ -303,8 +319,7 @@ it reports prospective naming patterns and diagnostics instead of generating a
 name just for display. It still fails with a nonzero exit status; JSON remains
 structured on failures. No filesystem writes, Git commands, commits, pushes, or
 bootstrap commands are executed or probed by preview. Commands also never run
-during ordinary plan/apply, validation, or inspection. Assisted prompting (#113)
-remains a future milestone.
+during ordinary plan/apply, validation, or inspection.
 
 Preview JSON uses `kind: repository_creation_preview` and `version: 1`,
 including unresolved preflight results (`ready: false`). If configuration cannot

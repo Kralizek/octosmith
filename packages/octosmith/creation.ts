@@ -15,12 +15,10 @@ import {
   type RepositoryMetadata,
   resolveDesiredState,
   type RuntimeValueProvider,
-  shouldIncludeSecrets,
 } from "./configuration/resolve.ts";
 import {
   collectRuntimeReferences,
   MissingRuntimeValueError,
-  preflightRuntimeReferences,
   type RuntimeReference,
   type RuntimeReferenceDiagnostic,
   RuntimeReferenceError,
@@ -28,6 +26,7 @@ import {
   secretPolicyDiagnostics,
   withoutSkippedRuntimeValues,
 } from "./configuration/runtime_references.ts";
+import { checkCreationRuntimeReferences } from "./configuration/creation_runtime.ts";
 import { applyPlan } from "./github/apply.ts";
 import { type GitHubClient, GitHubRequestError } from "./github/client.ts";
 import {
@@ -125,6 +124,7 @@ export interface RepositoryCreationResult {
   readonly error?: { readonly message: string; readonly httpStatus?: number };
   readonly recovery?: string;
   readonly specification?: RepositoryCreationSpecification;
+  readonly runtimeDiagnostics?: readonly RuntimeReferenceDiagnostic[];
   readonly deferred: readonly RepositoryCreationDeferredWork[];
   readonly report?: Report;
   readonly bootstrap?: GitBootstrapResult;
@@ -142,6 +142,7 @@ export async function createRepository(
   let organization: string | undefined;
   let ownerType: "organization" | "user" | undefined;
   let specification: RepositoryCreationSpecification | undefined;
+  let runtimeDiagnostics: readonly RuntimeReferenceDiagnostic[] | undefined;
   let repository: CreatedRepository | undefined;
   let report: Report | undefined;
   let deferredReport: Report | undefined;
@@ -181,6 +182,7 @@ export async function createRepository(
     }),
     ...(recovery !== undefined && { recovery }),
     specification,
+    ...(runtimeDiagnostics !== undefined && { runtimeDiagnostics }),
     deferred,
     report,
     bootstrap,
@@ -207,6 +209,26 @@ export async function createRepository(
         ),
       );
     }
+    const runtimePreflight = checkCreationRuntimeReferences(
+      loaded,
+      specification,
+      {
+        values: options.values ?? missingValue,
+        secretValues: options.secretValues,
+        includeSecrets: request.includeSecrets,
+        skipMissingValues: request.skipMissingValues,
+      },
+    );
+    runtimeDiagnostics = runtimePreflight.diagnostics;
+    if (runtimePreflight.error || !runtimePreflight.snapshot) {
+      return result(
+        "preflight_rejected",
+        new CreationStageError(
+          runtimePreflight.error ?? "Required runtime values are unavailable.",
+        ),
+      );
+    }
+    const runtime = runtimePreflight.snapshot;
     const transport = options.bootstrap;
     if (!transport || typeof transport.bootstrap !== "function") {
       throw new CreationStageError(
@@ -280,13 +302,11 @@ export async function createRepository(
       files: Object.keys(configured.files ?? {}).map((path) => ({ path })),
     }, true));
     stage = "metadata";
-    const values = options.values ?? missingValue;
-    const secretValues = options.secretValues ?? values;
     const sink = new GitHubRepositoryMutationSink({
       client,
       owner: organization,
       ownerType: resolvedOwner.type,
-      secretValue: secretValues,
+      secretValue: runtime.secretValues,
       scope: "github-only",
       fileChanges: loaded.configuration.repositories.fileChanges,
     });
@@ -369,30 +389,13 @@ export async function createRepository(
       const diagnostics: RuntimeReferenceDiagnostic[] = [];
       let repositoryReport: RepositoryReport;
       try {
-        const skippedRuntimeReferences: RuntimeReference[] = [];
-        const includeSecrets = shouldIncludeSecrets(
-          loaded.configuration,
-          request.includeSecrets,
-        );
-        const runtimeValues = preflightRuntimeReferences(
-          selected.template,
-          loaded.templates[selected.template],
-          actual,
-          values,
-          {
-            secretValues,
-            includeSecrets,
-            skipMissingValues: request.skipMissingValues,
-            onSkipped: (reference, diagnostic) => {
-              skippedRuntimeReferences.push(reference);
-              diagnostics.push(diagnostic);
-            },
-          },
-        );
+        const skippedRuntimeReferences = runtime.skippedReferences;
+        const includeSecrets = runtime.includeSecrets;
+        diagnostics.push(...runtime.skippedDiagnostics);
         const resolved = await resolveDesiredState(
           loaded,
           actual,
-          runtimeValues,
+          runtime.values,
           {
             skippedRuntimeReferences,
             includeSecrets,
