@@ -52,7 +52,7 @@ import {
   type PullRequestResult,
   uniquePullRequests,
 } from "@octosmith/octosmith";
-import { type GitHubTokenOptions, resolveGitHubToken } from "./auth.ts";
+import { type GitHubTokenOptions, resolveGitHubCredential } from "./auth.ts";
 import { parseOutputFormat, renderOutput } from "./output.ts";
 import {
   parsePermissionOutputFormat,
@@ -635,6 +635,10 @@ function createCli(
                     return runtime.client;
                   },
                   values: options.runtime?.value ?? environmentValue,
+                  // Read lazily: the credential is resolved after preflight.
+                  get credentialSource() {
+                    return creationRuntime?.credentialSource;
+                  },
                   bootstrap: {
                     bootstrap: (request) => {
                       const transport = options.bootstrap ??
@@ -962,12 +966,13 @@ async function createDefaultRuntime(
   credentials?: GitHubTokenOptions,
   fetch?: typeof globalThis.fetch,
 ): Promise<ApplyRuntime> {
-  const token = await resolveGitHubToken(credentials);
+  const { token, source } = await resolveGitHubCredential(credentials);
 
   let firstTraceGroup = true;
 
   return createGitHubRuntime({
     token,
+    credentialSource: source,
     fetch,
     ...(trace && {
       traceGroup: (name) => {

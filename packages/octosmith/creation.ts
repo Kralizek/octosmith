@@ -27,6 +27,10 @@ import {
   withoutSkippedRuntimeValues,
 } from "./configuration/runtime_references.ts";
 import { checkCreationRuntimeReferences } from "./configuration/creation_runtime.ts";
+import {
+  type GitHubCredentialSource,
+  workflowPermissionRemediation,
+} from "./workflow_permission.ts";
 import { applyPlan } from "./github/apply.ts";
 import { type GitHubClient, GitHubRequestError } from "./github/client.ts";
 import {
@@ -102,6 +106,8 @@ export interface CreateRepositoryOptions extends RepositoryCreationOptions {
   readonly values?: RuntimeValueProvider;
   readonly secretValues?: RuntimeValueProvider;
   readonly bootstrap?: RepositoryGitBootstrap;
+  /** Tailors permission remediation; omit when the credential source is unknown. */
+  readonly credentialSource?: GitHubCredentialSource;
 }
 
 /** Safe, composable lifecycle result; no operations or file/runtime contents. */
@@ -701,9 +707,11 @@ export async function createRepository(
               ? ""
               : "; post-create command #" + bootstrap.failedCommand) +
             (bootstrap.failure === "workflow_permission"
-              ? "; GitHub refused workflow files because the token lacks the `workflow` scope (classic/OAuth tokens, e.g. `gh auth refresh -s workflow`) or Workflows: write (fine-grained tokens and GitHub Apps)"
+              ? "; GitHub refused the initial commit because it adds workflow files. " +
+                workflowPermissionRemediation(options.credentialSource)
               : "") +
-            "; raw subprocess diagnostics and arguments are omitted.",
+            (bootstrap.failure === "workflow_permission" ? " Raw" : "; raw") +
+            " subprocess diagnostics and arguments are omitted.",
         ),
         bootstrap.pushConfirmed
           ? "Repository bootstrapped and retained. Do not rerun resource create. Inspect local temporary storage for the cleanup failure, verify remote state and finish deferred GitHub-side work with a fresh ordinary plan/apply."

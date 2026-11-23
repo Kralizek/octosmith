@@ -5,6 +5,7 @@ import {
   type DesiredState,
   type ExecutableResourcePlan,
   fileExecutionBranch,
+  type GitHubCredentialSource,
   hashCanonical,
   inspectResource,
   type LoadedConfiguration,
@@ -54,6 +55,8 @@ export interface ApplyRuntime {
   readonly client?: GitHubClient;
   readonly value?: RuntimeValueProvider;
   readonly bootstrap?: RepositoryGitBootstrap;
+  /** Mechanism that supplied the credential, when known. */
+  readonly credentialSource?: GitHubCredentialSource;
 
   /** Resolve online owner identity for organization saved-plan replay. */
   resolveOwner?(loaded: LoadedConfiguration): Promise<GitHubOwner>;
@@ -81,6 +84,7 @@ export interface ApplyRuntime {
 /** Describes GitHub runtime options. */
 export interface GitHubRuntimeOptions {
   readonly token: string;
+  readonly credentialSource?: GitHubCredentialSource;
   readonly secretValue?: RuntimeValueProvider;
   readonly baseUrl?: string;
   readonly fetch?: typeof globalThis.fetch;
@@ -123,6 +127,7 @@ export function createGitHubRuntime(
   return {
     client,
     value: secretValue,
+    credentialSource: options.credentialSource,
     resolveOwner,
     bootstrap: new LocalGitBootstrap({
       token: () => options.token,
@@ -165,6 +170,7 @@ export function createGitHubRuntime(
         ownerType: owner.type,
         secretValue,
         fileChanges,
+        credentialSource: options.credentialSource,
       });
       preparedSinks.clear();
 

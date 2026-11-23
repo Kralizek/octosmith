@@ -1,5 +1,5 @@
 import { assertEquals, assertRejects, assertStringIncludes } from "@std/assert";
-import { resolveGitHubToken } from "./auth.ts";
+import { resolveGitHubCredential, resolveGitHubToken } from "./auth.ts";
 
 function output(code: number, stdout = "", stderr = ""): Deno.CommandOutput {
   const encoder = new TextEncoder();
@@ -57,6 +57,32 @@ for (
     );
   });
 }
+
+Deno.test("credential resolution reports which mechanism supplied the token", async () => {
+  const gh = () => Promise.resolve(output(0, "cli-secret\n"));
+  assertEquals(
+    await resolveGitHubCredential({
+      explicitToken: "explicit-secret",
+      getEnv: () => "environment-secret",
+      runGhAuthToken: gh,
+    }),
+    { token: "explicit-secret", source: "explicit" },
+  );
+  assertEquals(
+    await resolveGitHubCredential({
+      getEnv: (name) => name === "GITHUB_TOKEN" ? "environment-secret" : "",
+      runGhAuthToken: gh,
+    }),
+    { token: "environment-secret", source: "environment" },
+  );
+  assertEquals(
+    await resolveGitHubCredential({
+      getEnv: () => undefined,
+      runGhAuthToken: gh,
+    }),
+    { token: "cli-secret", source: "gh" },
+  );
+});
 
 Deno.test("GitHub CLI token is trimmed before use", async () => {
   assertEquals(

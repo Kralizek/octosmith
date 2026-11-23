@@ -148,6 +148,19 @@ Apply is not transactional. If one operation fails, earlier operations for that
 repository may already have been applied. Remaining operations for that
 repository are skipped, and Octosmith stops before mutating later repositories.
 
+Changing managed files under `.github/workflows/` requires a credential that can
+modify workflows: the `workflow` scope for classic personal access and OAuth
+tokens, or Workflows: write for fine-grained tokens and GitHub Apps. GitHub
+often reports a missing permission on these writes as HTTP 404 rather than 403.
+When a direct or pull-request delivery write that includes workflow files fails
+this way, the error names the workflow paths and how to grant the permission. It
+states the cause as confirmed only when GitHub's refusal message or the token
+scopes reported with the response show it; otherwise it says the cause is
+unconfirmed. Advice to run `gh auth refresh` appears only when the token came
+from `gh auth token`; explicitly supplied tokens and `GITHUB_TOKEN` must be
+replaced at their source. Other failures, including unrelated 403 responses,
+keep their existing diagnostics, and response bodies are never included.
+
 ## Secret opt-in
 
 Both `plan` and fresh `apply` accept an optional boolean:
