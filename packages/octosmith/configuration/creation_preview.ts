@@ -1,6 +1,9 @@
 import type { LoadedConfiguration } from "./load.ts";
 import type { RepositoryCreationSpecification } from "./creation.ts";
 import type { RepositoryVisibility } from "../types.ts";
+import { checkCreationRuntimeReferences } from "./creation_runtime.ts";
+import type { RuntimeValueProvider } from "./resolve.ts";
+import type { RuntimeReferenceDiagnostic } from "./runtime_references.ts";
 
 /** A concise projection of configured intent, never a reconciliation delta. */
 export interface RepositoryCreationResourceSummary {
@@ -55,6 +58,8 @@ export interface RepositoryCreationPreview {
   readonly choices: RepositoryCreationSpecification["choices"];
   readonly diagnostics: RepositoryCreationSpecification["diagnostics"];
   readonly validation: RepositoryCreationSpecification["validation"];
+  readonly runtimeDiagnostics?: readonly RuntimeReferenceDiagnostic[];
+  readonly runtimeError?: string;
   readonly identity?: {
     readonly name: string;
     readonly nameOrigin: "explicit" | "generated";
@@ -85,13 +90,23 @@ export interface RepositoryCreationPreview {
 
 /**
  * Project a preflight specification and its composed template into offline intent.
- * Use the same loaded configuration as preflight. No runtime values are resolved,
- * file contents read, or current-state/reconciliation operations calculated here.
+ * Use the same loaded configuration as preflight. If a value provider is supplied,
+ * check runtime availability without exposing values. No file contents or current
+ * state are read, and no reconciliation operations are calculated here.
  */
 export function buildRepositoryCreationPreview(
   loaded: LoadedConfiguration,
   specification: RepositoryCreationSpecification,
+  options?: {
+    readonly values: RuntimeValueProvider;
+    readonly secretValues?: RuntimeValueProvider;
+    readonly includeSecrets?: boolean;
+    readonly skipMissingValues?: boolean;
+  },
 ): RepositoryCreationPreview {
+  const runtime = options && specification.ready
+    ? checkCreationRuntimeReferences(loaded, specification, options)
+    : undefined;
   const base = {
     kind: "repository_creation_preview" as const,
     version: 1 as const,
@@ -100,10 +115,17 @@ export function buildRepositoryCreationPreview(
       ownerType: "user" as const,
     }),
     template: specification.template,
-    ready: specification.ready,
+    ready: specification.ready && runtime?.error === undefined,
     choices: specification.choices,
     diagnostics: specification.diagnostics,
-    validation: specification.validation,
+    validation: runtime === undefined ? specification.validation : {
+      ...specification.validation,
+      diagnostics: specification.validation.diagnostics.filter(({ code }) =>
+        code !== "unresolved_variable" && code !== "unresolved_secret"
+      ),
+    },
+    ...(runtime !== undefined && { runtimeDiagnostics: runtime.diagnostics }),
+    ...(runtime?.error !== undefined && { runtimeError: runtime.error }),
     secretPolicy: loaded.configuration.repositories.settings?.secrets ??
       "automatic",
     collectionManagement:
@@ -266,14 +288,15 @@ export function buildRepositoryCreationPreview(
         reason:
           "Exact API changes require organization/repository state after creation; no deltas, commits, or pull requests are planned.",
       },
-      ...(hasVariables || (hasSecrets && base.secretPolicy === "automatic")
+      ...(runtime === undefined &&
+          (hasVariables || (hasSecrets && base.secretPolicy === "automatic"))
         ? [{
           code: "runtime_values" as const,
           reason:
             "Resolve runtime-backed values and secret availability during execution; values are omitted from this preview.",
         }]
         : []),
-      ...(hasSecrets && base.secretPolicy === "manual"
+      ...(runtime === undefined && hasSecrets && base.secretPolicy === "manual"
         ? [{
           code: "secret_policy" as const,
           reason:

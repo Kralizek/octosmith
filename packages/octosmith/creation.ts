@@ -28,6 +28,7 @@ import {
   secretPolicyDiagnostics,
   withoutSkippedRuntimeValues,
 } from "./configuration/runtime_references.ts";
+import { checkCreationRuntimeReferences } from "./configuration/creation_runtime.ts";
 import { applyPlan } from "./github/apply.ts";
 import { type GitHubClient, GitHubRequestError } from "./github/client.ts";
 import {
@@ -125,6 +126,7 @@ export interface RepositoryCreationResult {
   readonly error?: { readonly message: string; readonly httpStatus?: number };
   readonly recovery?: string;
   readonly specification?: RepositoryCreationSpecification;
+  readonly runtimeDiagnostics?: readonly RuntimeReferenceDiagnostic[];
   readonly deferred: readonly RepositoryCreationDeferredWork[];
   readonly report?: Report;
   readonly bootstrap?: GitBootstrapResult;
@@ -142,6 +144,7 @@ export async function createRepository(
   let organization: string | undefined;
   let ownerType: "organization" | "user" | undefined;
   let specification: RepositoryCreationSpecification | undefined;
+  let runtimeDiagnostics: readonly RuntimeReferenceDiagnostic[] | undefined;
   let repository: CreatedRepository | undefined;
   let report: Report | undefined;
   let deferredReport: Report | undefined;
@@ -181,6 +184,7 @@ export async function createRepository(
     }),
     ...(recovery !== undefined && { recovery }),
     specification,
+    ...(runtimeDiagnostics !== undefined && { runtimeDiagnostics }),
     deferred,
     report,
     bootstrap,
@@ -205,6 +209,23 @@ export async function createRepository(
         new CreationStageError(
           "Preflight rejected; resolve the specification diagnostics before creating a repository.",
         ),
+      );
+    }
+    const runtimePreflight = checkCreationRuntimeReferences(
+      loaded,
+      specification,
+      {
+        values: options.values ?? missingValue,
+        secretValues: options.secretValues,
+        includeSecrets: request.includeSecrets,
+        skipMissingValues: request.skipMissingValues,
+      },
+    );
+    runtimeDiagnostics = runtimePreflight.diagnostics;
+    if (runtimePreflight.error) {
+      return result(
+        "preflight_rejected",
+        new CreationStageError(runtimePreflight.error),
       );
     }
     const transport = options.bootstrap;

@@ -1,5 +1,6 @@
 import type { RepositoryCreationResult } from "../creation.ts";
 import { renderReport } from "./render.ts";
+import { renderRuntimeReferenceDiagnostic } from "../configuration/runtime_references.ts";
 
 /** Render lifecycle stages separately from the ordinary reconciliation report. */
 export function renderRepositoryCreationResult(
@@ -56,6 +57,7 @@ export function renderRepositoryCreationResult(
     ...(result.specification?.diagnostics.map((diagnostic) =>
       `${diagnostic.code}: ${diagnostic.message}`
     ) ?? []),
+    ...(result.runtimeDiagnostics ?? []).map(renderRuntimeReferenceDiagnostic),
     ...(result.recovery ? [`Recovery: ${result.recovery}`] : []),
     ...result.deferred.map((work) =>
       `Deferred ${work.resource} (${work.targets.join(", ")}): ${work.reason}`

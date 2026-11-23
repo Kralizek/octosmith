@@ -181,6 +181,13 @@ commands:
       remain failures. The shared generator resolves selected naming strategies.
       The resolved name is passed explicitly into final creation preflight so it
       is not generated twice. Collisions fail without retry or adoption.
+      Execution and offline preview check participating runtime values locally.
+      Missing values fail preflight by default. With --skip-missing-values,
+      unavailable bindings are reported and omitted for this invocation while
+      existing remote values are preserved and other work continues. Manual
+      secret policy remains independent unless --include-secrets opts in.
+      A later normal plan/apply can reconcile values when available. Diagnostics
+      omit values; provider and configuration errors remain fatal.
       Resolves composed files through ordinary desired-state semantics and creates
       one local commit (empty if no files) and at most one explicit branch push.
       Structured repository.post_create_commands run only during actual creation,
@@ -242,7 +249,7 @@ commands:
         summary: Include secrets; explicit false honors configuration.
       - name: skip-missing-values
         type: boolean
-        summary: Skip unavailable runtime values during reconciliation.
+        summary: Skip and report unavailable runtime values during preflight and reconciliation; preserve existing values.
       - name: path
         aliases: [p]
         type: string
@@ -268,6 +275,9 @@ commands:
       - title: Preview with a provisional generated name as structured JSON
         content: |
           $ octosmith resource create services --dry-run --format json
+      - title: Preview while excluding unavailable runtime values
+        content: |
+          $ octosmith resource create services --name api-service --visibility private --skip-missing-values --dry-run --format json
 
   octosmith template:
     kind: group

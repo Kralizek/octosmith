@@ -374,7 +374,7 @@ export function describeRuntimeReferenceDiagnostic(
 
 /** Describe policy exclusion without enumerating individual secret bindings. */
 export function secretPolicyDiagnostics(
-  desired: DesiredState,
+  desired: Pick<DesiredState, "secretsExcluded" | "template" | "repository">,
 ): readonly RuntimeReferenceDiagnostic[] {
   return desired.secretsExcluded
     ? [{

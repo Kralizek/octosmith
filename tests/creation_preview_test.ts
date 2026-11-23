@@ -3,6 +3,7 @@ import {
   buildRepositoryCreationPreview,
   loadConfigurationDirectory,
   type LoadedConfiguration,
+  MissingRuntimeValueError,
   preflightRepositoryCreation,
   renderRepositoryCreationPreview,
   type RepositoryCreationInput,
@@ -11,8 +12,27 @@ import {
 } from "../packages/octosmith/mod.ts";
 import { main } from "../packages/cli/mod.ts";
 import { renderOutput } from "../packages/cli/output.ts";
+import type { ApplyRuntime } from "../packages/cli/apply.ts";
 
 const fixture = "tests/fixtures/creation-preview";
+const offlineRuntime: ApplyRuntime = {
+  value: () => "AVAILABLE-VALUE-SENTINEL",
+  discover: () => {
+    throw new Error("Unexpected discovery");
+  },
+  read: () => {
+    throw new Error("Unexpected read");
+  },
+  prepare: () => {
+    throw new Error("Unexpected prepare");
+  },
+  recheck: () => {
+    throw new Error("Unexpected recheck");
+  },
+  apply: () => {
+    throw new Error("Unexpected apply");
+  },
+};
 
 function configuration(
   include: RepositorySelector | "all" = {
@@ -441,6 +461,7 @@ Deno.test({
             ...args,
           ],
           {
+            runtime: offlineRuntime,
             credentials: { getEnv: forbidden, runGhAuthToken: forbidden },
             bootstrap: { bootstrap: forbidden },
             fetch: forbidden,
@@ -498,6 +519,7 @@ Deno.test("resource create dry-run text reports intent and fails strictly on amb
         "--dry-run",
         ...(ready ? ["--visibility", "internal"] : []),
       ], {
+        runtime: offlineRuntime,
         write: (value) => output.push(value),
         writeError: (value) => errors.push(value),
       }),
@@ -507,6 +529,102 @@ Deno.test("resource create dry-run text reports intent and fails strictly on amb
     assertStringIncludes(text, "Repository creation preview");
     assertStringIncludes(text, ready ? "Bootstrap:" : "visibility_ambiguous");
     if (ready) assertStringIncludes(text, "not reserved");
+  }
+});
+
+Deno.test("creation dry-run checks runtime values and secret policy in text and JSON", async () => {
+  for (const format of ["text", "json"]) {
+    for (const skip of [false, true]) {
+      const output: string[] = [];
+      const errors: string[] = [];
+      const status = await main([
+        "resource",
+        "create",
+        "services",
+        "--name",
+        "team-orders-svcs",
+        "--visibility",
+        "internal",
+        "--path",
+        fixture,
+        "--dry-run",
+        "--format",
+        format,
+        ...(skip ? ["--skip-missing-values"] : []),
+      ], {
+        runtime: {
+          ...offlineRuntime,
+          value: (name) => {
+            if (name === "BUILD_VALUE") return "PRIVATE-AVAILABLE-VALUE";
+            throw new MissingRuntimeValueError(name);
+          },
+        },
+        write: (value) => output.push(value),
+        writeError: (value) => errors.push(value),
+      });
+      assertEquals(status, skip ? 0 : 1);
+      const rendered = (format === "json" || skip ? output : errors).join("\n");
+      assertEquals(rendered.includes("PRIVATE-AVAILABLE-VALUE"), false);
+      assertStringIncludes(rendered, "DEPENDABOT_TOKEN");
+      assertStringIncludes(rendered, "DEPLOY_REGION");
+      assertStringIncludes(
+        rendered,
+        format === "json"
+          ? skip ? "skipped_secret" : "missing_secret"
+          : skip
+          ? "Skipped secret"
+          : "Required secret",
+      );
+      if (format === "json") {
+        const result = JSON.parse(rendered) as RepositoryCreationPreview;
+        assertEquals(result.ready, skip);
+        assertEquals(result.runtimeDiagnostics?.length, 4);
+        assertEquals(
+          result.runtimeDiagnostics?.some(({ name }) => name === "BUILD_VALUE"),
+          false,
+        );
+      }
+    }
+  }
+});
+
+Deno.test("creation preview separates manual policy exclusions from unavailable inputs", async () => {
+  const original = await loadConfigurationDirectory(fixture);
+  const loaded = {
+    ...original,
+    configuration: {
+      ...original.configuration,
+      repositories: {
+        ...original.configuration.repositories,
+        settings: { secrets: "manual" as const },
+      },
+    },
+  };
+  const specification = await preflightRepositoryCreation(loaded, {
+    template: "services",
+    name: "team-orders-svcs",
+    visibility: "internal",
+  });
+  for (const includeSecrets of [false, true]) {
+    const result = buildRepositoryCreationPreview(loaded, specification, {
+      values: (name) => {
+        throw new MissingRuntimeValueError(name);
+      },
+      includeSecrets,
+      skipMissingValues: true,
+    });
+    assertEquals(result.ready, true);
+    assertEquals(
+      result.runtimeDiagnostics?.filter(({ code }) => code === "skipped_secret")
+        .length,
+      includeSecrets ? 3 : 0,
+    );
+    assertEquals(
+      result.runtimeDiagnostics?.some(({ code }) =>
+        code === "excluded_secrets"
+      ),
+      !includeSecrets,
+    );
   }
 });
 
