@@ -152,6 +152,13 @@ stop immediately. Arguments and subprocess output never enter reports. Workspace
 cleanup still runs, but external side effects cannot be rolled back; repair and
 initialize the retained repository manually, then use ordinary plan/apply, never
 retry create. `push_unknown` explicitly means remote changes may have occurred.
+`workflow_permission` means GitHub's push response explicitly refused workflow
+files (the credential lacks the `workflow` scope or Workflows: write); no
+content was pushed. Pass `credentialSource` (`"explicit"`, `"environment"` or
+`"gh"`) in the creation options to tailor the remediation; without it the
+guidance stays generic. The same source can be given to
+`GitHubRepositoryMutationSink`, which explains REST workflow-file write failures
+during managed-file delivery using `describeWorkflowWriteFailure`.
 `deferredReconciliationAttempted` and `deferredReport` distinguish successful
 content delivery from complete creation. Never rerun create for a retained
 repository; inspect uncertain pushes against the SHA, repair content manually if

@@ -49,8 +49,18 @@ export class GitHubRequestError extends Error {
   readonly statusText: string;
   readonly body: string;
   readonly details?: GitHubErrorBody;
+  /** Classic/OAuth token scopes GitHub reported; undefined when not reported. */
+  readonly oauthScopes?: readonly string[];
+  /** HTTP method of the failed request, when known. */
+  readonly method?: string;
 
-  constructor(status: number, statusText: string, body: string) {
+  constructor(
+    status: number,
+    statusText: string,
+    body: string,
+    oauthScopes?: readonly string[],
+    method?: string,
+  ) {
     super(
       "GitHub API request failed: " + status + " " +
         statusText + (body ? " - " + body : ""),
@@ -60,6 +70,8 @@ export class GitHubRequestError extends Error {
     this.statusText = statusText;
     this.body = body;
     this.details = parseGitHubErrorBody(body);
+    if (oauthScopes !== undefined) this.oauthScopes = oauthScopes;
+    if (method !== undefined) this.method = method;
   }
 }
 
@@ -143,6 +155,8 @@ export class FetchGitHubClient implements GitHubClient {
         response.status,
         response.statusText,
         body,
+        parseOAuthScopes(response.headers.get("x-oauth-scopes")),
+        method,
       );
     }
 
@@ -154,6 +168,17 @@ export class FetchGitHubClient implements GitHubClient {
 
     return text ? JSON.parse(text) as T : undefined as T;
   }
+}
+
+// Fine-grained and GitHub App tokens have no OAuth scopes; an absent or empty
+// header is treated as unknown rather than as "no scopes".
+function parseOAuthScopes(
+  header: string | null,
+): readonly string[] | undefined {
+  const scopes = header?.split(",").map((scope) => scope.trim()).filter(
+    Boolean,
+  );
+  return scopes && scopes.length > 0 ? scopes : undefined;
 }
 
 function parseGitHubErrorBody(body: string): GitHubErrorBody | undefined {

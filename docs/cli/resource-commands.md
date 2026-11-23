@@ -275,12 +275,20 @@ one-based `failedCommand` ordinal, omitting sensitive arguments and raw output.
 Later commands and all content delivery stop; `pushAttempted` remains false. The
 remote is retained and external command side effects are not rolled back. For a
 rejected push, repair the permissions/policy and inspect remote state before
-manually pushing the intended initial commit. For `push_unknown` (for example a
-lost connection after sending), remote changes are uncertain: compare the
-reported initial SHA with GitHub's branch head before taking any action. Never
-force-push or assume the repository is empty. After a confirmed push with failed
-deferred work, repair the reported failure and run fresh plan/apply; verify/set
-the resolved default branch first if that operation failed and ongoing drift
+manually pushing the intended initial commit. A push that GitHub explicitly
+refuses because the commit adds workflow files (its "refusing to allow ... to
+create or update workflow" message) is reported as `workflow_permission`; other
+rejections remain `push_rejected` and credential failures remain
+`authentication`. The `workflow_permission` remediation names the `workflow`
+scope (classic and OAuth tokens) or Workflows: write (fine-grained tokens and
+GitHub Apps), and suggests `gh auth refresh -h github.com -s workflow` only when
+the token came from `gh auth token`; a `GITHUB_TOKEN` or explicitly supplied
+token must be replaced at its source. For `push_unknown` (for example a lost
+connection after sending), remote changes are uncertain: compare the reported
+initial SHA with GitHub's branch head before taking any action. Never force-push
+or assume the repository is empty. After a confirmed push with failed deferred
+work, repair the reported failure and run fresh plan/apply; verify/set the
+resolved default branch first if that operation failed and ongoing drift
 enforcement is disabled. Unarchive manually if needed before repairs. A cleanup
 warning requires inspecting local temporary storage. After a lost creation
 response, inspect GitHub before explicitly retrying.

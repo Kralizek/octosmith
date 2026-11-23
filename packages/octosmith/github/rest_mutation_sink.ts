@@ -30,6 +30,10 @@ import {
   assertNoBootstrapFileDeclarations,
   BOOTSTRAP_FILE_PATH,
 } from "../state/bootstrap.ts";
+import {
+  describeWorkflowWriteFailure,
+  type GitHubCredentialSource,
+} from "../workflow_permission.ts";
 
 /** Describes secret value provider. */
 export type SecretValueProvider = (name: string) => string;
@@ -47,6 +51,8 @@ export interface GitHubRepositoryMutationSinkOptions {
   readonly managedFiles?: ManagedFileSnapshot;
   readonly allowClosure?: boolean;
   readonly scope?: ReconciliationScope;
+  /** Tailors permission remediation; omit when the credential source is unknown. */
+  readonly credentialSource?: GitHubCredentialSource;
 }
 
 type FileOperation = Extract<
@@ -93,6 +99,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
   readonly #allowClosure: boolean;
   readonly #bootstrap?: RepositoryBootstrap;
   readonly #scope: ReconciliationScope;
+  readonly #credentialSource?: GitHubCredentialSource;
   #bootstrapSnapshot?: ManagedFileSnapshot;
   #filesReconciled = false;
   #ownerVerification?: Promise<void>;
@@ -111,6 +118,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
     this.#fileBranch = options.fileBranch;
     this.#managedFiles = options.managedFiles;
     this.#allowClosure = options.allowClosure ?? true;
+    this.#credentialSource = options.credentialSource;
   }
 
   prepare(
@@ -170,6 +178,7 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       managedFiles: managedFiles ?? this.#managedFiles,
       allowClosure,
       scope: this.#scope,
+      credentialSource: this.#credentialSource,
       ...(fileOperations.length > 0 && {
         preparedFileChanges: {
           operations: fileOperations,
@@ -831,6 +840,12 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
           await this.onPullRequest?.(result);
         },
       }).catch((error) => {
+        const workflow = describeWorkflowWriteFailure(
+          error,
+          operations.map(filePath),
+          this.#credentialSource,
+        );
+        if (workflow !== undefined) throw new Error(workflow);
         if (error instanceof GitHubRequestError) {
           throw new Error(
             "GitHub managed-file reconciliation failed (HTTP " + error.status +
@@ -846,6 +861,28 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
       return;
     }
 
+    await this.applyDirectFileChanges(
+      repository,
+      plannedOperations,
+      operations,
+      snapshot,
+    ).catch((error) => {
+      const workflow = describeWorkflowWriteFailure(
+        error,
+        operations.map(filePath),
+        this.#credentialSource,
+      );
+      if (workflow !== undefined) throw new Error(workflow, { cause: error });
+      throw error;
+    });
+  }
+
+  private async applyDirectFileChanges(
+    repository: string,
+    plannedOperations: readonly PlannedFileOperation[],
+    operations: readonly FileOperation[],
+    snapshot: ManagedFileSnapshot | undefined,
+  ): Promise<void> {
     const repositoryPath = this.repo(repository);
     const metadata = await this.#client.get<
       { readonly default_branch: string }
@@ -1003,6 +1040,12 @@ export class GitHubRepositoryMutationSink implements RepositoryMutationSink {
 }
 
 const PAGE_SIZE = 100;
+
+function filePath(operation: FileOperation): string {
+  return operation.type === "delete-file"
+    ? operation.path
+    : operation.file.path;
+}
 
 async function getAllWrappedPages<T>(
   client: GitHubClient,

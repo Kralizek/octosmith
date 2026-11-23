@@ -1094,6 +1094,51 @@ for (
   );
 }
 
+Deno.test("workflow-permission bootstrap failures tailor remediation to the credential source", async () => {
+  for (
+    const source of [undefined, "explicit", "environment", "gh"] as const
+  ) {
+    const github = new GitHub();
+    const result = await createRepository({
+      configuration: configuration(),
+      template: "services",
+      name: "api-orders",
+    }, {
+      client: github.client(),
+      credentialSource: source,
+      bootstrap: {
+        bootstrap: (request) =>
+          Promise.resolve(
+            {
+              branch: request.branch,
+              fileCount: 1,
+              prepared: true,
+              commitCreated: true,
+              commitSha: github.sha,
+              pushAttempted: true,
+              pushConfirmed: false,
+              outcome: "failed",
+              failure: "workflow_permission",
+            } satisfies GitBootstrapResult,
+          ),
+      },
+    });
+    assertEquals(result.status, "bootstrap_failed");
+    const message = result.error!.message;
+    assertStringIncludes(message, "workflow_permission");
+    assertStringIncludes(message, "`workflow` scope");
+    assertStringIncludes(message, "Raw subprocess diagnostics");
+    assertEquals(message.includes("gh auth refresh"), source === "gh", message);
+    assertEquals(message.includes("GITHUB_TOKEN"), source === "environment");
+    const rendered = renderRepositoryCreationResult(result);
+    assertStringIncludes(rendered, "Bootstrap failure: workflow_permission");
+    assertEquals(
+      JSON.parse(JSON.stringify(result)).bootstrap.failure,
+      "workflow_permission",
+    );
+  }
+});
+
 Deno.test("invalid managed source after creation is an invalid-files bootstrap failure", async () => {
   const root = await Deno.makeTempDir();
   const source = root + "/contents.txt";

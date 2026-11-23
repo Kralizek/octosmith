@@ -2,6 +2,7 @@ import { dirname, join } from "@std/path";
 import type { DesiredFile } from "./state/types.ts";
 import { assertManagedFilePath } from "./state/file_path.ts";
 import type { PostCreateCommand } from "./configuration/types.ts";
+import { isWorkflowPermissionRefusal } from "./workflow_permission.ts";
 
 /** Stable identity and message used for the single initial commit. */
 export const INITIAL_COMMIT_IDENTITY = {
@@ -19,6 +20,7 @@ export type GitBootstrapFailure =
   | "commit"
   | "authentication"
   | "push_rejected"
+  | "workflow_permission"
   | "push_unknown"
   | "cleanup";
 
@@ -388,13 +390,14 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
       });
       if (pushed.code !== 0) {
         const diagnostic = pushed.stdout + "\n" + pushed.stderr;
-        failure =
-          /Authentication failed|could not read Username|(?:HTTP |returned error: )(401|403)|Write access .* not granted|Permission .* denied|Repository not found/i
+        failure = isWorkflowPermissionRefusal(diagnostic)
+          ? "workflow_permission"
+          : /Authentication failed|could not read Username|(?:HTTP |returned error: )(401|403)|Write access .* not granted|Permission .* denied|Repository not found/i
               .test(diagnostic)
-            ? "authentication"
-            : /\[rejected\]|\[remote rejected\]/.test(diagnostic)
-            ? "push_rejected"
-            : "push_unknown";
+          ? "authentication"
+          : /\[rejected\]|\[remote rejected\]/.test(diagnostic)
+          ? "push_rejected"
+          : "push_unknown";
         throw new Error("Push failed");
       }
       state = { ...state, pushConfirmed: true, outcome: "completed" };

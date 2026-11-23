@@ -1541,6 +1541,87 @@ Deno.test("GitHub response bodies cannot leak managed content through apply erro
   assert(!JSON.stringify(applied).includes("managed-content-must-not-leak"));
 });
 
+async function rejectWorkflowTree(
+  error: GitHubRequestError,
+  files: readonly DesiredFile[],
+  credentialSource?: "explicit" | "environment" | "gh",
+) {
+  const client = new ReconciliationClient();
+  const rejecting: GitHubClient = {
+    get: client.get.bind(client),
+    request: (method, path, options) => {
+      if (method === "POST" && path.endsWith("/git/trees")) throw error;
+      return client.request(method, path, options);
+    },
+  };
+  return await applyPlan(
+    new GitHubRepositoryMutationSink({
+      client: rejecting,
+      owner: "acme",
+      secretValue: () => "unused",
+      fileChanges: { mode: "pull_request" },
+      credentialSource,
+    }),
+    {
+      repository: "sample",
+      managedFiles: client.snapshot(files),
+      operations: client.operations(files),
+    },
+  );
+}
+
+const workflowFile = {
+  path: ".github/workflows/ci.yml",
+  ensure: "exact",
+  content: "on: push",
+} as const;
+
+Deno.test("PR delivery explains workflow-scope 404s without leaking response data", async () => {
+  const applied = await rejectWorkflowTree(
+    new GitHubRequestError(
+      404,
+      "Not Found",
+      '{"message":"Not Found","secret":"body-must-not-leak"}',
+      ["repo", "read:org"],
+      "POST",
+    ),
+    [workflowFile],
+    "gh",
+  );
+  const error = applied.operations[0].error ?? "";
+  assert(error.includes(".github/workflows/ci.yml"), error);
+  assert(error.includes("OAuth scopes do not include `workflow`"), error);
+  assert(error.includes("gh auth refresh -h github.com -s workflow"), error);
+  assert(!JSON.stringify(applied).includes("body-must-not-leak"));
+});
+
+Deno.test("PR delivery keeps generic HTTP reports for unrelated or non-workflow failures", async () => {
+  for (
+    const [error, files] of [
+      [
+        new GitHubRequestError(
+          403,
+          "Forbidden",
+          '{"message":"Resource not accessible by integration"}',
+          undefined,
+          "POST",
+        ),
+        [workflowFile],
+      ],
+      [
+        new GitHubRequestError(404, "Not Found", "{}", ["repo"], "POST"),
+        [fileA],
+      ],
+    ] as const
+  ) {
+    const applied = await rejectWorkflowTree(error, files);
+    assertEquals(
+      applied.operations[0].error,
+      "GitHub managed-file reconciliation failed (HTTP " + error.status + ")",
+    );
+  }
+});
+
 async function withCli(
   client: ReconciliationClient,
   test: (options: {

@@ -1,3 +1,5 @@
+import type { GitHubCredentialSource } from "@octosmith/octosmith";
+
 /** Credential sources used by the CLI when creating a GitHub runtime. */
 export interface GitHubTokenOptions {
   readonly explicitToken?: string;
@@ -7,16 +9,29 @@ export interface GitHubTokenOptions {
   ) => Promise<Deno.CommandOutput>;
 }
 
+/** A resolved GitHub token and the mechanism that supplied it. */
+export interface GitHubCredential {
+  readonly token: string;
+  readonly source: GitHubCredentialSource;
+}
+
 /** Resolve a GitHub token without involving the core planning API. */
 export async function resolveGitHubToken(
   options: GitHubTokenOptions = {},
 ): Promise<string> {
+  return (await resolveGitHubCredential(options)).token;
+}
+
+/** Resolve a GitHub token, reporting its source for permission guidance. */
+export async function resolveGitHubCredential(
+  options: GitHubTokenOptions = {},
+): Promise<GitHubCredential> {
   if (options.explicitToken !== undefined) {
     const token = options.explicitToken.trim();
     if (!token) {
       throw new Error("Explicit GitHub token is empty");
     }
-    return token;
+    return { token, source: "explicit" };
   }
 
   const getEnv = options.getEnv ?? Deno.env.get;
@@ -26,7 +41,7 @@ export async function resolveGitHubToken(
     if (!token) {
       throw new Error("GITHUB_TOKEN is empty");
     }
-    return token;
+    return { token, source: "environment" };
   }
 
   if (getEnv("GITHUB_ACTIONS") !== undefined) {
@@ -72,5 +87,5 @@ export async function resolveGitHubToken(
       "GitHub authentication failed: gh auth token returned an empty token. Run gh auth login or set GITHUB_TOKEN.",
     );
   }
-  return token;
+  return { token, source: "gh" };
 }
