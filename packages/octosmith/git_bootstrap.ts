@@ -19,6 +19,7 @@ export type GitBootstrapFailure =
   | "commit"
   | "authentication"
   | "push_rejected"
+  | "workflow_permission"
   | "push_unknown"
   | "cleanup";
 
@@ -388,9 +389,14 @@ export class LocalGitBootstrap implements RepositoryGitBootstrap {
       });
       if (pushed.code !== 0) {
         const diagnostic = pushed.stdout + "\n" + pushed.stderr;
+        // GitHub refuses workflow file changes from tokens lacking the
+        // `workflow` scope or Workflows: write permission.
         failure =
-          /Authentication failed|could not read Username|(?:HTTP |returned error: )(401|403)|Write access .* not granted|Permission .* denied|Repository not found/i
+          /create or update workflow|without [`']?workflows?[`']? (?:scope|permission)/i
               .test(diagnostic)
+            ? "workflow_permission"
+            : /Authentication failed|could not read Username|(?:HTTP |returned error: )(401|403)|Write access .* not granted|Permission .* denied|Repository not found/i
+                .test(diagnostic)
             ? "authentication"
             : /\[rejected\]|\[remote rejected\]/.test(diagnostic)
             ? "push_rejected"

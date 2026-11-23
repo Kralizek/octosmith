@@ -348,6 +348,7 @@ for (
     "rejected",
     "unknown",
     "auth_push",
+    "workflow",
     "throw",
     "auth",
     "existing",
@@ -378,13 +379,15 @@ for (
             }
             if (
               stage === "rejected" || stage === "unknown" ||
-              stage === "auth_push"
+              stage === "auth_push" || stage === "workflow"
             ) {
               return Promise.resolve({
                 code: 1,
                 stdout: "",
                 stderr: stage === "auth_push"
                   ? "The requested URL returned error: 403 PRIVATE-TOKEN"
+                  : stage === "workflow"
+                  ? " ! [remote rejected] HEAD -> master (refusing to allow an OAuth App to create or update workflow `.github/workflows/ci.yml` without `workflow` scope) PRIVATE-TOKEN"
                   : stage === "rejected"
                   ? "! [remote rejected] HEAD (policy) PRIVATE-TOKEN"
                   : "connection lost PRIVATE-TOKEN PRIVATE-ERROR",
@@ -428,15 +431,17 @@ for (
           throw: "push_unknown",
           auth: "authentication",
           auth_push: "authentication",
+          workflow: "workflow_permission",
           existing: "preparation",
           cleanup: "cleanup",
         };
         assertEquals(result.failure, failures[stage]);
         assertEquals(
           pushes,
-          ["rejected", "unknown", "auth_push", "throw", "cleanup"].includes(
-              stage,
-            )
+          ["rejected", "unknown", "auth_push", "workflow", "throw", "cleanup"]
+              .includes(
+                stage,
+              )
             ? 1
             : 0,
         );

@@ -700,6 +700,9 @@ export async function createRepository(
             (bootstrap.failedCommand === undefined
               ? ""
               : "; post-create command #" + bootstrap.failedCommand) +
+            (bootstrap.failure === "workflow_permission"
+              ? "; GitHub refused workflow files because the token lacks the `workflow` scope (classic/OAuth tokens, e.g. `gh auth refresh -s workflow`) or Workflows: write (fine-grained tokens and GitHub Apps)"
+              : "") +
             "; raw subprocess diagnostics and arguments are omitted.",
         ),
         bootstrap.pushConfirmed

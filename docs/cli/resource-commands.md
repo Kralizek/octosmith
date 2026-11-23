@@ -275,15 +275,18 @@ one-based `failedCommand` ordinal, omitting sensitive arguments and raw output.
 Later commands and all content delivery stop; `pushAttempted` remains false. The
 remote is retained and external command side effects are not rolled back. For a
 rejected push, repair the permissions/policy and inspect remote state before
-manually pushing the intended initial commit. For `push_unknown` (for example a
-lost connection after sending), remote changes are uncertain: compare the
-reported initial SHA with GitHub's branch head before taking any action. Never
-force-push or assume the repository is empty. After a confirmed push with failed
-deferred work, repair the reported failure and run fresh plan/apply; verify/set
-the resolved default branch first if that operation failed and ongoing drift
-enforcement is disabled. Unarchive manually if needed before repairs. A cleanup
-warning requires inspecting local temporary storage. After a lost creation
-response, inspect GitHub before explicitly retrying.
+manually pushing the intended initial commit. A rejection caused by workflow
+files and a token without the `workflow` scope or Workflows: write is reported
+as `workflow_permission`; for `gh` authentication, run
+`gh auth refresh -s workflow`. For `push_unknown` (for example a lost connection
+after sending), remote changes are uncertain: compare the reported initial SHA
+with GitHub's branch head before taking any action. Never force-push or assume
+the repository is empty. After a confirmed push with failed deferred work,
+repair the reported failure and run fresh plan/apply; verify/set the resolved
+default branch first if that operation failed and ongoing drift enforcement is
+disabled. Unarchive manually if needed before repairs. A cleanup warning
+requires inspecting local temporary storage. After a lost creation response,
+inspect GitHub before explicitly retrying.
 
 `--dry-run` extends preflight with a creation preview, not a drift report
 against an imaginary repository. Text and JSON report:
