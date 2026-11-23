@@ -2295,6 +2295,65 @@ Deno.test("creation uses normal encryption for Actions, Dependabot and environme
   );
 });
 
+Deno.test("creation resolves runtime values once and reuses the snapshot", async () => {
+  await sodium.ready;
+  const keys = sodium.crypto_box_keypair();
+  const github = new GitHub();
+  github.override = ({ method, path }) => {
+    if (method === "GET" && path.endsWith("/public-key")) {
+      return Response.json({
+        key_id: "key",
+        key: sodium.to_base64(keys.publicKey, sodium.base64_variants.ORIGINAL),
+      });
+    }
+  };
+  const calls = new Map<string, number>();
+  const provider = (name: string) => {
+    const count = (calls.get(name) ?? 0) + 1;
+    calls.set(name, count);
+    if (count > 1) throw new MissingRuntimeValueError(name);
+    return `${name}-snapshot`;
+  };
+  const result = await createRepository({
+    configuration: configuration({
+      actions: {
+        variables: [{ from: "VARIABLE_SOURCE", to: "VARIABLE" }],
+        secrets: [{ from: "SECRET_SOURCE", to: "SECRET" }],
+      },
+    }),
+    template: "services",
+    name: "api-orders",
+  }, {
+    client: github.client(),
+    values: provider,
+    bootstrap: github.bootstrap,
+  });
+  assertEquals(result.status, "completed");
+  assertEquals(Object.fromEntries(calls), {
+    VARIABLE_SOURCE: 1,
+    SECRET_SOURCE: 1,
+  });
+  assertEquals(
+    github.mutations().filter(({ body }) => body?.name === "VARIABLE")
+      .map(({ body }) => body?.value),
+    ["VARIABLE_SOURCE-snapshot"],
+  );
+  const [secret] = github.mutations().filter(({ body }) =>
+    typeof body?.encrypted_value === "string"
+  );
+  assertEquals(
+    sodium.to_string(sodium.crypto_box_seal_open(
+      sodium.from_base64(
+        String(secret.body!.encrypted_value),
+        sodium.base64_variants.ORIGINAL,
+      ),
+      keys.publicKey,
+      keys.privateKey,
+    )),
+    "SECRET_SOURCE-snapshot",
+  );
+});
+
 Deno.test("creation deferral result is explicit and fresh plans resume only remaining deltas", async () => {
   const github = new GitHub();
   github.override = ({ path }) => {
@@ -2378,7 +2437,7 @@ Deno.test("creation deferral result is explicit and fresh plans resume only rema
   assertEquals(resumed.operations.map(({ type }) => type), ["create-ruleset"]);
 });
 
-for (const failure of ["runtime", "state_read", "metadata"] as const) {
+for (const failure of ["state_read", "metadata"] as const) {
   Deno.test(`creation retains configured deferred recovery work after ${failure} failure`, async () => {
     const github = new GitHub();
     github.override = ({ method, path }) => {
@@ -2391,7 +2450,6 @@ for (const failure of ["runtime", "state_read", "metadata"] as const) {
         return Response.json({ message: "Forbidden" }, { status: 403 });
       }
     };
-    let runtimeCalls = 0;
     const result = await createRepository({
       template: "services",
       name: "api-orders",
@@ -2407,17 +2465,10 @@ for (const failure of ["runtime", "state_read", "metadata"] as const) {
           },
           rules: [],
         }],
-        ...(failure === "runtime" && {
-          actions: { variables: [{ from: "MISSING", to: "RUNTIME" }] },
-        }),
       }),
     }, {
       client: github.client(),
       bootstrap: github.bootstrap,
-      values: (name) => {
-        if (runtimeCalls++ === 0) return "available-before-creation";
-        throw new MissingRuntimeValueError(name);
-      },
     });
     assertEquals(
       result.status,

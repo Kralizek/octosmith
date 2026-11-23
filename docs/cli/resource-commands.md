@@ -168,13 +168,16 @@ team permissions, custom properties, Actions settings/OIDC/variables/secrets,
 Dependabot secrets, and environments and their variables/secrets. Secret,
 collection-management and runtime-value policies are unchanged. Both execution
 and dry-run check participating runtime-backed values in the current
-environment. Missing values fail preflight before GitHub access by default. With
-`--skip-missing-values`, only bindings with unavailable runtime values are
-skipped; other resources and bootstrap continue. Existing remote values are
-preserved, including under strict collection management. The text and JSON
-diagnostics identify skipped bindings and reasons without exposing values. This
-is an invocation-only exclusion, not persistent pending work: a later normal
-plan/apply with the values available reconciles them.
+environment. Missing values fail preflight before GitHub access by default.
+Execution reads each runtime value once, before repository creation, and every
+reconciliation pass and secret write in that invocation uses this snapshot; the
+provider is not queried again. With `--skip-missing-values`, only bindings with
+unavailable runtime values are skipped; other resources and bootstrap continue.
+Existing remote values are preserved, including under strict collection
+management. The text and JSON diagnostics identify skipped bindings and reasons
+without exposing values. This is an invocation-only exclusion, not persistent
+pending work: a later normal plan/apply with the values available reconciles
+them.
 
 The secret policy is independent: `--include-secrets=true` opts into secrets
 under manual policy and `--include-secrets=false` honors the configured mode.

@@ -128,6 +128,12 @@ export function collectRuntimeReferences(
   return references;
 }
 
+/** Providers backed only by values captured during a runtime preflight. */
+export interface RuntimeValueSnapshotProviders {
+  readonly values: (name: string) => string;
+  readonly secretValues: (name: string) => string;
+}
+
 /**
  * Check runtime references required by a selected template.
  *
@@ -147,6 +153,8 @@ export function preflightRuntimeReferences(
       reference: RuntimeReference,
       diagnostic: RuntimeReferenceDiagnostic,
     ) => void;
+    /** Receives providers that only serve values resolved by this preflight. */
+    readonly onSnapshot?: (snapshot: RuntimeValueSnapshotProviders) => void;
   } = {},
 ): (name: string) => string {
   const resolved = new Map<string, string>();
@@ -224,6 +232,11 @@ export function preflightRuntimeReferences(
     throw new RuntimeReferenceError(diagnostics);
   }
 
+  options.onSnapshot?.({
+    values: snapshotProvider("variable"),
+    secretValues: snapshotProvider("secret"),
+  });
+
   return (name) => {
     const referenceKey = key("variable", name);
     if (missing.has(referenceKey)) {
@@ -232,6 +245,18 @@ export function preflightRuntimeReferences(
     const value = resolved.get(referenceKey);
     return value === undefined ? values(name) : value;
   };
+
+  function snapshotProvider(
+    kind: RuntimeReference["kind"],
+  ): (name: string) => string {
+    return (name) => {
+      const value = resolved.get(key(kind, name));
+      if (value === undefined) {
+        throw new MissingRuntimeValueError(name);
+      }
+      return value;
+    };
+  }
 }
 
 /** Remove skipped values while retaining ownership of strict collections. */
